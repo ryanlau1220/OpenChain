@@ -30,13 +30,6 @@ fi
 
 case "$1" in
     dev)
-        # Fast health check for PostgreSQL port 5432
-        if ! (nc -z localhost 5432 2>/dev/null || (echo > /dev/tcp/localhost/5432) 2>/dev/null); then
-            echo -e "${RED}⚠️  [WARN] PostgreSQL database is not reachable on port 5432.${RESET}"
-            echo -e "${YELLOW}Please start the Docker infrastructure in another terminal using:${RESET} ${CYAN}./manage.sh docker${RESET}"
-            exit 1
-        fi
-
         # Free ports 8081 and 3000 from lingering background processes
         fuser -k 8081/tcp 3000/tcp 2>/dev/null || true
 
@@ -55,22 +48,21 @@ case "$1" in
         done
 
         echo -e "${GREEN}✓ [OK] OpenChain Go Backend is 100% HEALTHY & READY on port ${PORT:-8081}!${RESET}"
-        echo -e "${MAGENTA}Launching OpenChain Web App (Vite HMR)...${RESET}"
+        echo -e "${MAGENTA}Launching OpenChain TanStack Start Web App (Port 3000)...${RESET}"
         (pnpm --filter @openchain/web dev 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
         wait
         ;;
 
     docker)
-        echo -e "${YELLOW}Starting Docker Compose infrastructure stack (PostgreSQL, Valkey, ZITADEL)...${RESET}"
-        docker compose -f infra/docker-compose.yml up postgres valkey zitadel -d
-        echo -e "${GREEN}✓ [OK] Docker infrastructure started successfully in detached mode.${RESET}"
-        echo -e "${CYAN}You can now run local backend & frontend with HMR using:${RESET} ${YELLOW}./manage.sh dev${RESET}"
+        echo -e "${YELLOW}Building and starting Docker Compose containers...${RESET}"
+        docker compose -f infra/docker-compose.yml up -d
+        echo -e "${GREEN}✓ [OK] Docker containers started successfully.${RESET}"
         ;;
 
     docker:down)
-        echo -e "${YELLOW}Stopping Docker Compose infrastructure stack...${RESET}"
+        echo -e "${YELLOW}Stopping Docker Compose stack...${RESET}"
         docker compose -f infra/docker-compose.yml down
-        echo -e "${GREEN}✓ [OK] Docker containers stopped and removed.${RESET}"
+        echo -e "${GREEN}✓ [OK] Docker containers stopped.${RESET}"
         ;;
 
     build)

@@ -1,9 +1,9 @@
-import type React from 'react';
+import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { GraphCanvas } from './components/GraphCanvas';
-import { Header } from './components/Header';
-import { ShareModal } from './components/ShareModal';
-import { WalletLookup } from './components/WalletLookup';
+import { GraphCanvas } from '../components/GraphCanvas';
+import { Header } from '../components/Header';
+import { ShareModal } from '../components/ShareModal';
+import { WalletLookup } from '../components/WalletLookup';
 import {
 	type AddressSummary,
 	type GraphData,
@@ -14,11 +14,15 @@ import {
 	getSharedCanvas,
 	lookupAddress,
 	shareCanvas,
-} from './services/api';
+} from '../services/api';
 
-const DEFAULT_SEPOLIA_ADDR = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'; // Uniswap V2 Router on Sepolia
+export const Route = createFileRoute('/')({
+	component: Index,
+});
 
-export const App: React.FC = () => {
+const DEFAULT_SEPOLIA_ADDR = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
+
+function Index() {
 	const [addresses, setAddresses] = useState<string[]>([DEFAULT_SEPOLIA_ADDR]);
 	const [selectedTokens, setSelectedTokens] = useState<string[]>([
 		'ETH',
@@ -31,23 +35,21 @@ export const App: React.FC = () => {
 	const [loading, setLoading] = useState<boolean>(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
-	// Canvas Share Modal state
 	const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
 	const [shareUrl, setShareUrl] = useState<string>('');
 	const [shareExpiresAt, setShareExpiresAt] = useState<string>('');
 
 	useEffect(() => {
-		// Check URL hash for shared canvas link
-		const hash = window.location.hash;
-		if (hash.includes('shareId=')) {
-			const sId = new URLSearchParams(hash.split('?')[1]).get('shareId');
-			if (sId) {
-				getSharedCanvas(sId)
-					.then((res) => {
-						setGraphData(res.graph_data);
-					})
-					.catch((err) => console.error(err));
-				return;
+		if (typeof window !== 'undefined') {
+			const hash = window.location.hash;
+			if (hash.includes('shareId=')) {
+				const sId = new URLSearchParams(hash.split('?')[1]).get('shareId');
+				if (sId) {
+					getSharedCanvas(sId)
+						.then((res) => setGraphData(res.graph_data))
+						.catch((err) => console.error(err));
+					return;
+				}
 			}
 		}
 
@@ -149,16 +151,13 @@ export const App: React.FC = () => {
 
 	return (
 		<div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-			{/* Top Bar with Single / Multi-Address Search & Token Filters */}
 			<Header
 				currentAddress={addresses[0] || DEFAULT_SEPOLIA_ADDR}
 				onSearch={handleSearch}
 				network="Sepolia Testnet"
 			/>
 
-			{/* Main Single-Page Beosin-Style Investigation Workbench */}
 			<div className="flex-1 flex overflow-hidden">
-				{/* Graph Flow Visualizer (Center Canvas) */}
 				<div className="flex-1 relative">
 					<GraphCanvas
 						graphData={graphData}
@@ -168,8 +167,7 @@ export const App: React.FC = () => {
 					/>
 				</div>
 
-				{/* Side Inspector Panel (Right Drawer) */}
-				<div className="w-80 border-l border-slate-800 bg-slate-900/90 overflow-y-auto p-4 flex flex-col gap-4">
+				<div className="w-80 border-l border-slate-800 bg-slate-900 overflow-y-auto p-4 flex flex-col gap-4">
 					<h3 className="text-xs uppercase font-bold tracking-wider text-slate-400">
 						{selectedNode ? 'Selected Node Detail' : 'Address Inspector'}
 					</h3>
@@ -178,12 +176,13 @@ export const App: React.FC = () => {
 						risk={risk}
 						labels={labels}
 						loading={loading}
-						onTraceAddress={(addr) => handleSearch([addr], selectedTokens)}
+						onTraceAddress={(addr: string) =>
+							handleSearch([addr], selectedTokens)
+						}
 					/>
 				</div>
 			</div>
 
-			{/* Canvas Sharing Modal */}
 			<ShareModal
 				isOpen={shareModalOpen}
 				onClose={() => setShareModalOpen(false)}
@@ -192,4 +191,4 @@ export const App: React.FC = () => {
 			/>
 		</div>
 	);
-};
+}

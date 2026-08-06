@@ -201,7 +201,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 	return (
 		<div className="relative w-full h-full bg-slate-950 flex flex-col">
-			{/* Beosin Investigation Action Toolbar */}
+			{/* Action Toolbar */}
 			<div className="h-12 border-b border-slate-800 bg-slate-900 px-4 flex items-center justify-between text-xs sticky top-0 z-20">
 				<div className="flex items-center gap-3">
 					<div className="flex items-center gap-1.5 text-slate-300 font-medium">
@@ -284,7 +284,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				className="flex-1 w-full h-full cursor-grab active:cursor-grabbing"
 			/>
 
-			{/* Floating Zoom & Fit Controls */}
+			{/* Floating Controls */}
 			<div className="absolute bottom-6 left-6 flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-10">
 				<button
 					type="button"

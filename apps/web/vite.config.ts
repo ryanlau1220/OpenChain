@@ -1,8 +1,10 @@
-import react from '@vitejs/plugin-react';
+import { devtools } from '@tanstack/devtools-vite';
+import { tanstackStart } from '@tanstack/react-start/plugin/vite';
+import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-	plugins: [react()],
+	plugins: [devtools(), tanstackStart(), viteReact()],
 	server: {
 		port: 3000,
 		host: true,
@@ -15,13 +17,6 @@ export default defineConfig({
 						if (id.includes('cytoscape')) {
 							return 'vendor-cytoscape';
 						}
-						if (id.includes('react') || id.includes('react-dom')) {
-							return 'vendor-react';
-						}
-						if (id.includes('lucide-react')) {
-							return 'vendor-icons';
-						}
-						return 'vendor';
 					}
 				},
 			},

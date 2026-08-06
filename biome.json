@@ -7,7 +7,9 @@
       "**/build/**/*",
       "**/gen/**/*",
       "**/tmp/**/*",
-      "**/.turbo/**/*"
+      "**/.turbo/**/*",
+      "**/*.gen.ts",
+      "**/routeTree.gen.ts"
     ]
   },
   "organizeImports": {

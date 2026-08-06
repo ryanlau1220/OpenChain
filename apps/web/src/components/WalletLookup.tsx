@@ -19,7 +19,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	risk,
 	labels,
 	loading,
-	onTraceAddress,
+	onTraceAddress: _onTraceAddress,
 }) => {
 	if (loading) {
 		return (
@@ -38,6 +38,9 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 			</div>
 		);
 	}
+
+	const safeLabels = Array.isArray(labels) ? labels : [];
+	const safeFlags = Array.isArray(risk?.flags) ? risk.flags : [];
 
 	return (
 		<div className="space-y-4 text-xs">
@@ -59,9 +62,9 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 				<p className="font-mono font-bold text-slate-100 break-all select-all text-[11px]">
 					{summary.address}
 				</p>
-				{labels && labels.length > 0 && (
+				{safeLabels.length > 0 && (
 					<div className="flex flex-wrap gap-1 pt-1">
-						{labels.map((l) => (
+						{safeLabels.map((l) => (
 							<span
 								key={l.id}
 								className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20"
@@ -119,13 +122,13 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 			</div>
 
 			{/* Risk Flags List */}
-			{risk && risk.flags.length > 0 && (
+			{safeFlags.length > 0 && (
 				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
 					<span className="font-semibold text-slate-400 text-[11px] block">
-						Triggered Risk Factors ({risk.flags.length})
+						Triggered Risk Factors ({safeFlags.length})
 					</span>
 					<div className="space-y-1.5">
-						{risk.flags.map((flag) => (
+						{safeFlags.map((flag) => (
 							<div
 								key={flag.rule_id}
 								className="p-2 bg-slate-900 rounded border border-slate-800 text-[11px] space-y-0.5"

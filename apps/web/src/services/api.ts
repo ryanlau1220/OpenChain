@@ -80,26 +80,24 @@ export interface CanvasShareResponse {
 	expires_at: string;
 }
 
-export interface InvestigationCase {
-	id: string;
-	title: string;
-	description: string;
-	status: string;
-	tags: string[];
-	created_by: string;
-	created_at: string;
-}
-
 export async function lookupAddress(address: string) {
 	const res = await fetch(
 		`${API_BASE}/api/v1/lookup/address?address=${encodeURIComponent(address)}`,
 	);
 	if (!res.ok) throw new Error('Failed to lookup address');
-	return res.json() as Promise<{
+	const data = await res.json();
+	return {
+		summary: data.summary,
+		labels: Array.isArray(data.labels) ? data.labels : [],
+		risk: {
+			...data.risk,
+			flags: Array.isArray(data.risk?.flags) ? data.risk.flags : [],
+		},
+	} as {
 		summary: AddressSummary;
 		labels: LabelItem[];
 		risk: RiskEvaluation;
-	}>;
+	};
 }
 
 export async function fetchTraceGraph(
@@ -127,7 +125,12 @@ export async function fetchMultiTraceGraph(
 		}),
 	});
 	if (!res.ok) throw new Error('Failed to fetch multi-trace graph');
-	return res.json() as Promise<GraphData>;
+	const data = await res.json();
+	return {
+		...data,
+		nodes: Array.isArray(data.nodes) ? data.nodes : [],
+		edges: Array.isArray(data.edges) ? data.edges : [],
+	} as GraphData;
 }
 
 export async function shareCanvas(graphData: GraphData) {
@@ -145,39 +148,17 @@ export async function getSharedCanvas(shareId: string) {
 		`${API_BASE}/api/v1/canvas/share?share_id=${encodeURIComponent(shareId)}`,
 	);
 	if (!res.ok) throw new Error('Shared canvas expired or not found');
-	return res.json() as Promise<CanvasShareResponse>;
-}
-
-export async function addLabel(label: Partial<LabelItem>) {
-	const res = await fetch(`${API_BASE}/api/v1/labels`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(label),
-	});
-	if (!res.ok) throw new Error('Failed to add label');
-	return res.json() as Promise<LabelItem>;
-}
-
-export async function fetchCases() {
-	const res = await fetch(`${API_BASE}/api/v1/cases`);
-	if (!res.ok) throw new Error('Failed to fetch cases');
-	return res.json() as Promise<InvestigationCase[]>;
-}
-
-export async function createCase(data: {
-	title: string;
-	description: string;
-	tags: string[];
-}) {
-	const res = await fetch(`${API_BASE}/api/v1/cases`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(data),
-	});
-	if (!res.ok) throw new Error('Failed to create case');
-	return res.json() as Promise<InvestigationCase>;
-}
-
-export function getExportUrl(caseId: string, format = 'JSON') {
-	return `${API_BASE}/api/v1/cases/export?case_id=${encodeURIComponent(caseId)}&format=${format}`;
+	const resData = await res.json();
+	return {
+		...resData,
+		graph_data: {
+			...resData.graph_data,
+			nodes: Array.isArray(resData.graph_data?.nodes)
+				? resData.graph_data.nodes
+				: [],
+			edges: Array.isArray(resData.graph_data?.edges)
+				? resData.graph_data.edges
+				: [],
+		},
+	} as CanvasShareResponse;
 }
