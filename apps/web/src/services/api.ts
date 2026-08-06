@@ -46,11 +46,13 @@ export interface RiskEvaluation {
 export interface GraphNode {
 	id: string;
 	label: string;
-	entity_type: string;
+	entity_type: string; // EOA, CONTRACT, EXCHANGE, MIXER, SCAMMER
 	risk_score: number;
 	category: string;
 	is_seed: boolean;
 	total_volume_wei: string;
+	in_tx_count?: number;
+	out_tx_count?: number;
 }
 
 export interface GraphEdge {
@@ -64,11 +66,18 @@ export interface GraphEdge {
 }
 
 export interface GraphData {
-	seed_address: string;
+	seed_addresses?: string[];
+	seed_address?: string;
 	nodes: GraphNode[];
 	edges: GraphEdge[];
 	total_nodes: number;
 	total_edges: number;
+}
+
+export interface CanvasShareResponse {
+	share_id: string;
+	graph_data: GraphData;
+	expires_at: string;
 }
 
 export interface InvestigationCase {
@@ -93,12 +102,50 @@ export async function lookupAddress(address: string) {
 	}>;
 }
 
-export async function fetchTraceGraph(seedAddress: string, maxHops = 2) {
-	const res = await fetch(
-		`${API_BASE}/api/v1/tracing/graph?seed_address=${encodeURIComponent(seedAddress)}&max_hops=${maxHops}`,
-	);
-	if (!res.ok) throw new Error('Failed to fetch trace graph');
+export async function fetchTraceGraph(
+	seedAddress: string,
+	maxHops = 2,
+	direction = 'BOTH',
+) {
+	return fetchMultiTraceGraph([seedAddress], maxHops, direction, []);
+}
+
+export async function fetchMultiTraceGraph(
+	addresses: string[],
+	maxHops = 2,
+	direction = 'BOTH',
+	tokens: string[] = [],
+) {
+	const res = await fetch(`${API_BASE}/api/v1/tracing/graph`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			addresses,
+			max_hops: maxHops,
+			direction,
+			tokens,
+		}),
+	});
+	if (!res.ok) throw new Error('Failed to fetch multi-trace graph');
 	return res.json() as Promise<GraphData>;
+}
+
+export async function shareCanvas(graphData: GraphData) {
+	const res = await fetch(`${API_BASE}/api/v1/canvas/share`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(graphData),
+	});
+	if (!res.ok) throw new Error('Failed to share canvas');
+	return res.json() as Promise<CanvasShareResponse>;
+}
+
+export async function getSharedCanvas(shareId: string) {
+	const res = await fetch(
+		`${API_BASE}/api/v1/canvas/share?share_id=${encodeURIComponent(shareId)}`,
+	);
+	if (!res.ok) throw new Error('Shared canvas expired or not found');
+	return res.json() as Promise<CanvasShareResponse>;
 }
 
 export async function addLabel(label: Partial<LabelItem>) {
