@@ -7,7 +7,7 @@ COPY package.json pnpm-workspace.yaml turbo.json ./
 COPY packages/proto ./packages/proto
 COPY apps/web ./apps/web
 
-RUN pnpm install --no-freeze-lockfile
+RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @openchain/web build
 
 FROM nginx:alpine
