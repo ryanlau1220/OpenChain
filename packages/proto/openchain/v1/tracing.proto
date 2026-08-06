@@ -21,6 +21,8 @@ message GraphNode {
   string category = 5;
   bool is_seed = 6;
   string total_volume_wei = 7;
+  uint32 in_tx_count = 8;
+  uint32 out_tx_count = 9;
 }
 
 message GraphEdge {
@@ -42,6 +44,8 @@ message TraceGraphRequest {
   TraceDirection direction = 4;
   string min_value_wei = 5;
   string token_contract = 6;
+  repeated string seed_addresses = 7;
+  repeated string tokens = 8;
 }
 
 message TraceGraphResponse {
@@ -57,6 +61,7 @@ message ExpandNodeRequest {
   Network network = 2;
   TraceDirection direction = 3;
   uint32 limit = 4;
+  uint32 max_hops = 5;
 }
 
 message ExpandNodeResponse {

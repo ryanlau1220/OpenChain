@@ -230,10 +230,21 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 	}
 
 	nodes := make([]GraphNode, 0, len(nodeMap))
+	// Add seed nodes first
+	for _, seed := range cleanedSeeds {
+		if n, exists := nodeMap[seed]; exists {
+			n.InTxCount = inCountMap[seed]
+			n.OutTxCount = outCountMap[seed]
+			nodes = append(nodes, n)
+		}
+	}
+	// Add remaining nodes
 	for id, n := range nodeMap {
-		n.InTxCount = inCountMap[id]
-		n.OutTxCount = outCountMap[id]
-		nodes = append(nodes, n)
+		if !n.IsSeed {
+			n.InTxCount = inCountMap[id]
+			n.OutTxCount = outCountMap[id]
+			nodes = append(nodes, n)
+		}
 	}
 
 	edges := make([]GraphEdge, 0, len(edgeMap))

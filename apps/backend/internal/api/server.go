@@ -71,6 +71,7 @@ func NewServer(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator, 
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
+	s.RegisterConnectRPC(mux)
 	mux.HandleFunc("/api/v1/health", withLogging(s.handleHealth))
 	mux.HandleFunc("/api/v1/lookup/address", withLogging(s.handleLookupAddress))
 	mux.HandleFunc("/api/v1/tracing/graph", withLogging(s.handleTraceGraph))

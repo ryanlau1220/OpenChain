@@ -1,14 +1,14 @@
 version: v1
 plugins:
-  - plugin: connect-go
+  - plugin: buf.build/connectrpc/go:v1.17.0
     out: ../../apps/backend/gen/proto
     opt: paths=source_relative
-  - plugin: go
+  - plugin: buf.build/protocolbuffers/go:v1.36.1
     out: ../../apps/backend/gen/proto
     opt: paths=source_relative
-  - plugin: es
+  - plugin: buf.build/bufbuild/es:v2.2.3
     out: gen/ts
     opt: target=ts
-  - plugin: connect-es
+  - plugin: buf.build/connectrpc/es:v1.6.0
     out: gen/ts
     opt: target=ts
