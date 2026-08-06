@@ -55,7 +55,9 @@ services:
     volumes:
       - ./zitadel/zitadel.yaml:/zitadel.yaml:ro
 
+  # Production full-stack container profiles (optional)
   backend:
+    profiles: ["full"]
     build:
       context: ..
       dockerfile: infra/Dockerfile.backend
@@ -77,6 +79,7 @@ services:
         condition: service_healthy
 
   web:
+    profiles: ["full"]
     build:
       context: ..
       dockerfile: infra/Dockerfile.web
