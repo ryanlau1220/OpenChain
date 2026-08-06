@@ -5,6 +5,7 @@ import type { CanvasSnapshot } from '@openchain/proto/openchain/v1/canvas_pb';
 import { CaseService } from '@openchain/proto/openchain/v1/cases_connect';
 import type { InvestigationCase } from '@openchain/proto/openchain/v1/cases_pb';
 import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
+import { EntityType } from '@openchain/proto/openchain/v1/common_pb';
 import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
 import type { AddressLabel } from '@openchain/proto/openchain/v1/labels_pb';
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
@@ -37,6 +38,24 @@ export type {
 	InvestigationCase,
 	AddressSummary,
 };
+export { EntityType };
+
+export function entityLabel(t?: EntityType): string {
+	switch (t) {
+		case EntityType.ENTITY_TYPE_CONTRACT:
+			return 'CONTRACT';
+		case EntityType.ENTITY_TYPE_EXCHANGE:
+			return 'EXCHANGE';
+		case EntityType.ENTITY_TYPE_MIXER:
+			return 'MIXER';
+		case EntityType.ENTITY_TYPE_BRIDGE:
+			return 'BRIDGE';
+		case EntityType.ENTITY_TYPE_DEFI_POOL:
+			return 'DEFI POOL';
+		default:
+			return 'EOA';
+	}
+}
 
 // GraphData is the view type used to build a CanvasSnapshot for sharing
 export interface GraphData {

@@ -91,8 +91,9 @@ func (e *Evaluator) EvaluateAddress(ctx context.Context, address string, network
 		totalScore += 15.0
 	}
 
-	// Rule 3: Zero transaction fresh account
-	if txCount == 0 {
+	// Rule 3: Zero transaction fresh account (contracts have no nonce-based
+	// activity signal, so only flag EOAs)
+	if txCount == 0 && !isContract {
 		flags = append(flags, RiskFlag{
 			RuleID:         "R005",
 			RuleName:       "Unused / Fresh Address",

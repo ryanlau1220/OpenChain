@@ -1,9 +1,10 @@
 import { Clock, ExternalLink, ShieldAlert, Tag, Wallet } from 'lucide-react';
 import type React from 'react';
-import type {
-	AddressLabel,
-	AddressSummary,
-	RiskEvaluation,
+import {
+	type AddressLabel,
+	type AddressSummary,
+	type RiskEvaluation,
+	entityLabel,
 } from '../services/api';
 
 interface WalletLookupProps {
@@ -84,7 +85,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						<Wallet className="w-3.5 h-3.5 text-blue-400" />
 					</div>
 					<p className="font-bold font-mono text-slate-100 text-sm">
-						{summary.balance_formatted}
+						{summary.balanceFormatted}
 					</p>
 				</div>
 
@@ -94,7 +95,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						<Clock className="w-3.5 h-3.5 text-blue-400" />
 					</div>
 					<p className="font-bold font-mono text-slate-100 text-sm">
-						{summary.tx_count}
+						{summary.txCount}
 					</p>
 				</div>
 
@@ -104,7 +105,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						<Tag className="w-3.5 h-3.5 text-purple-400" />
 					</div>
 					<p className="font-bold text-slate-100 uppercase text-xs">
-						{summary.entity_type}
+						{entityLabel(summary.entityType)}
 					</p>
 				</div>
 
@@ -114,9 +115,9 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						<ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
 					</div>
 					<p
-						className={`font-bold font-mono text-xs ${summary.risk_score >= 50 ? 'text-red-400' : 'text-emerald-400'}`}
+						className={`font-bold font-mono text-xs ${(risk?.totalScore ?? 0) >= 50 ? 'text-red-400' : 'text-emerald-400'}`}
 					>
-						{summary.risk_level} ({summary.risk_score})
+						{risk?.riskLevel ?? 'N/A'} ({risk?.totalScore ?? 0})
 					</p>
 				</div>
 			</div>
@@ -130,13 +131,13 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					<div className="space-y-1.5">
 						{safeFlags.map((flag) => (
 							<div
-								key={flag.rule_id}
+								key={flag.ruleId}
 								className="p-2 bg-slate-900 rounded border border-slate-800 text-[11px] space-y-0.5"
 							>
 								<div className="flex items-center justify-between font-medium text-slate-200">
-									<span>{flag.rule_name}</span>
+									<span>{flag.ruleName}</span>
 									<span className="text-red-400 font-mono">
-										+{flag.score_impact}
+										+{flag.scoreImpact}
 									</span>
 								</div>
 								<p className="text-slate-400 text-[10px]">{flag.description}</p>

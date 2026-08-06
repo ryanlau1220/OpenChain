@@ -12,7 +12,13 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import type { GraphData, GraphEdge, GraphNode } from '../services/api';
+import {
+	EntityType,
+	type GraphData,
+	type GraphEdge,
+	type GraphNode,
+	entityLabel,
+} from '../services/api';
 
 interface GraphCanvasProps {
 	graphData: GraphData | null;
@@ -48,24 +54,24 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		// Map Nodes
 		(graphData?.nodes || []).forEach((n) => {
 			let bg = '#2563EB'; // Default Blue EOA
-			let badge = n.entity_type || 'EOA';
+			let badge = entityLabel(n.entityType);
 
-			if (n.is_seed) {
+			if (n.isSeed) {
 				bg = '#0284C7'; // Target Seed Cyan/Sky
 				badge = 'Target Wallet';
-			} else if (n.entity_type === 'SCAMMER' || n.risk_score >= 50) {
+			} else if (n.category === 'SCAMMER' || n.riskScore >= 50) {
 				bg = '#DC2626'; // Red Risk / Scammer
 				badge = 'Scammer';
-			} else if (n.entity_type === 'EXCHANGE') {
+			} else if (n.entityType === EntityType.ENTITY_TYPE_EXCHANGE) {
 				bg = '#D97706'; // Amber Exchange
 				badge = 'Exchange';
-			} else if (n.entity_type === 'CONTRACT') {
+			} else if (n.entityType === EntityType.ENTITY_TYPE_CONTRACT) {
 				bg = '#7C3AED'; // Purple Contract
 				badge = 'Contract';
 			}
 
-			const inCount = n.in_tx_count ?? 0;
-			const outCount = n.out_tx_count ?? 0;
+			const inCount = n.inTxCount ?? 0;
+			const outCount = n.outTxCount ?? 0;
 			const countStr = `${outCount} Out / ${inCount} In`;
 			const displayLabel = `${countStr}\n${n.label || n.id.substring(0, 8)}`;
 
@@ -75,9 +81,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					id: n.id,
 					label: displayLabel,
 					badge: badge,
-					risk_score: n.risk_score,
-					is_seed: n.is_seed,
-					entity_type: n.entity_type,
+					risk_score: n.riskScore,
+					is_seed: n.isSeed,
+					entity_type: badge,
 					bg: bg,
 					raw: n,
 				},
@@ -86,7 +92,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		// Map Edges
 		(graphData?.edges || []).forEach((e) => {
-			const isToken = e.asset_symbol === 'USDT' || e.asset_symbol === 'USDC';
+			const isToken = e.assetSymbol === 'USDT' || e.assetSymbol === 'USDC';
 			const edgeColor = isToken ? '#059669' : '#DC2626'; // Green for Token, Red for ETH
 
 			elements.push({
@@ -95,7 +101,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					id: e.id,
 					source: e.source,
 					target: e.target,
-					label: `${e.tx_count} Tx / Total ${e.value_formatted || 'Transfer'}`,
+					label: `${e.txCount} Tx / Total ${e.valueFormatted || 'Transfer'}`,
 					color: edgeColor,
 					raw: e,
 				},
