@@ -132,12 +132,12 @@ func (e *Engine) TraceMultiHopGraph(ctx context.Context, seedAddress string, net
 		}
 	}
 
-	var nodes []GraphNode
+	nodes := make([]GraphNode, 0, len(nodeMap))
 	for _, n := range nodeMap {
 		nodes = append(nodes, n)
 	}
 
-	var edges []GraphEdge
+	edges := make([]GraphEdge, 0, len(edgeMap))
 	for _, eg := range edgeMap {
 		edges = append(edges, eg)
 	}
