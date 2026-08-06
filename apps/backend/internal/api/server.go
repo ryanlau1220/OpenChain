@@ -78,10 +78,29 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ws", s.wsHub.HandleWS)
 }
 
+// Handler returns the full HTTP handler with CORS applied to every route.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	s.RegisterRoutes(mux)
+	return withCORS(mux)
+}
+
+// withCORS sets CORS headers on every response and answers OPTIONS preflights.
+// ConnectRPC POSTs send custom headers, so browsers preflight each call.
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enableCORS(w)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ── Health ─────────────────────────────────────────────────────────────────────
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "healthy",

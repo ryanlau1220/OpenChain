@@ -16,7 +16,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
-func setupTestServer() (*http.ServeMux, *Server) {
+func setupTestServer() (http.Handler, *Server) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
 	riskEvaluator := risk.NewEvaluator(labelRegistry)
@@ -25,9 +25,7 @@ func setupTestServer() (*http.ServeMux, *Server) {
 	wsHub := NewHub()
 
 	server := NewServer(evmClient, labelRegistry, riskEvaluator, tracingEngine, caseService, wsHub)
-	mux := http.NewServeMux()
-	server.RegisterRoutes(mux)
-	return mux, server
+	return server.Handler(), server
 }
 
 // ── REST: Health ───────────────────────────────────────────────────────────────
@@ -49,6 +47,26 @@ func TestHealthAPI(t *testing.T) {
 	}
 	if resp["status"] != "healthy" {
 		t.Errorf("expected healthy status, got %s", resp["status"])
+	}
+}
+
+func TestCORSPreflight(t *testing.T) {
+	mux, _ := setupTestServer()
+
+	req := httptest.NewRequest("OPTIONS", "/openchain.v1.CanvasService/ShareCanvas", nil)
+	req.Header.Set("Origin", "http://localhost:3000")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for preflight, got %d", w.Code)
+	}
+	if w.Header().Get("Access-Control-Allow-Origin") == "" {
+		t.Error("expected Access-Control-Allow-Origin header on preflight")
+	}
+	if w.Header().Get("Access-Control-Allow-Headers") == "" {
+		t.Error("expected Access-Control-Allow-Headers header on preflight")
 	}
 }
 

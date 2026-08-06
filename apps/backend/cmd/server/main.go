@@ -33,12 +33,10 @@ func main() {
 	wsHub := api.NewHub()
 
 	server := api.NewServer(evmClient, labelRegistry, riskEvaluator, tracingEngine, caseService, wsHub)
-	mux := http.NewServeMux()
-	server.RegisterRoutes(mux)
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      mux,
+		Handler:      server.Handler(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
