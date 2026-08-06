@@ -46,7 +46,7 @@ case "$1" in
         if command -v air >/dev/null 2>&1; then
             (cd apps/backend && air -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
         else
-            (cd apps/backend && go run github.com/air-verse/air@latest -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
+            (cd apps/backend && go run github.com/air-verse/air@v1.61.0 -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
         fi
 
         echo -e "${YELLOW}Waiting for Go backend to become healthy on port ${PORT:-8081}...${RESET}"
