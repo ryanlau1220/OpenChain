@@ -21,32 +21,15 @@ cleanup_dev() {
     exit 0
 }
 
-set_env_value() {
-    local env_file="$1"
-    local key="$2"
-    local value="$3"
-
-    if grep -q "^${key}=" "$env_file"; then
-        sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
-    else
-        printf '\n%s=%s\n' "$key" "$value" >> "$env_file"
-    fi
-}
-
-read_env_value() {
-    local env_file="$1"
-    local key="$2"
-    sed -n "s/^${key}=//p" "$env_file" | tail -n 1
-}
+# Auto-load .env file if available
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
 
 case "$1" in
     dev)
-        if [ -f .env ]; then
-            set -a
-            source .env
-            set +a
-        fi
-
         # Fast health check for PostgreSQL port 5432
         if ! (nc -z localhost 5432 2>/dev/null || (echo > /dev/tcp/localhost/5432) 2>/dev/null); then
             echo -e "${RED}⚠️  [WARN] PostgreSQL database is not reachable on port 5432.${RESET}"
@@ -59,24 +42,25 @@ case "$1" in
 
         trap cleanup_dev INT TERM
 
-        echo -e "${CYAN}Launching OpenChain Go Backend...${RESET}"
+        echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081})...${RESET}"
         (cd apps/backend && go run ./cmd/server 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
 
-        echo -e "${YELLOW}Waiting for Go backend to become healthy on port 8081...${RESET}"
-        until curl -s -f http://localhost:8081/api/v1/health >/dev/null 2>&1; do
+        echo -e "${YELLOW}Waiting for Go backend to become healthy on port ${PORT:-8081}...${RESET}"
+        until curl -s -f http://localhost:${PORT:-8081}/api/v1/health >/dev/null 2>&1; do
             sleep 1
         done
 
-        echo -e "${GREEN}✓ [OK] OpenChain Go Backend is 100% HEALTHY & READY on port 8081!${RESET}"
-        echo -e "${MAGENTA}Launching OpenChain Web App...${RESET}"
+        echo -e "${GREEN}✓ [OK] OpenChain Go Backend is 100% HEALTHY & READY on port ${PORT:-8081}!${RESET}"
+        echo -e "${MAGENTA}Launching OpenChain Web App (Vite HMR)...${RESET}"
         (pnpm --filter @openchain/web dev 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
         wait
         ;;
 
     docker)
-        echo -e "${YELLOW}Starting Docker Compose infrastructure stack (Postgres, Valkey, ZITADEL)...${RESET}"
-        docker compose -f infra/docker-compose.yml up -d
+        echo -e "${YELLOW}Starting Docker Compose infrastructure stack (PostgreSQL, Valkey, ZITADEL)...${RESET}"
+        docker compose -f infra/docker-compose.yml up postgres valkey zitadel -d
         echo -e "${GREEN}✓ [OK] Docker infrastructure started successfully in detached mode.${RESET}"
+        echo -e "${CYAN}You can now run local backend & frontend with HMR using:${RESET} ${YELLOW}./manage.sh dev${RESET}"
         ;;
 
     docker:down)
