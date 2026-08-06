@@ -128,12 +128,3 @@ func (s *Service) ExportReport(ctx context.Context, caseID string, format string
 		return fmt.Sprintf("%s_dossier.json", caseID), data, "application/json", nil
 	}
 }
-
-type stringWriter struct {
-	buf []byte
-}
-
-func (sw *stringWriter) Write(p []byte) (n int, err error) {
-	sw.buf = append(sw.buf, p...)
-	return len(p), nil
-}

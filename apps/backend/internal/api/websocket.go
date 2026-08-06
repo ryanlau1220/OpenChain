@@ -12,9 +12,9 @@ import (
 )
 
 type WSMessage struct {
-	Type      string      `json:"type"`      // ping, subscribe_address, alert
-	Address   string      `json:"address"`   // target address
-	Data      interface{} `json:"data"`      // payload
+	Type      string      `json:"type"`    // ping, subscribe_address, alert
+	Address   string      `json:"address"` // target address
+	Data      interface{} `json:"data"`    // payload
 	Timestamp int64       `json:"timestamp"`
 }
 
@@ -37,7 +37,9 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WebSocket accept error: %v", err)
 		return
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "connection closed")
+	defer func() {
+		_ = conn.Close(websocket.StatusNormalClosure, "connection closed")
+	}()
 
 	h.mu.Lock()
 	h.connections[conn] = true

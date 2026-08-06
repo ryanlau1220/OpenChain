@@ -9,15 +9,12 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
 type EVMClient struct {
 	rpcURL     string
 	httpClient *http.Client
-	cache      map[string][]byte
-	cacheMu    sync.RWMutex
 }
 
 func NewEVMClient(rpcURL string) *EVMClient {
@@ -26,7 +23,6 @@ func NewEVMClient(rpcURL string) *EVMClient {
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		cache: make(map[string][]byte),
 	}
 }
 
@@ -72,7 +68,9 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
