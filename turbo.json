@@ -3,14 +3,23 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build", "proto:generate"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["dist/**", "bin/**"]
     },
     "proto:generate": {
-      "inputs": ["src/**/*.proto", "buf.yaml", "buf.gen.yaml"],
+      "inputs": ["openchain/v1/*.proto", "buf.yaml", "buf.gen.yaml"],
       "outputs": ["gen/**"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^lint"],
+      "outputs": []
+    },
+    "check": {
+      "dependsOn": ["^check"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^test"],
+      "outputs": ["coverage/**"]
     },
     "dev": {
       "cache": false,
