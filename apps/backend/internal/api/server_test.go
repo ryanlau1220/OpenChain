@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
+	connect "connectrpc.com/connect"
+	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/cases"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
@@ -14,7 +16,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
-func setupTestServer() *http.ServeMux {
+func setupTestServer() (*http.ServeMux, *Server) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
 	riskEvaluator := risk.NewEvaluator(labelRegistry)
@@ -25,11 +27,13 @@ func setupTestServer() *http.ServeMux {
 	server := NewServer(evmClient, labelRegistry, riskEvaluator, tracingEngine, caseService, wsHub)
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
-	return mux
+	return mux, server
 }
 
+// ── REST: Health ───────────────────────────────────────────────────────────────
+
 func TestHealthAPI(t *testing.T) {
-	mux := setupTestServer()
+	mux, _ := setupTestServer()
 
 	req := httptest.NewRequest("GET", "/api/v1/health", nil)
 	w := httptest.NewRecorder()
@@ -48,88 +52,227 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
-func TestLookupAddressAPI(t *testing.T) {
-	mux := setupTestServer()
+// ── ConnectRPC: Tracing Service ────────────────────────────────────────────────
 
-	req := httptest.NewRequest("GET", "/api/v1/lookup/address?address=0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+func TestConnectTracingService(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectTracingHandler{server: server}
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", w.Code)
+	resp, err := handler.TraceGraph(context.Background(), connect.NewRequest(&pb.TraceGraphRequest{
+		SeedAddresses: []string{"0x7a250d5630b4cf539739df2c5dacb4c659f2488d"},
+		MaxHops:       2,
+		Direction:     pb.TraceDirection_TRACE_DIRECTION_BOTH,
+	}))
+	if err != nil {
+		t.Fatalf("TraceGraph failed: %v", err)
 	}
-
-	var resp map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse lookup response: %v", err)
+	if resp.Msg.SeedAddress == "" {
+		t.Error("expected non-empty seed_address in TraceGraph response")
 	}
-	if resp["summary"] == nil {
-		t.Errorf("expected summary field in response")
+	if len(resp.Msg.Nodes) == 0 {
+		t.Error("expected at least one node in TraceGraph response")
 	}
-}
-
-func TestTraceGraphAPI(t *testing.T) {
-	mux := setupTestServer()
-
-	req := httptest.NewRequest("GET", "/api/v1/tracing/graph?seed_address=0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D&max_hops=2", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", w.Code)
+	// Verify seed node is present and marked
+	seedFound := false
+	for _, n := range resp.Msg.Nodes {
+		if n.IsSeed {
+			seedFound = true
+			break
+		}
 	}
-
-	var resp map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse trace graph response: %v", err)
-	}
-	if resp["seed_address"] == nil {
-		t.Errorf("expected seed_address field in trace response")
+	if !seedFound {
+		t.Error("expected at least one seed node marked IsSeed=true")
 	}
 }
 
-func TestLabelsAPI(t *testing.T) {
-	mux := setupTestServer()
+func TestConnectExpandNode(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectTracingHandler{server: server}
 
-	// GET labels
-	req := httptest.NewRequest("GET", "/api/v1/labels?address=0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", w.Code)
+	resp, err := handler.ExpandNode(context.Background(), connect.NewRequest(&pb.ExpandNodeRequest{
+		NodeAddress: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+		MaxHops:     1,
+		Direction:   pb.TraceDirection_TRACE_DIRECTION_BOTH,
+	}))
+	if err != nil {
+		t.Fatalf("ExpandNode failed: %v", err)
 	}
+	_ = resp.Msg.NewNodes // just ensure the call succeeds
+}
 
-	// POST label
-	postBody := `{"address":"0x1111111111111111111111111111111111111111","network":"ETHEREUM_SEPOLIA","category":"DeFi","label":"Test Protocol","confidence":1.0}`
-	reqPost := httptest.NewRequest("POST", "/api/v1/labels", strings.NewReader(postBody))
-	reqPost.Header.Set("Content-Type", "application/json")
-	wPost := httptest.NewRecorder()
-	mux.ServeHTTP(wPost, reqPost)
+// ── ConnectRPC: Lookup Service ─────────────────────────────────────────────────
 
-	if wPost.Code != http.StatusOK {
-		t.Fatalf("expected status 200 on POST label, got %d", wPost.Code)
+func TestConnectLookupAddress(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectLookupHandler{server: server}
+
+	resp, err := handler.LookupAddress(context.Background(), connect.NewRequest(&pb.LookupAddressRequest{
+		Address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+		Network: pb.Network_NETWORK_ETHEREUM_SEPOLIA,
+	}))
+	if err != nil {
+		t.Fatalf("LookupAddress failed: %v", err)
+	}
+	if resp.Msg.Summary == nil {
+		t.Fatal("expected summary in LookupAddress response")
+	}
+	if resp.Msg.Summary.Address == "" {
+		t.Error("expected address in summary")
 	}
 }
 
-func TestCasesAPI(t *testing.T) {
-	mux := setupTestServer()
+func TestConnectLookupAddressEmpty(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectLookupHandler{server: server}
 
-	// GET cases
-	req := httptest.NewRequest("GET", "/api/v1/cases", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+	_, err := handler.LookupAddress(context.Background(), connect.NewRequest(&pb.LookupAddressRequest{}))
+	if err == nil {
+		t.Fatal("expected error for empty address, got nil")
+	}
+}
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200 on GET cases, got %d", w.Code)
+// ── ConnectRPC: Label Service ──────────────────────────────────────────────────
+
+func TestConnectLabelService(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectLabelHandler{server: server}
+
+	// GetLabels for known seeded address
+	gResp, err := handler.GetLabels(context.Background(), connect.NewRequest(&pb.GetLabelsRequest{
+		Address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+	}))
+	if err != nil {
+		t.Fatalf("GetLabels failed: %v", err)
+	}
+	if len(gResp.Msg.Labels) == 0 {
+		t.Error("expected at least one label for Uniswap V2 Router address")
 	}
 
-	// Export Case
-	reqExport := httptest.NewRequest("GET", "/api/v1/cases/export?case_id=CASE-SEPOLIA-001&format=JSON", nil)
-	wExport := httptest.NewRecorder()
-	mux.ServeHTTP(wExport, reqExport)
+	// AddLabel
+	aResp, err := handler.AddLabel(context.Background(), connect.NewRequest(&pb.AddLabelRequest{
+		Address:  "0x1111111111111111111111111111111111111111",
+		Network:  pb.Network_NETWORK_ETHEREUM_SEPOLIA,
+		Category: "DeFi",
+		Label:    "Test Protocol",
+		Source:   "Manual",
+	}))
+	if err != nil {
+		t.Fatalf("AddLabel failed: %v", err)
+	}
+	if aResp.Msg.Label == nil || aResp.Msg.Label.Label != "Test Protocol" {
+		t.Error("expected label with correct name")
+	}
+}
 
-	if wExport.Code != http.StatusOK {
-		t.Fatalf("expected status 200 on export, got %d", wExport.Code)
+// ── ConnectRPC: Risk Service ───────────────────────────────────────────────────
+
+func TestConnectRiskService(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectRiskHandler{server: server}
+
+	resp, err := handler.EvaluateRisk(context.Background(), connect.NewRequest(&pb.EvaluateRiskRequest{
+		Address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+		Network: pb.Network_NETWORK_ETHEREUM_SEPOLIA,
+	}))
+	if err != nil {
+		t.Fatalf("EvaluateRisk failed: %v", err)
+	}
+	if resp.Msg.Evaluation == nil {
+		t.Fatal("expected evaluation in EvaluateRisk response")
+	}
+	if resp.Msg.Evaluation.RiskLevel == "" {
+		t.Error("expected non-empty risk_level")
+	}
+}
+
+// ── ConnectRPC: Case Service ───────────────────────────────────────────────────
+
+func TestConnectCaseService(t *testing.T) {
+	_, server := setupTestServer()
+	handler := &connectCaseHandler{server: server}
+
+	// ListCases — seeded default exists
+	listResp, err := handler.ListCases(context.Background(), connect.NewRequest(&pb.ListCasesRequest{}))
+	if err != nil {
+		t.Fatalf("ListCases failed: %v", err)
+	}
+	if listResp.Msg.Total == 0 {
+		t.Error("expected at least one seeded case")
+	}
+
+	// CreateCase
+	createResp, err := handler.CreateCase(context.Background(), connect.NewRequest(&pb.CreateCaseRequest{
+		Title:       "ConnectRPC Test Case",
+		Description: "Created via ConnectRPC handler",
+		Tags:        []string{"test", "rpc"},
+	}))
+	if err != nil {
+		t.Fatalf("CreateCase failed: %v", err)
+	}
+	caseID := createResp.Msg.CaseItem.Id
+
+	// GetCase
+	getResp, err := handler.GetCase(context.Background(), connect.NewRequest(&pb.GetCaseRequest{Id: caseID}))
+	if err != nil {
+		t.Fatalf("GetCase failed: %v", err)
+	}
+	if getResp.Msg.CaseItem.Title != "ConnectRPC Test Case" {
+		t.Errorf("expected title 'ConnectRPC Test Case', got %s", getResp.Msg.CaseItem.Title)
+	}
+
+	// ExportReport
+	expResp, err := handler.ExportReport(context.Background(), connect.NewRequest(&pb.ExportReportRequest{
+		CaseId: caseID,
+		Format: "JSON",
+	}))
+	if err != nil {
+		t.Fatalf("ExportReport failed: %v", err)
+	}
+	if len(expResp.Msg.Content) == 0 {
+		t.Error("expected non-empty export content")
+	}
+}
+
+// ── ConnectRPC: Canvas Service ─────────────────────────────────────────────────
+
+func TestConnectCanvasService(t *testing.T) {
+	handler := newCanvasHandler()
+
+	share, err := handler.ShareCanvas(context.Background(), connect.NewRequest(&pb.ShareCanvasRequest{
+		Snapshot: &pb.CanvasSnapshot{
+			SeedAddress:   "0xabc",
+			SeedAddresses: []string{"0xabc"},
+			TotalNodes:    3,
+			TotalEdges:    2,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ShareCanvas failed: %v", err)
+	}
+	if share.Msg.ShareId == "" {
+		t.Fatal("expected non-empty share_id")
+	}
+	if share.Msg.ExpiresAt == "" {
+		t.Fatal("expected expires_at")
+	}
+
+	// Round-trip: fetch the shared canvas back by id
+	got, err := handler.GetSharedCanvas(context.Background(), connect.NewRequest(&pb.GetSharedCanvasRequest{
+		ShareId: share.Msg.ShareId,
+	}))
+	if err != nil {
+		t.Fatalf("GetSharedCanvas failed: %v", err)
+	}
+	if got.Msg.Snapshot == nil || got.Msg.Snapshot.SeedAddress != "0xabc" {
+		t.Error("expected snapshot round-trip to preserve seed_address")
+	}
+
+	_, err = handler.ShareCanvas(context.Background(), connect.NewRequest(&pb.ShareCanvasRequest{}))
+	if err == nil {
+		t.Error("expected InvalidArgument for nil snapshot")
+	}
+	_, err = handler.GetSharedCanvas(context.Background(), connect.NewRequest(&pb.GetSharedCanvasRequest{ShareId: "nope"}))
+	if err == nil {
+		t.Error("expected NotFound for unknown share_id")
 	}
 }

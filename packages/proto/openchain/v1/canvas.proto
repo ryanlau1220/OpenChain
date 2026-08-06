@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+import "openchain/v1/tracing.proto";
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+// A serialisable snapshot of a graph canvas that can be shared via a link.
+message CanvasSnapshot {
+  string seed_address          = 1;
+  repeated string seed_addresses = 2;
+  repeated GraphNode nodes     = 3;
+  repeated GraphEdge edges     = 4;
+  uint32 total_nodes           = 5;
+  uint32 total_edges           = 6;
+}
+
+message ShareCanvasRequest {
+  CanvasSnapshot snapshot = 1;
+}
+
+message ShareCanvasResponse {
+  string share_id    = 1;
+  string expires_at  = 2; // RFC-3339 timestamp
+}
+
+message GetSharedCanvasRequest {
+  string share_id = 1;
+}
+
+message GetSharedCanvasResponse {
+  CanvasSnapshot snapshot  = 1;
+  string share_id          = 2;
+  string expires_at        = 3;
+}
+
+service CanvasService {
+  rpc ShareCanvas(ShareCanvasRequest) returns (ShareCanvasResponse);
+  rpc GetSharedCanvas(GetSharedCanvasRequest) returns (GetSharedCanvasResponse);
+}

@@ -1,70 +1,44 @@
+import { createClient } from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-web';
+import { CanvasService } from '@openchain/proto/openchain/v1/canvas_connect';
+import type { CanvasSnapshot } from '@openchain/proto/openchain/v1/canvas_pb';
+import { CaseService } from '@openchain/proto/openchain/v1/cases_connect';
+import type { InvestigationCase } from '@openchain/proto/openchain/v1/cases_pb';
+import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
+import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
+import type { AddressLabel } from '@openchain/proto/openchain/v1/labels_pb';
+import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
+import { RiskService } from '@openchain/proto/openchain/v1/risk_connect';
+import type { RiskEvaluation } from '@openchain/proto/openchain/v1/risk_pb';
+import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
+import { TraceDirection } from '@openchain/proto/openchain/v1/tracing_pb';
+import type {
+	GraphEdge,
+	GraphNode,
+} from '@openchain/proto/openchain/v1/tracing_pb';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8081';
 
-export interface AddressSummary {
-	address: string;
-	network: string;
-	entity_type: string;
-	label: string;
-	balance_wei: string;
-	balance_formatted: string;
-	tx_count: number;
-	risk_score: number;
-	risk_level: string;
-}
+const transport = createConnectTransport({ baseUrl: API_BASE });
 
-export interface LabelItem {
-	id: string;
-	address: string;
-	network: string;
-	category: string;
-	label: string;
-	confidence: number;
-	evidence_url: string;
-	source: string;
-	created_by: string;
-	created_at: string;
-}
+export const tracingClient = createClient(TracingService, transport);
+export const lookupClient = createClient(LookupService, transport);
+export const labelClient = createClient(LabelService, transport);
+export const riskClient = createClient(RiskService, transport);
+export const caseClient = createClient(CaseService, transport);
+export const canvasClient = createClient(CanvasService, transport);
 
-export interface RiskFlag {
-	rule_id: string;
-	rule_name: string;
-	severity: string;
-	score_impact: number;
-	description: string;
-	evidence_detail: string;
-}
+// Re-export generated proto types for consumer convenience
+export type {
+	GraphNode,
+	GraphEdge,
+	AddressLabel,
+	RiskEvaluation,
+	InvestigationCase,
+	AddressSummary,
+};
 
-export interface RiskEvaluation {
-	address: string;
-	network: string;
-	total_score: number;
-	risk_level: string;
-	flags: RiskFlag[];
-	evaluated_at: string;
-}
-
-export interface GraphNode {
-	id: string;
-	label: string;
-	entity_type: string; // EOA, CONTRACT, EXCHANGE, MIXER, SCAMMER
-	risk_score: number;
-	category: string;
-	is_seed: boolean;
-	total_volume_wei: string;
-	in_tx_count?: number;
-	out_tx_count?: number;
-}
-
-export interface GraphEdge {
-	id: string;
-	source: string;
-	target: string;
-	value_wei: string;
-	value_formatted: string;
-	tx_count: number;
-	asset_symbol: string;
-}
-
+// GraphData is the view type used to build a CanvasSnapshot for sharing
 export interface GraphData {
 	seed_addresses?: string[];
 	seed_address?: string;
@@ -80,25 +54,7 @@ export interface CanvasShareResponse {
 	expires_at: string;
 }
 
-export async function lookupAddress(address: string) {
-	const res = await fetch(
-		`${API_BASE}/api/v1/lookup/address?address=${encodeURIComponent(address)}`,
-	);
-	if (!res.ok) throw new Error('Failed to lookup address');
-	const data = await res.json();
-	return {
-		summary: data.summary,
-		labels: Array.isArray(data.labels) ? data.labels : [],
-		risk: {
-			...data.risk,
-			flags: Array.isArray(data.risk?.flags) ? data.risk.flags : [],
-		},
-	} as {
-		summary: AddressSummary;
-		labels: LabelItem[];
-		risk: RiskEvaluation;
-	};
-}
+// ── Tracing ─────────────────────────────────────────────────────────────────────
 
 export async function fetchTraceGraph(
 	seedAddress: string,
@@ -108,57 +64,80 @@ export async function fetchTraceGraph(
 	return fetchMultiTraceGraph([seedAddress], maxHops, direction, []);
 }
 
+export async function lookupAddress(address: string) {
+	const [lookupResp, riskResp, labelsResp] = await Promise.all([
+		lookupClient.lookupAddress({
+			address,
+			network: 1 /* NETWORK_ETHEREUM_SEPOLIA */,
+		}),
+		riskClient.evaluateRisk({ address, network: 1 }),
+		labelClient.getLabels({ address, network: 1 }),
+	]);
+	return {
+		summary: lookupResp.summary,
+		risk: riskResp.evaluation,
+		labels: labelsResp.labels,
+	};
+}
+
 export async function fetchMultiTraceGraph(
 	addresses: string[],
 	maxHops = 2,
 	direction = 'BOTH',
 	tokens: string[] = [],
-) {
-	const res = await fetch(`${API_BASE}/api/v1/tracing/graph`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			addresses,
-			max_hops: maxHops,
-			direction,
-			tokens,
-		}),
+): Promise<GraphData> {
+	const traceDir =
+		direction === 'INFLOW'
+			? TraceDirection.INBOUND
+			: direction === 'OUTFLOW'
+				? TraceDirection.OUTBOUND
+				: TraceDirection.BOTH;
+
+	const response = await tracingClient.traceGraph({
+		seedAddresses: addresses,
+		maxHops,
+		direction: traceDir,
+		tokens,
 	});
-	if (!res.ok) throw new Error('Failed to fetch multi-trace graph');
-	const data = await res.json();
+
 	return {
-		...data,
-		nodes: Array.isArray(data.nodes) ? data.nodes : [],
-		edges: Array.isArray(data.edges) ? data.edges : [],
-	} as GraphData;
+		seed_addresses: addresses,
+		seed_address: response.seedAddress,
+		nodes: response.nodes as unknown as GraphNode[],
+		edges: response.edges as unknown as GraphEdge[],
+		total_nodes: response.totalNodes,
+		total_edges: response.totalEdges,
+	};
 }
 
+// ── Canvas Share ───────────────────────────────────────────────────────────────
+
 export async function shareCanvas(graphData: GraphData) {
-	const res = await fetch(`${API_BASE}/api/v1/canvas/share`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(graphData),
-	});
-	if (!res.ok) throw new Error('Failed to share canvas');
-	return res.json() as Promise<CanvasShareResponse>;
+	const snapshot: CanvasSnapshot = {
+		seedAddress: graphData.seed_address ?? '',
+		seedAddresses: graphData.seed_addresses ?? [],
+		nodes: graphData.nodes,
+		edges: graphData.edges,
+		totalNodes: graphData.total_nodes,
+		totalEdges: graphData.total_edges,
+	};
+	const res = await canvasClient.shareCanvas({ snapshot });
+	return { share_id: res.shareId, expires_at: res.expiresAt };
 }
 
 export async function getSharedCanvas(shareId: string) {
-	const res = await fetch(
-		`${API_BASE}/api/v1/canvas/share?share_id=${encodeURIComponent(shareId)}`,
-	);
-	if (!res.ok) throw new Error('Shared canvas expired or not found');
-	const resData = await res.json();
+	const res = await canvasClient.getSharedCanvas({ shareId });
+	const s = res.snapshot;
 	return {
-		...resData,
+		share_id: res.shareId,
+		expires_at: res.expiresAt,
 		graph_data: {
-			...resData.graph_data,
-			nodes: Array.isArray(resData.graph_data?.nodes)
-				? resData.graph_data.nodes
-				: [],
-			edges: Array.isArray(resData.graph_data?.edges)
-				? resData.graph_data.edges
-				: [],
+			seed_address: s?.seedAddress,
+			seed_addresses: s?.seedAddresses ?? [],
+			nodes: s?.nodes ?? [],
+			edges: s?.edges ?? [],
+			total_nodes: s?.totalNodes ?? 0,
+			total_edges: s?.totalEdges ?? 0,
 		},
 	} as CanvasShareResponse;
 }

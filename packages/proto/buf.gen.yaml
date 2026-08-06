@@ -6,7 +6,7 @@ plugins:
   - plugin: buf.build/protocolbuffers/go:v1.36.1
     out: ../../apps/backend/gen/proto
     opt: paths=source_relative
-  - plugin: buf.build/bufbuild/es:v2.2.3
+  - plugin: buf.build/bufbuild/es:v1.10.0
     out: gen/ts
     opt: target=ts
   - plugin: buf.build/connectrpc/es:v1.6.0

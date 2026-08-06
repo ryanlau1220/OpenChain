@@ -13,6 +13,9 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"@bufbuild/protobuf": "^1.10.0",
+		"@connectrpc/connect": "^1.6.0",
+		"@connectrpc/connect-web": "^1.6.0",
 		"@openchain/proto": "workspace:*",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tanstack/react-devtools": "latest",

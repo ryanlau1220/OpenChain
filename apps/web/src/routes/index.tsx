@@ -5,10 +5,10 @@ import { Header } from '../components/Header';
 import { ShareModal } from '../components/ShareModal';
 import { WalletLookup } from '../components/WalletLookup';
 import {
+	type AddressLabel,
 	type AddressSummary,
 	type GraphData,
 	type GraphNode,
-	type LabelItem,
 	type RiskEvaluation,
 	fetchMultiTraceGraph,
 	getSharedCanvas,
@@ -30,7 +30,7 @@ function Index() {
 	]);
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [risk, setRisk] = useState<RiskEvaluation | null>(null);
-	const [labels, setLabels] = useState<LabelItem[]>([]);
+	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [graphData, setGraphData] = useState<GraphData | null>(null);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);

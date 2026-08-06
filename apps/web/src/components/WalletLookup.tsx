@@ -1,15 +1,15 @@
 import { Clock, ExternalLink, ShieldAlert, Tag, Wallet } from 'lucide-react';
 import type React from 'react';
 import type {
+	AddressLabel,
 	AddressSummary,
-	LabelItem,
 	RiskEvaluation,
 } from '../services/api';
 
 interface WalletLookupProps {
 	summary: AddressSummary | null;
 	risk: RiskEvaluation | null;
-	labels: LabelItem[];
+	labels: AddressLabel[];
 	loading: boolean;
 	onTraceAddress: (addr: string) => void;
 }
