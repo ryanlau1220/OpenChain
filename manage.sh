@@ -95,7 +95,7 @@ case "$1" in
 
     lint)
         echo -e "${CYAN}Running Biome code formatting...${RESET}"
-        pnpm format
+        npx biome check --write apps/web
         echo -e "${CYAN}Running golangci-lint on Go backend...${RESET}"
         if command -v golangci-lint >/dev/null 2>&1; then
             (cd apps/backend && golangci-lint run)
@@ -107,16 +107,18 @@ case "$1" in
 
     check)
         echo -e "${CYAN}Running Biome checks...${RESET}"
-        pnpm check
+        npx biome check apps/web
         echo -e "${CYAN}Running TypeScript typecheck on web...${RESET}"
         pnpm --filter @openchain/web build
         echo -e "${GREEN}✓ Quality checks complete.${RESET}"
         ;;
 
     test)
-        echo -e "${CYAN}Running Go unit tests...${RESET}"
+        echo -e "${CYAN}Running Go backend unit, integration & E2E tests...${RESET}"
         (cd apps/backend && go test -v ./...)
-        echo -e "${GREEN}✓ Tests complete.${RESET}"
+        echo -e "${MAGENTA}Running web frontend unit tests (Vitest)...${RESET}"
+        pnpm --filter @openchain/web test
+        echo -e "${GREEN}✓ Full-stack test suite complete.${RESET}"
         ;;
 
     clean)
