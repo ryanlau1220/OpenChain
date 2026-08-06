@@ -1,0 +1,21 @@
+Port: 8080
+ExternalPort: 8080
+ExternalSecure: false
+TLS:
+  Enabled: false
+
+Database:
+  Postgres:
+    Host: postgres
+    Port: 5432
+    Database: zitadel
+    User:
+      Username: openchain
+      Password: openchain_secret
+      SSL:
+        Mode: disable
+    Admin:
+      Username: openchain
+      Password: openchain_secret
+      SSL:
+        Mode: disable
