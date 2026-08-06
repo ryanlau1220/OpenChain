@@ -1,16 +1,12 @@
 import cytoscape from 'cytoscape';
 import {
-	Activity,
+	ArrowLeftRight,
 	ArrowRight,
 	Download,
-	Eye,
-	Filter,
 	Layers,
 	Maximize2,
 	RotateCcw,
 	Share2,
-	ShieldAlert,
-	Sparkles,
 	ZoomIn,
 	ZoomOut,
 } from 'lucide-react';
@@ -51,21 +47,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		// Map Nodes
 		(graphData?.nodes || []).forEach((n) => {
-			let bg = '#3B82F6'; // Default Blue
+			let bg = '#2563EB'; // Default Blue EOA
 			let badge = n.entity_type || 'EOA';
 
 			if (n.is_seed) {
-				bg = '#06B6D4'; // Seed Cyan
-				badge = '★ Target Wallet';
+				bg = '#0284C7'; // Target Seed Cyan/Sky
+				badge = 'Target Wallet';
 			} else if (n.entity_type === 'SCAMMER' || n.risk_score >= 50) {
-				bg = '#EF4444'; // Red Risk
-				badge = '⚠️ Scammer';
+				bg = '#DC2626'; // Red Risk / Scammer
+				badge = 'Scammer';
 			} else if (n.entity_type === 'EXCHANGE') {
-				bg = '#F59E0B'; // Amber Exchange
-				badge = '🏦 Exchange';
+				bg = '#D97706'; // Amber Exchange
+				badge = 'Exchange';
 			} else if (n.entity_type === 'CONTRACT') {
-				bg = '#8B5CF6'; // Purple Contract
-				badge = '📜 Contract';
+				bg = '#7C3AED'; // Purple Contract
+				badge = 'Contract';
 			}
 
 			const inCount = n.in_tx_count ?? 0;
@@ -91,7 +87,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		// Map Edges
 		(graphData?.edges || []).forEach((e) => {
 			const isToken = e.asset_symbol === 'USDT' || e.asset_symbol === 'USDC';
-			const edgeColor = isToken ? '#10B981' : '#EF4444'; // Green for Tokens, Red for ETH
+			const edgeColor = isToken ? '#059669' : '#DC2626'; // Green for Token, Red for ETH
 
 			elements.push({
 				group: 'edges',
@@ -123,13 +119,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'text-wrap': 'wrap',
 						'text-max-width': '120px',
 						width: (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? 52 : 38,
+							ele.data('is_seed') ? 50 : 36,
 						height: (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? 52 : 38,
+							ele.data('is_seed') ? 50 : 36,
 						'border-width': (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? 4 : 2,
+							ele.data('is_seed') ? 3 : 1.5,
 						'border-color': (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? '#06B6D4' : '#FFFFFF',
+							ele.data('is_seed') ? '#38BDF8' : '#FFFFFF',
 						'overlay-padding': '4px',
 					},
 				},
@@ -154,9 +150,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					selector: ':selected',
 					style: {
 						'border-width': 4,
-						'border-color': '#06B6D4',
-						'line-color': '#06B6D4',
-						'target-arrow-color': '#06B6D4',
+						'border-color': '#38BDF8',
+						'line-color': '#38BDF8',
+						'target-arrow-color': '#38BDF8',
 					},
 				},
 			],
@@ -205,41 +201,41 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 	return (
 		<div className="relative w-full h-full bg-slate-950 flex flex-col">
-			{/* Beosin Investigation Top Toolbar */}
-			<div className="h-12 border-b border-slate-800/80 bg-slate-900/90 px-4 flex items-center justify-between text-xs sticky top-0 z-20">
+			{/* Beosin Investigation Action Toolbar */}
+			<div className="h-12 border-b border-slate-800 bg-slate-900 px-4 flex items-center justify-between text-xs sticky top-0 z-20">
 				<div className="flex items-center gap-3">
-					<div className="flex items-center gap-1 text-slate-300 font-medium">
-						<Layers className="w-3.5 h-3.5 text-cyan-400" />
+					<div className="flex items-center gap-1.5 text-slate-300 font-medium">
+						<Layers className="w-3.5 h-3.5 text-blue-400" />
 						<span>Selected:</span>
-						<span className="text-cyan-400 font-bold">
+						<span className="text-blue-400 font-semibold">
 							{selectedNode ? '1 address' : '0 addresses'}
 						</span>
 					</div>
 
 					{/* Directional Hop Expansion Actions */}
 					{selectedNode && (
-						<div className="flex items-center gap-1.5 ml-3 pl-3 border-l border-slate-700">
+						<div className="flex items-center gap-2 ml-3 pl-3 border-l border-slate-800">
 							<button
 								type="button"
 								onClick={() => onExpandNode?.(selectedNode.id, 'INFLOW')}
-								className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded font-medium transition flex items-center gap-1"
+								className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-medium transition flex items-center gap-1"
 							>
-								<ArrowRight className="w-3 h-3 rotate-180" />
+								<ArrowRight className="w-3 h-3 rotate-180 text-blue-400" />
 								Expand Inflow
 							</button>
 							<button
 								type="button"
 								onClick={() => onExpandNode?.(selectedNode.id, 'OUTFLOW')}
-								className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded font-medium transition flex items-center gap-1"
+								className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-medium transition flex items-center gap-1"
 							>
-								<ArrowRight className="w-3 h-3" />
+								<ArrowRight className="w-3 h-3 text-blue-400" />
 								Expand Outflow
 							</button>
 						</div>
 					)}
 				</div>
 
-				{/* Layout & Sharing Tools */}
+				{/* Layout Selector & Canvas Actions */}
 				<div className="flex items-center gap-2">
 					<select
 						value={layoutName}
@@ -252,7 +248,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 									| 'grid',
 							)
 						}
-						className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none"
+						className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2.5 py-1 focus:outline-none"
 					>
 						<option value="breadthfirst">Flow Layout (Left to Right)</option>
 						<option value="cose">Force Directed (Cose)</option>
@@ -282,18 +278,18 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				</div>
 			</div>
 
-			{/* Cytoscape Canvas Container */}
+			{/* Cytoscape Canvas */}
 			<div
 				ref={containerRef}
 				className="flex-1 w-full h-full cursor-grab active:cursor-grabbing"
 			/>
 
-			{/* Canvas Floating Viewport Controls */}
-			<div className="absolute bottom-6 left-6 flex items-center gap-1 p-1 bg-slate-900/90 border border-slate-800 rounded-xl shadow-xl z-10">
+			{/* Floating Zoom & Fit Controls */}
+			<div className="absolute bottom-6 left-6 flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-10">
 				<button
 					type="button"
 					onClick={handleZoomIn}
-					className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
+					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
 					title="Zoom In"
 				>
 					<ZoomIn className="w-4 h-4" />
@@ -301,7 +297,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				<button
 					type="button"
 					onClick={handleZoomOut}
-					className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
+					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
 					title="Zoom Out"
 				>
 					<ZoomOut className="w-4 h-4" />
@@ -309,7 +305,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				<button
 					type="button"
 					onClick={handleFit}
-					className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
+					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
 					title="Fit View"
 				>
 					<Maximize2 className="w-4 h-4" />
@@ -317,7 +313,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				<button
 					type="button"
 					onClick={handleReset}
-					className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
+					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
 					title="Reset View"
 				>
 					<RotateCcw className="w-4 h-4" />
@@ -326,13 +322,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 			{/* Empty State Overlay */}
 			{(!graphData || (graphData.nodes || []).length === 0) && (
-				<div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 pointer-events-none">
-					<Sparkles className="w-12 h-12 text-cyan-400 mb-3 animate-pulse" />
-					<h3 className="text-base font-semibold text-slate-200">
-						No Address Flow Graph Rendered
+				<div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 pointer-events-none">
+					<ArrowLeftRight className="w-10 h-10 text-slate-600 mb-2" />
+					<h3 className="text-sm font-semibold text-slate-300">
+						No Address Flow Rendered
 					</h3>
-					<p className="text-xs text-slate-400 mt-1">
-						Enter target address(es) above to visualize fund transfers
+					<p className="text-xs text-slate-500 mt-1">
+						Enter target address(es) above to start tracing
 					</p>
 				</div>
 			)}

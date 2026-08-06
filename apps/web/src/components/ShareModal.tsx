@@ -27,7 +27,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
 	return (
 		<div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-			<div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+			<div className="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full p-6 shadow-2xl relative">
 				<button
 					type="button"
 					onClick={onClose}
@@ -37,27 +37,27 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 				</button>
 
 				<div className="flex items-center gap-3 mb-4">
-					<div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+					<div className="w-9 h-9 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
 						<Share2 className="w-5 h-5" />
 					</div>
 					<div>
-						<h3 className="text-lg font-bold text-white">Canvas Sharing</h3>
+						<h3 className="text-base font-bold text-slate-100">
+							Canvas Sharing
+						</h3>
 						<p className="text-xs text-slate-400">
-							Share the contents of the current canvas with team investigators
+							Share the contents of the current canvas with other team users
 						</p>
 					</div>
 				</div>
 
-				<div className="bg-slate-950 border border-slate-800 rounded-xl p-4 mb-4">
-					<p className="text-xs text-slate-400 mb-2 font-mono">
-						Visit the link:
-					</p>
-					<div className="break-all text-xs text-cyan-400 font-mono bg-slate-900 p-2.5 rounded-lg border border-slate-800 select-all">
+				<div className="bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4 space-y-2">
+					<p className="text-xs text-slate-400 font-mono">Visit the link:</p>
+					<div className="break-all text-xs text-blue-400 font-mono bg-slate-900 p-2.5 rounded border border-slate-800 select-all">
 						{shareUrl}
 					</div>
 					{expiresAt && (
-						<p className="text-[11px] text-slate-500 mt-2">
-							Viewable shared content (current share is valid for 7 days until{' '}
+						<p className="text-[11px] text-slate-500">
+							Viewable shared content (current share is valid until{' '}
 							{new Date(expiresAt).toLocaleString()})
 						</p>
 					)}
@@ -67,14 +67,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 					<button
 						type="button"
 						onClick={onClose}
-						className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition"
+						className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-lg transition"
 					>
 						Cancel
 					</button>
 					<button
 						type="button"
 						onClick={handleCopy}
-						className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl transition shadow flex items-center gap-1.5"
+						className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-lg transition shadow flex items-center gap-1.5"
 					>
 						{copied ? (
 							<Check className="w-4 h-4" />
