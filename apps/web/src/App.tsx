@@ -59,18 +59,29 @@ export const App: React.FC = () => {
 			const gData = await fetchTraceGraph(nodeAddr, 2);
 			if (gData && graphData) {
 				// Merge nodes and edges
-				const existingNodeIds = new Set(graphData.nodes.map((n) => n.id));
-				const newNodes = gData.nodes.filter((n) => !existingNodeIds.has(n.id));
+				const existingNodeIds = new Set(
+					(graphData.nodes || []).map((n) => n.id),
+				);
+				const newNodes = (gData.nodes || []).filter(
+					(n) => !existingNodeIds.has(n.id),
+				);
 
-				const existingEdgeIds = new Set(graphData.edges.map((e) => e.id));
-				const newEdges = gData.edges.filter((e) => !existingEdgeIds.has(e.id));
+				const existingEdgeIds = new Set(
+					(graphData.edges || []).map((e) => e.id),
+				);
+				const newEdges = (gData.edges || []).filter(
+					(e) => !existingEdgeIds.has(e.id),
+				);
+
+				const updatedNodes = [...(graphData.nodes || []), ...newNodes];
+				const updatedEdges = [...(graphData.edges || []), ...newEdges];
 
 				setGraphData({
 					...graphData,
-					nodes: [...graphData.nodes, ...newNodes],
-					edges: [...graphData.edges, ...newEdges],
-					total_nodes: graphData.nodes.length + newNodes.length,
-					total_edges: graphData.edges.length + newEdges.length,
+					nodes: updatedNodes,
+					edges: updatedEdges,
+					total_nodes: updatedNodes.length,
+					total_edges: updatedEdges.length,
 				});
 			}
 		} catch (err) {

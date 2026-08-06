@@ -37,7 +37,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		const elements: cytoscape.ElementDefinition[] = [];
 
 		// Map Nodes
-		graphData.nodes.forEach((n) => {
+		(graphData?.nodes || []).forEach((n) => {
 			let bg = '#3B82F6'; // Default Blue
 			if (n.is_seed)
 				bg = '#06B6D4'; // Seed Cyan
@@ -60,7 +60,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		// Map Edges
-		graphData.edges.forEach((e) => {
+		(graphData?.edges || []).forEach((e) => {
 			elements.push({
 				group: 'edges',
 				data: {
