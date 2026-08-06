@@ -5,11 +5,12 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "format": "biome format --write .",
+    "check": "biome check .",
     "proto:generate": "turbo run proto:generate"
   },
   "devDependencies": {
-    "prettier": "^3.5.0",
+    "@biomejs/biome": "^1.9.4",
     "turbo": "^2.4.0"
   },
   "engines": {
