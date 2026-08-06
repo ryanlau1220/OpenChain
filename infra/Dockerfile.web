@@ -1,0 +1,16 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+RUN npm install -g pnpm
+
+COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY packages/proto ./packages/proto
+COPY apps/web ./apps/web
+
+RUN pnpm install --no-freeze-lockfile
+RUN pnpm --filter @openchain/web build
+
+FROM nginx:alpine
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+EXPOSE 3000
+CMD ["nginx", "-g", "daemon off;"]

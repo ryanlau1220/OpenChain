@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: openchain-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-openchain}
+      POSTGRES_USER: ${POSTGRES_USER:-openchain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openchain_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openchain} -d ${POSTGRES_DB:-openchain}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8.0-alpine
+    container_name: openchain-valkey
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v2.58.0
+    container_name: openchain-zitadel
+    restart: unless-stopped
+    command: start-from-init --masterkey "MasterKeyNeedsToHave32Characters!" --config /zitadel.yaml
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${POSTGRES_USER:-openchain}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD:-openchain_secret}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_EXTERNALPORT: 8080
+      ZITADEL_EXTERNALSECURE: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./zitadel/zitadel.yaml:/zitadel.yaml:ro
+
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    container_name: openchain-backend
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: "8081"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-openchain}:${POSTGRES_PASSWORD:-openchain_secret}@postgres:5432/${POSTGRES_DB:-openchain}?sslmode=disable"
+      VALKEY_URL: "valkey:6379"
+      ETH_SEPOLIA_RPC_URL: ${ETH_SEPOLIA_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com}
+      BASE_SEPOLIA_RPC_URL: ${BASE_SEPOLIA_RPC_URL:-https://sepolia.base.org}
+      ZITADEL_ISSUER: ${ZITADEL_ISSUER:-http://localhost:8080}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    container_name: openchain-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: "http://localhost:8081"
+      VITE_ZITADEL_ISSUER: "http://localhost:8080"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  valkeydata:
