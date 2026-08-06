@@ -4,7 +4,6 @@ import {
 	Scripts,
 	createRootRoute,
 } from '@tanstack/react-router';
-import type React from 'react';
 import cssUrl from '../styles.css?url';
 
 export const Route = createRootRoute({
@@ -14,7 +13,10 @@ export const Route = createRootRoute({
 			{ name: 'viewport', content: 'width=device-width, initial-scale=1' },
 			{ title: 'OpenChain - Blockchain Investigation Platform' },
 		],
-		links: [{ rel: 'stylesheet', href: cssUrl }],
+		links: [
+			{ rel: 'icon', href: '/favicon.png', type: 'image/png' },
+			{ rel: 'stylesheet', href: cssUrl },
+		],
 	}),
 	component: RootComponent,
 });
