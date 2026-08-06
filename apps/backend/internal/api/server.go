@@ -2,9 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/cases"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
@@ -19,6 +23,14 @@ type Server struct {
 	tracingEngine *tracing.Engine
 	caseService   *cases.Service
 	wsHub         *Hub
+	shareStoreMu  sync.RWMutex
+	shareStore    map[string]CanvasShareItem
+}
+
+type CanvasShareItem struct {
+	ShareID   string               `json:"share_id"`
+	GraphData *tracing.GraphResult `json:"graph_data"`
+	ExpiresAt time.Time            `json:"expires_at"`
 }
 
 func NewServer(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator, te *tracing.Engine, cs *cases.Service, hub *Hub) *Server {
@@ -29,6 +41,7 @@ func NewServer(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator, 
 		tracingEngine: te,
 		caseService:   cs,
 		wsHub:         hub,
+		shareStore:    make(map[string]CanvasShareItem),
 	}
 }
 
@@ -36,6 +49,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
 	mux.HandleFunc("/api/v1/lookup/address", s.handleLookupAddress)
 	mux.HandleFunc("/api/v1/tracing/graph", s.handleTraceGraph)
+	mux.HandleFunc("/api/v1/canvas/share", s.handleCanvasShare)
 	mux.HandleFunc("/api/v1/labels", s.handleLabels)
 	mux.HandleFunc("/api/v1/risk/evaluate", s.handleEvaluateRisk)
 	mux.HandleFunc("/api/v1/cases", s.handleCases)
@@ -102,9 +116,49 @@ func (s *Server) handleLookupAddress(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+type TraceGraphRequest struct {
+	Addresses []string `json:"addresses"`
+	Tokens    []string `json:"tokens"`
+	Direction string   `json:"direction"`
+	MaxHops   uint32   `json:"max_hops"`
+}
+
 func (s *Server) handleTraceGraph(w http.ResponseWriter, r *http.Request) {
 	enableCORS(w)
 	if r.Method == "OPTIONS" {
+		return
+	}
+
+	if r.Method == "POST" {
+		var req TraceGraphRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if len(req.Addresses) == 0 {
+			http.Error(w, `{"error":"at least one address is required"}`, http.StatusBadRequest)
+			return
+		}
+
+		maxHops := req.MaxHops
+		if maxHops == 0 {
+			maxHops = 2
+		}
+
+		dir := req.Direction
+		if dir == "" {
+			dir = "BOTH"
+		}
+
+		res, err := s.tracingEngine.TraceMultiAddressGraph(r.Context(), req.Addresses, "ETHEREUM_SEPOLIA", maxHops, dir, req.Tokens)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(res)
 		return
 	}
 
@@ -120,7 +174,12 @@ func (s *Server) handleTraceGraph(w http.ResponseWriter, r *http.Request) {
 		maxHops = h
 	}
 
-	res, err := s.tracingEngine.TraceMultiHopGraph(r.Context(), address, "ETHEREUM_SEPOLIA", uint32(maxHops), "BOTH")
+	dir := r.URL.Query().Get("direction")
+	if dir == "" {
+		dir = "BOTH"
+	}
+
+	res, err := s.tracingEngine.TraceMultiAddressGraph(r.Context(), []string{address}, "ETHEREUM_SEPOLIA", uint32(maxHops), dir, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -128,6 +187,56 @@ func (s *Server) handleTraceGraph(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(res)
+}
+
+func (s *Server) handleCanvasShare(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	if r.Method == "POST" {
+		var req tracing.GraphResult
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		shareID := fmt.Sprintf("share-%s", uuid.New().String()[:8])
+		expiresAt := time.Now().Add(7 * 24 * time.Hour) // 7 day expiration
+
+		item := CanvasShareItem{
+			ShareID:   shareID,
+			GraphData: &req,
+			ExpiresAt: expiresAt,
+		}
+
+		s.shareStoreMu.Lock()
+		s.shareStore[shareID] = item
+		s.shareStoreMu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(item)
+		return
+	}
+
+	shareID := r.URL.Query().Get("share_id")
+	if shareID == "" {
+		http.Error(w, `{"error":"share_id is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	s.shareStoreMu.RLock()
+	item, ok := s.shareStore[shareID]
+	s.shareStoreMu.RUnlock()
+
+	if !ok || time.Now().After(item.ExpiresAt) {
+		http.Error(w, `{"error":"share link invalid or expired"}`, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(item)
 }
 
 func (s *Server) handleLabels(w http.ResponseWriter, r *http.Request) {
@@ -166,17 +275,17 @@ func (s *Server) handleEvaluateRisk(w http.ResponseWriter, r *http.Request) {
 
 	address := r.URL.Query().Get("address")
 	if address == "" {
-		http.Error(w, `{"error":"address is required"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"address parameter is required"}`, http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	txCount, _ := s.evm.GetTxCount(ctx, address)
 	isContract, _ := s.evm.IsContract(ctx, address)
-	riskEval := s.riskEvaluator.EvaluateAddress(ctx, address, "ETHEREUM_SEPOLIA", isContract, txCount)
+	txCount, _ := s.evm.GetTxCount(ctx, address)
+	eval := s.riskEvaluator.EvaluateAddress(ctx, address, "ETHEREUM_SEPOLIA", isContract, txCount)
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(riskEval)
+	_ = json.NewEncoder(w).Encode(eval)
 }
 
 func (s *Server) handleCases(w http.ResponseWriter, r *http.Request) {
@@ -195,19 +304,31 @@ func (s *Server) handleCases(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		cItem, err := s.caseService.CreateCase(r.Context(), req.Title, req.Description, req.Tags)
+		c, err := s.caseService.CreateCase(r.Context(), req.Title, req.Description, req.Tags)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(cItem)
+		_ = json.NewEncoder(w).Encode(c)
 		return
 	}
 
-	cs := s.caseService.ListCases(r.Context())
+	id := r.URL.Query().Get("id")
+	if id != "" {
+		c, err := s.caseService.GetCase(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(c)
+		return
+	}
+
+	casesList := s.caseService.ListCases(r.Context())
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(cs)
+	_ = json.NewEncoder(w).Encode(casesList)
 }
 
 func (s *Server) handleExportCase(w http.ResponseWriter, r *http.Request) {
@@ -222,20 +343,20 @@ func (s *Server) handleExportCase(w http.ResponseWriter, r *http.Request) {
 		format = "JSON"
 	}
 
-	filename, content, mimeType, err := s.caseService.ExportReport(r.Context(), caseID, format)
+	filename, content, contentType, err := s.caseService.ExportReport(r.Context(), caseID, format)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", mimeType)
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Type", contentType)
 	_, _ = w.Write(content)
 }
 
 func enableCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
