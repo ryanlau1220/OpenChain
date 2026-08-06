@@ -42,8 +42,12 @@ case "$1" in
 
         trap cleanup_dev INT TERM
 
-        echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081})...${RESET}"
-        (cd apps/backend && go run ./cmd/server 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
+        echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081} with Air Live Reload)...${RESET}"
+        if command -v air >/dev/null 2>&1; then
+            (cd apps/backend && air -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
+        else
+            (cd apps/backend && go run github.com/air-verse/air@latest -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
+        fi
 
         echo -e "${YELLOW}Waiting for Go backend to become healthy on port ${PORT:-8081}...${RESET}"
         until curl -s -f http://localhost:${PORT:-8081}/api/v1/health >/dev/null 2>&1; do
@@ -107,7 +111,7 @@ case "$1" in
 
     clean)
         echo -e "${YELLOW}Cleaning build assets and cache...${RESET}"
-        rm -rf apps/web/dist .turbo apps/backend/bin
+        rm -rf apps/web/dist .turbo apps/backend/bin apps/backend/tmp
         echo -e "${GREEN}✓ Clean complete.${RESET}"
         ;;
 
