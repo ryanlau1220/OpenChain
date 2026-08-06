@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
@@ -15,6 +16,30 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/risk"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
+
+type responseLogger struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rl *responseLogger) WriteHeader(code int) {
+	rl.statusCode = code
+	rl.ResponseWriter.WriteHeader(code)
+}
+
+func withLogging(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rl := &responseLogger{ResponseWriter: w, statusCode: http.StatusOK}
+		next(rl, r)
+		slog.Info("http_request",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.Int("status", rl.statusCode),
+			slog.Duration("duration", time.Since(start)),
+		)
+	}
+}
 
 type Server struct {
 	evm           *adapter.EVMClient
@@ -46,14 +71,14 @@ func NewServer(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator, 
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/health", s.handleHealth)
-	mux.HandleFunc("/api/v1/lookup/address", s.handleLookupAddress)
-	mux.HandleFunc("/api/v1/tracing/graph", s.handleTraceGraph)
-	mux.HandleFunc("/api/v1/canvas/share", s.handleCanvasShare)
-	mux.HandleFunc("/api/v1/labels", s.handleLabels)
-	mux.HandleFunc("/api/v1/risk/evaluate", s.handleEvaluateRisk)
-	mux.HandleFunc("/api/v1/cases", s.handleCases)
-	mux.HandleFunc("/api/v1/cases/export", s.handleExportCase)
+	mux.HandleFunc("/api/v1/health", withLogging(s.handleHealth))
+	mux.HandleFunc("/api/v1/lookup/address", withLogging(s.handleLookupAddress))
+	mux.HandleFunc("/api/v1/tracing/graph", withLogging(s.handleTraceGraph))
+	mux.HandleFunc("/api/v1/canvas/share", withLogging(s.handleCanvasShare))
+	mux.HandleFunc("/api/v1/labels", withLogging(s.handleLabels))
+	mux.HandleFunc("/api/v1/risk/evaluate", withLogging(s.handleEvaluateRisk))
+	mux.HandleFunc("/api/v1/cases", withLogging(s.handleCases))
+	mux.HandleFunc("/api/v1/cases/export", withLogging(s.handleExportCase))
 	mux.HandleFunc("/ws", s.wsHub.HandleWS)
 }
 
