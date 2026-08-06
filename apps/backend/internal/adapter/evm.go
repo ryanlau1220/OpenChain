@@ -89,6 +89,23 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 	return rpcResp.Result, nil
 }
 
+func (c *EVMClient) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
+	raw, err := c.callRPC(ctx, "eth_blockNumber", []interface{}{})
+	if err != nil {
+		return 0, err
+	}
+
+	var hexStr string
+	if err := json.Unmarshal(raw, &hexStr); err != nil {
+		return 0, err
+	}
+
+	hexStr = strings.TrimPrefix(hexStr, "0x")
+	val := new(big.Int)
+	val.SetString(hexStr, 16)
+	return val.Uint64(), nil
+}
+
 func (c *EVMClient) GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	raw, err := c.callRPC(ctx, "eth_getBalance", []interface{}{address, "latest"})
 	if err != nil {
@@ -150,17 +167,26 @@ type LogItem struct {
 // ERC20 Transfer event signature: Transfer(address,address,uint256)
 const TransferEventTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-func (c *EVMClient) GetERC20Transfers(ctx context.Context, address string, fromBlock string) ([]LogItem, error) {
+func (c *EVMClient) GetERC20Transfers(ctx context.Context, address string, fromBlockHex string) ([]LogItem, error) {
 	padAddress := "0x000000000000000000000000" + strings.TrimPrefix(strings.ToLower(address), "0x")
 
+	if fromBlockHex == "" || fromBlockHex == "0x0" {
+		latest, err := c.GetLatestBlockNumber(ctx)
+		if err == nil && latest > 45000 {
+			fromBlockHex = fmt.Sprintf("0x%x", latest-45000)
+		} else {
+			fromBlockHex = "0x1"
+		}
+	}
+
 	filterInbound := map[string]interface{}{
-		"fromBlock": fromBlock,
+		"fromBlock": fromBlockHex,
 		"toBlock":   "latest",
 		"topics":    []interface{}{TransferEventTopic, nil, padAddress},
 	}
 
 	filterOutbound := map[string]interface{}{
-		"fromBlock": fromBlock,
+		"fromBlock": fromBlockHex,
 		"toBlock":   "latest",
 		"topics":    []interface{}{TransferEventTopic, padAddress, nil},
 	}

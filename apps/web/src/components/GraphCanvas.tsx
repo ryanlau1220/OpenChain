@@ -164,6 +164,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			},
 		});
 
+		cy.minZoom(0.3);
+		cy.maxZoom(1.8);
+
 		cy.on('tap', 'node', (evt) => {
 			const nData = evt.target.data('raw');
 			setSelectedNode(nData);
