@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+import "openchain/v1/common.proto";
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+message CaseNodeItem {
+  string address = 1;
+  string label = 2;
+  string notes = 3;
+}
+
+message CaseEdgeItem {
+  string source_address = 1;
+  string target_address = 2;
+  string tx_hash = 3;
+  string notes = 4;
+}
+
+message InvestigationCase {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string status = 4; // ACTIVE, DRAFT, CLOSED
+  repeated string tags = 5;
+  repeated CaseNodeItem nodes = 6;
+  repeated CaseEdgeItem edges = 7;
+  string created_by = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+}
+
+message CreateCaseRequest {
+  string title = 1;
+  string description = 2;
+  repeated string tags = 3;
+}
+
+message CreateCaseResponse {
+  InvestigationCase case_item = 1;
+}
+
+message GetCaseRequest {
+  string id = 1;
+}
+
+message GetCaseResponse {
+  InvestigationCase case_item = 1;
+}
+
+message ListCasesRequest {
+  uint32 page = 1;
+  uint32 page_size = 2;
+}
+
+message ListCasesResponse {
+  repeated InvestigationCase cases = 1;
+  uint32 total = 2;
+}
+
+message ExportReportRequest {
+  string case_id = 1;
+  string format = 2; // PDF, CSV, JSON
+}
+
+message ExportReportResponse {
+  string filename = 1;
+  bytes content = 2;
+  string mime_type = 3;
+}
+
+service CaseService {
+  rpc CreateCase(CreateCaseRequest) returns (CreateCaseResponse);
+  rpc GetCase(GetCaseRequest) returns (GetCaseResponse);
+  rpc ListCases(ListCasesRequest) returns (ListCasesResponse);
+  rpc ExportReport(ExportReportRequest) returns (ExportReportResponse);
+}

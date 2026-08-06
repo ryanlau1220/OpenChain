@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+enum Network {
+  NETWORK_UNSPECIFIED = 0;
+  NETWORK_ETHEREUM_SEPOLIA = 1;
+  NETWORK_BASE_SEPOLIA = 2;
+  NETWORK_HOLESKY = 3;
+  NETWORK_ETHEREUM_MAINNET = 4;
+}
+
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  ENTITY_TYPE_EOA = 1;
+  ENTITY_TYPE_CONTRACT = 2;
+  ENTITY_TYPE_EXCHANGE = 3;
+  ENTITY_TYPE_MIXER = 4;
+  ENTITY_TYPE_BRIDGE = 5;
+  ENTITY_TYPE_DEFI_POOL = 6;
+}
+
+message AddressSummary {
+  string address = 1;
+  Network network = 2;
+  EntityType entity_type = 3;
+  string label = 4;
+  string balance_wei = 5;
+  string balance_formatted = 6;
+  uint64 tx_count = 7;
+  int64 first_seen_timestamp = 8;
+  int64 last_seen_timestamp = 9;
+  string total_received_wei = 10;
+  string total_sent_wei = 11;
+  double risk_score = 12;
+  repeated string risk_tags = 13;
+}
+
+message TokenBalance {
+  string contract_address = 1;
+  string symbol = 2;
+  string name = 3;
+  uint32 decimals = 4;
+  string raw_balance = 5;
+  string formatted_balance = 6;
+}

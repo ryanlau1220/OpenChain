@@ -1,0 +1,21 @@
+{
+  "name": "@openchain/proto",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./gen/ts/openchain/v1/tracing_connect.js",
+  "types": "./gen/ts/openchain/v1/tracing_connect.d.ts",
+  "scripts": {
+    "proto:generate": "buf generate",
+    "build": "buf generate"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.49.0",
+    "@bufbuild/protoc-gen-es": "^2.2.3",
+    "@connectrpc/protoc-gen-connect-es": "^1.6.0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
+    "@connectrpc/connect": "^1.6.0",
+    "@connectrpc/connect-web": "^1.6.0"
+  }
+}

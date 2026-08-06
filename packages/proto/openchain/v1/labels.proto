@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+import "openchain/v1/common.proto";
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+message AddressLabel {
+  string id = 1;
+  string address = 2;
+  Network network = 3;
+  string category = 4;
+  string label = 5;
+  double confidence = 6;
+  string evidence_url = 7;
+  string source = 8;
+  string created_by = 9;
+  int64 created_at = 10;
+}
+
+message AddLabelRequest {
+  string address = 1;
+  Network network = 2;
+  string category = 3;
+  string label = 4;
+  double confidence = 5;
+  string evidence_url = 6;
+  string source = 7;
+}
+
+message AddLabelResponse {
+  AddressLabel label = 1;
+}
+
+message GetLabelsRequest {
+  string address = 1;
+  Network network = 2;
+}
+
+message GetLabelsResponse {
+  repeated AddressLabel labels = 1;
+}
+
+message SearchLabelsRequest {
+  string query = 1;
+  string category = 2;
+  uint32 limit = 3;
+}
+
+message SearchLabelsResponse {
+  repeated AddressLabel labels = 1;
+}
+
+service LabelService {
+  rpc AddLabel(AddLabelRequest) returns (AddLabelResponse);
+  rpc GetLabels(GetLabelsRequest) returns (GetLabelsResponse);
+  rpc SearchLabels(SearchLabelsRequest) returns (SearchLabelsResponse);
+}

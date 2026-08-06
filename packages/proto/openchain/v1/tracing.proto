@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+import "openchain/v1/common.proto";
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+enum TraceDirection {
+  TRACE_DIRECTION_UNSPECIFIED = 0;
+  TRACE_DIRECTION_OUTBOUND = 1;
+  TRACE_DIRECTION_INBOUND = 2;
+  TRACE_DIRECTION_BOTH = 3;
+}
+
+message GraphNode {
+  string id = 1; // address
+  string label = 2;
+  EntityType entity_type = 3;
+  double risk_score = 4;
+  string category = 5;
+  bool is_seed = 6;
+  string total_volume_wei = 7;
+}
+
+message GraphEdge {
+  string id = 1;
+  string source = 2;
+  string target = 3;
+  string value_wei = 4;
+  string value_formatted = 5;
+  uint32 tx_count = 6;
+  string asset_symbol = 7; // ETH or ERC20 symbol
+  int64 first_tx_timestamp = 8;
+  int64 last_tx_timestamp = 9;
+}
+
+message TraceGraphRequest {
+  string seed_address = 1;
+  Network network = 2;
+  uint32 max_hops = 3;
+  TraceDirection direction = 4;
+  string min_value_wei = 5;
+  string token_contract = 6;
+}
+
+message TraceGraphResponse {
+  string seed_address = 1;
+  repeated GraphNode nodes = 2;
+  repeated GraphEdge edges = 3;
+  uint32 total_nodes = 4;
+  uint32 total_edges = 5;
+}
+
+message ExpandNodeRequest {
+  string node_address = 1;
+  Network network = 2;
+  TraceDirection direction = 3;
+  uint32 limit = 4;
+}
+
+message ExpandNodeResponse {
+  repeated GraphNode new_nodes = 1;
+  repeated GraphEdge new_edges = 2;
+}
+
+service TracingService {
+  rpc TraceGraph(TraceGraphRequest) returns (TraceGraphResponse);
+  rpc ExpandNode(ExpandNodeRequest) returns (ExpandNodeResponse);
+}

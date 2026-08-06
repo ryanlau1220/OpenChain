@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+import "openchain/v1/common.proto";
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+message TransactionItem {
+  string hash = 1;
+  uint64 block_number = 2;
+  int64 timestamp = 3;
+  string from_address = 4;
+  string to_address = 5;
+  string value_wei = 6;
+  string value_formatted = 7;
+  string gas_used = 8;
+  string gas_price_wei = 9;
+  bool is_contract_creation = 10;
+  bool status_success = 11;
+  string method_name = 12;
+  repeated TokenTransferItem token_transfers = 13;
+}
+
+message TokenTransferItem {
+  string tx_hash = 1;
+  uint32 log_index = 2;
+  string token_address = 3;
+  string symbol = 4;
+  uint32 decimals = 5;
+  string from_address = 6;
+  string to_address = 7;
+  string raw_value = 8;
+  string formatted_value = 9;
+}
+
+message LookupAddressRequest {
+  string address = 1;
+  Network network = 2;
+  uint32 limit_txs = 3;
+}
+
+message LookupAddressResponse {
+  AddressSummary summary = 1;
+  repeated TokenBalance tokens = 2;
+  repeated TransactionItem recent_transactions = 3;
+}
+
+message LookupTxRequest {
+  string hash = 1;
+  Network network = 2;
+}
+
+message LookupTxResponse {
+  TransactionItem transaction = 1;
+}
+
+service LookupService {
+  rpc LookupAddress(LookupAddressRequest) returns (LookupAddressResponse);
+  rpc LookupTransaction(LookupTxRequest) returns (LookupTxResponse);
+}
