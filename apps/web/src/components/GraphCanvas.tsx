@@ -2,10 +2,10 @@ import cytoscape from 'cytoscape';
 import {
 	AlertTriangle,
 	ArrowLeftRight,
-	ArrowRight,
 	Download,
 	Layers,
 	Maximize2,
+	MinusCircle,
 	PlusCircle,
 	Redo2,
 	RotateCcw,
@@ -29,7 +29,8 @@ interface GraphCanvasProps {
 		| (GraphData & { sync_state?: { warning_message?: string; is_synced?: boolean } })
 		| null;
 	onNodeSelect: (node: GraphNode | null) => void;
-	onExpandNode?: (address: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => void;
+	onExpandNode?: (address: string) => void;
+	onCollapseNode?: (address: string) => void;
 	onShareCanvas?: () => void;
 	onExportCase?: () => void;
 	onUndo?: () => void;
@@ -51,6 +52,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	graphData,
 	onNodeSelect,
 	onExpandNode,
+	onCollapseNode,
 	onShareCanvas,
 	onExportCase,
 	onUndo,
@@ -139,6 +141,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			);
 
 			if (newElements.length === 0) {
+				if (selectedNode?.id) {
+					cy.nodes().unselect();
+					cy.getElementById(selectedNode.id).select();
+				}
 				return;
 			}
 
@@ -146,6 +152,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.batch(() => {
 					cy.add(newElements);
 				});
+				if (selectedNode?.id) {
+					cy.nodes().unselect();
+					cy.getElementById(selectedNode.id).select();
+				}
 				const layout = cy.layout({
 					name: effectiveLayout,
 					fit: false,
@@ -159,6 +169,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.elements().remove();
 				cy.add(elements);
 			});
+			if (selectedNode?.id) {
+				cy.nodes().unselect();
+				cy.getElementById(selectedNode.id).select();
+			}
 			const layout = cy.layout({
 				name: effectiveLayout,
 				fit: true,
@@ -340,35 +354,30 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						<button
 							type="button"
 							disabled={!activeTargetAddress}
-							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress, 'INFLOW')}
-							className="btn-outline text-[11px] flex items-center gap-1 transition"
+							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress)}
+							className="btn-outline text-[11px] flex items-center gap-1 transition font-medium"
 							style={{ padding: '0.25rem 0.625rem' }}
-							title={selectedNode ? `Expand Inflows for ${selectedNode.id}` : 'Expand Inflows'}
+							title={
+								selectedNode
+									? `Expand counterparty transfers for ${selectedNode.id}`
+									: 'Expand transfers'
+							}
 						>
-							<ArrowLeftRight className="w-3 h-3" />
-							Inflow
+							<PlusCircle className="w-3.5 h-3.5 text-[var(--accent)]" />
+							Expand
 						</button>
 						<button
 							type="button"
 							disabled={!activeTargetAddress}
-							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress, 'OUTFLOW')}
-							className="btn-outline text-[11px] flex items-center gap-1 transition"
+							onClick={() => activeTargetAddress && onCollapseNode?.(activeTargetAddress)}
+							className="btn-outline text-[11px] flex items-center gap-1 transition font-medium"
 							style={{ padding: '0.25rem 0.625rem' }}
-							title={selectedNode ? `Expand Outflows for ${selectedNode.id}` : 'Expand Outflows'}
+							title={
+								selectedNode ? `Collapse expanded branch for ${selectedNode.id}` : 'Collapse branch'
+							}
 						>
-							<ArrowRight className="w-3 h-3" />
-							Outflow
-						</button>
-						<button
-							type="button"
-							disabled={!activeTargetAddress}
-							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress, 'BOTH')}
-							className="btn-outline text-[11px] flex items-center gap-1 transition"
-							style={{ padding: '0.25rem 0.625rem' }}
-							title={selectedNode ? `Expand Both for ${selectedNode.id}` : 'Expand Both'}
-						>
-							<PlusCircle className="w-3 h-3" />
-							Expand Both
+							<MinusCircle className="w-3.5 h-3.5 text-slate-500" />
+							Collapse
 						</button>
 					</div>
 				</div>

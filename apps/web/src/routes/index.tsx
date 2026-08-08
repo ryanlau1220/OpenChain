@@ -108,9 +108,9 @@ function Index() {
 		setLoading(false);
 	};
 
-	const handleExpandNode = async (nodeAddr: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => {
+	const handleExpandNode = async (nodeAddr: string) => {
 		try {
-			const gData = await fetchMultiTraceGraph([nodeAddr], 2, direction, selectedTokens);
+			const gData = await fetchMultiTraceGraph([nodeAddr], 2, 'BOTH', selectedTokens);
 			if (gData && graphData) {
 				const existingNodeIds = new Set((graphData.nodes || []).map((n) => n.id));
 				const newNodes = (gData.nodes || []).filter((n) => !existingNodeIds.has(n.id));
@@ -130,6 +130,36 @@ function Index() {
 		} catch (err) {
 			console.error(err);
 		}
+	};
+
+	const handleCollapseNode = (nodeAddr: string) => {
+		if (!graphData) return;
+		const cleanAddr = nodeAddr.toLowerCase();
+
+		const keptEdges = (graphData.edges || []).filter(
+			(e) => e.source.toLowerCase() !== cleanAddr && e.target.toLowerCase() !== cleanAddr,
+		);
+
+		const connectedNodeIds = new Set<string>();
+		keptEdges.forEach((e) => {
+			connectedNodeIds.add(e.source.toLowerCase());
+			connectedNodeIds.add(e.target.toLowerCase());
+		});
+
+		const keptNodes = (graphData.nodes || []).filter((n) => {
+			const nId = n.id.toLowerCase();
+			return n.isSeed || nId === cleanAddr || connectedNodeIds.has(nId);
+		});
+
+		const updatedGraph = {
+			...graphData,
+			nodes: keptNodes,
+			edges: keptEdges,
+			total_nodes: keptNodes.length,
+			total_edges: keptEdges.length,
+		};
+
+		pushGraphHistory(updatedGraph);
 	};
 
 	const handleNodeSelect = useCallback(async (node: GraphNode | null) => {
@@ -174,6 +204,7 @@ function Index() {
 						graphData={graphData}
 						onNodeSelect={handleNodeSelect}
 						onExpandNode={handleExpandNode}
+						onCollapseNode={handleCollapseNode}
 						onShareCanvas={handleShareCanvas}
 						onUndo={handleUndo}
 						onRedo={handleRedo}
