@@ -129,8 +129,13 @@ func (d *DB) InitSchema(ctx context.Context) error {
 
 // ConnectAge returns a transaction-bound Age client for Cypher executions
 func (d *DB) ConnectAge() (*age.Age, error) {
-	return age.ConnectAge(d.GraphName, d.DSN)
+	graph := d.GraphName
+	if graph == "" {
+		graph = "openchain"
+	}
+	return age.ConnectAge(graph, d.DSN)
 }
+
 
 // Close closes the database connection pool
 func (d *DB) Close() error {

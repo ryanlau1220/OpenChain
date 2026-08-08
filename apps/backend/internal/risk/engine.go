@@ -182,7 +182,10 @@ func (e *Evaluator) EvaluateAddress(ctx context.Context, address string, network
 
 			tx, err := ag.Begin()
 			if err == nil {
-				cursor, err := tx.ExecCypher(0, "%s", cypher)
+				cursor, err := tx.ExecCypher(2, "%s", cypher)
+
+
+
 				if err == nil {
 					foundTier1 := false
 					for cursor.Next() {

@@ -227,7 +227,6 @@ func (d *DB) QueryHopGraph(ctx context.Context, rootAddr string, maxHops int) (*
 			}
 		}
 
-
 		hashVal, _ := e.Props()["hash"].(string)
 		valWei, _ := e.Props()["value_wei"].(string)
 		blkNum, _ := e.Props()["block_number"].(int64)
@@ -316,6 +315,8 @@ func (d *DB) AttachLabelEdge(ctx context.Context, address string, labelID string
 
 	return tx.Commit()
 }
+
+
 
 
 
