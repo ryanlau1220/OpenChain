@@ -25,7 +25,7 @@ func LoadConfig() *Config {
 
 	tbURL := os.Getenv("TRUEBLOCKS_API_URL")
 	if tbURL == "" {
-		tbURL = "http://localhost:8080"
+		tbURL = "http://localhost:8085"
 	}
 
 	ethRPC := os.Getenv("ETH_SEPOLIA_RPC_URL")

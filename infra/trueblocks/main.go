@@ -71,8 +71,8 @@ func main() {
 		})
 	})
 
-	log.Printf("TrueBlocks local service listening on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	log.Printf("TrueBlocks local service listening on 0.0.0.0:%s", port)
+	if err := http.ListenAndServe("0.0.0.0:"+port, nil); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }

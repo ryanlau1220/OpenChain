@@ -51,7 +51,7 @@ case "$1" in
 
             echo -e "${YELLOW}Waiting for TrueBlocks indexing service...${RESET}"
             count=0
-            until curl -s -f --connect-timeout 1 --max-time 1 http://localhost:8080/status?fmt=json >/dev/null 2>&1 || [ $count -ge 10 ]; do
+            until curl -s -f --connect-timeout 1 --max-time 1 http://localhost:8085/status?fmt=json >/dev/null 2>&1 || [ $count -ge 10 ]; do
                 sleep 0.5
                 count=$((count+1))
             done
