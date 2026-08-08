@@ -28,13 +28,39 @@ function Index() {
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [risk, setRisk] = useState<RiskEvaluation | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
-	const [graphData, setGraphData] = useState<GraphData | null>(null);
-	const [loading, setLoading] = useState<boolean>(false);
-	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+	const [history, setHistory] = useState<GraphData[]>([]);
+	const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
-	const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
-	const [shareUrl, setShareUrl] = useState<string>('');
-	const [shareExpiresAt, setShareExpiresAt] = useState<string>('');
+	const pushGraphHistory = (newGraph: GraphData) => {
+		setHistory((prev) => {
+			const sliced = prev.slice(0, historyIndex + 1);
+			return [...sliced, newGraph];
+		});
+		setHistoryIndex((prev) => prev + 1);
+		setGraphData(newGraph);
+	};
+
+	const handleUndo = useCallback(() => {
+		setHistoryIndex((prevIdx) => {
+			if (prevIdx > 0) {
+				const newIdx = prevIdx - 1;
+				setGraphData(history[newIdx]);
+				return newIdx;
+			}
+			return prevIdx;
+		});
+	}, [history]);
+
+	const handleRedo = useCallback(() => {
+		setHistoryIndex((prevIdx) => {
+			if (prevIdx < history.length - 1) {
+				const newIdx = prevIdx + 1;
+				setGraphData(history[newIdx]);
+				return newIdx;
+			}
+			return prevIdx;
+		});
+	}, [history]);
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -43,7 +69,7 @@ function Index() {
 				const sId = new URLSearchParams(hash.split('?')[1]).get('shareId');
 				if (sId) {
 					getSharedCanvas(sId)
-						.then((res) => setGraphData(res.graph_data))
+						.then((res) => pushGraphHistory(res.graph_data))
 						.catch((err) => console.error(err));
 					return;
 				}
@@ -76,7 +102,9 @@ function Index() {
 		const tracePromise = (async () => {
 			try {
 				const gData = await fetchMultiTraceGraph(addrs, 2, 'BOTH', tokens);
-				setGraphData(gData);
+				if (gData) {
+					pushGraphHistory(gData);
+				}
 			} catch (err) {
 				console.error('Fetch graph trace failed:', err);
 			}
@@ -96,13 +124,14 @@ function Index() {
 				const newEdges = (gData.edges || []).filter((e) => !existingEdgeIds.has(e.id));
 				const updatedNodes = [...(graphData.nodes || []), ...newNodes];
 				const updatedEdges = [...(graphData.edges || []), ...newEdges];
-				setGraphData({
+				const updatedGraph = {
 					...graphData,
 					nodes: updatedNodes,
 					edges: updatedEdges,
 					total_nodes: updatedNodes.length,
 					total_edges: updatedEdges.length,
-				});
+				};
+				pushGraphHistory(updatedGraph);
 			}
 		} catch (err) {
 			console.error(err);
@@ -152,6 +181,10 @@ function Index() {
 						onNodeSelect={handleNodeSelect}
 						onExpandNode={handleExpandNode}
 						onShareCanvas={handleShareCanvas}
+						onUndo={handleUndo}
+						onRedo={handleRedo}
+						canUndo={historyIndex > 0}
+						canRedo={historyIndex < history.length - 1}
 					/>
 				</div>
 

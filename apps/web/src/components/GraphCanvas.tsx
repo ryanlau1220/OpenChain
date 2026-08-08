@@ -7,8 +7,10 @@ import {
 	Layers,
 	Maximize2,
 	PlusCircle,
+	Redo2,
 	RotateCcw,
 	Share2,
+	Undo2,
 	ZoomIn,
 	ZoomOut,
 } from 'lucide-react';
@@ -30,6 +32,10 @@ interface GraphCanvasProps {
 	onExpandNode?: (address: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => void;
 	onShareCanvas?: () => void;
 	onExportCase?: () => void;
+	onUndo?: () => void;
+	onRedo?: () => void;
+	canUndo?: boolean;
+	canRedo?: boolean;
 }
 
 // PRISM node palette (light mode)
@@ -47,6 +53,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	onExpandNode,
 	onShareCanvas,
 	onExportCase,
+	onUndo,
+	onRedo,
+	canUndo = false,
+	canRedo = false,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
@@ -366,6 +376,36 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				{/* Right: layout + actions */}
 
 				<div className="flex items-center gap-2">
+					{/* Undo / Redo history controls */}
+					<div className="flex items-center gap-1 mr-1">
+						<button
+							type="button"
+							onClick={onUndo}
+							disabled={!canUndo}
+							className={`p-1.5 rounded-lg transition ${
+								canUndo
+									? 'hover:bg-[var(--slate)] text-[var(--ink-2)]'
+									: 'text-[var(--ink-3)] opacity-40 cursor-not-allowed'
+							}`}
+							title="Undo Graph Change (Ctrl+Z)"
+						>
+							<Undo2 className="w-3.5 h-3.5" />
+						</button>
+						<button
+							type="button"
+							onClick={onRedo}
+							disabled={!canRedo}
+							className={`p-1.5 rounded-lg transition ${
+								canRedo
+									? 'hover:bg-[var(--slate)] text-[var(--ink-2)]'
+									: 'text-[var(--ink-3)] opacity-40 cursor-not-allowed'
+							}`}
+							title="Redo Graph Change (Ctrl+Y)"
+						>
+							<Redo2 className="w-3.5 h-3.5" />
+						</button>
+					</div>
+
 					<select
 						value={layoutName}
 						onChange={(e) =>
