@@ -1,7 +1,6 @@
 import { createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 import { CanvasService } from '@openchain/proto/openchain/v1/canvas_connect';
-import type { CanvasSnapshot } from '@openchain/proto/openchain/v1/canvas_pb';
 import { CaseService } from '@openchain/proto/openchain/v1/cases_connect';
 import type { InvestigationCase } from '@openchain/proto/openchain/v1/cases_pb';
 import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
@@ -10,7 +9,7 @@ import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
 import type { AddressLabel } from '@openchain/proto/openchain/v1/labels_pb';
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
 import { RiskService } from '@openchain/proto/openchain/v1/risk_connect';
-import type { RiskEvaluation } from '@openchain/proto/openchain/v1/risk_pb';
+import type { RiskEvaluation, RiskFlag } from '@openchain/proto/openchain/v1/risk_pb';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import { TraceDirection } from '@openchain/proto/openchain/v1/tracing_pb';
 import type { GraphEdge, GraphNode } from '@openchain/proto/openchain/v1/tracing_pb';
@@ -32,6 +31,7 @@ export type {
 	GraphEdge,
 	AddressLabel,
 	RiskEvaluation,
+	RiskFlag,
 	InvestigationCase,
 	AddressSummary,
 };
@@ -39,15 +39,15 @@ export { EntityType };
 
 export function entityLabel(t?: EntityType): string {
 	switch (t) {
-		case EntityType.ENTITY_TYPE_CONTRACT:
+		case EntityType.CONTRACT:
 			return 'CONTRACT';
-		case EntityType.ENTITY_TYPE_EXCHANGE:
+		case EntityType.EXCHANGE:
 			return 'EXCHANGE';
-		case EntityType.ENTITY_TYPE_MIXER:
+		case EntityType.MIXER:
 			return 'MIXER';
-		case EntityType.ENTITY_TYPE_BRIDGE:
+		case EntityType.BRIDGE:
 			return 'BRIDGE';
-		case EntityType.ENTITY_TYPE_DEFI_POOL:
+		case EntityType.DEFI_POOL:
 			return 'DEFI POOL';
 		default:
 			return 'EOA';
@@ -125,15 +125,16 @@ export async function fetchMultiTraceGraph(
 // ── Canvas Share ───────────────────────────────────────────────────────────────
 
 export async function shareCanvas(graphData: GraphData) {
-	const snapshot: CanvasSnapshot = {
-		seedAddress: graphData.seed_address ?? '',
-		seedAddresses: graphData.seed_addresses ?? [],
-		nodes: graphData.nodes,
-		edges: graphData.edges,
-		totalNodes: graphData.total_nodes,
-		totalEdges: graphData.total_edges,
-	};
-	const res = await canvasClient.shareCanvas({ snapshot });
+	const res = await canvasClient.shareCanvas({
+		snapshot: {
+			seedAddress: graphData.seed_address ?? '',
+			seedAddresses: graphData.seed_addresses ?? [],
+			nodes: graphData.nodes,
+			edges: graphData.edges,
+			totalNodes: graphData.total_nodes,
+			totalEdges: graphData.total_edges,
+		},
+	});
 	return { share_id: res.shareId, expires_at: res.expiresAt };
 }
 
