@@ -1,10 +1,12 @@
 import cytoscape from 'cytoscape';
 import {
+	AlertTriangle,
 	ArrowLeftRight,
 	ArrowRight,
 	Download,
 	Layers,
 	Maximize2,
+	PlusCircle,
 	RotateCcw,
 	Share2,
 	ZoomIn,
@@ -21,7 +23,9 @@ import {
 } from '../services/api';
 
 interface GraphCanvasProps {
-	graphData: GraphData | null;
+	graphData:
+		| (GraphData & { sync_state?: { warning_message?: string; is_synced?: boolean } })
+		| null;
 	onNodeSelect: (node: GraphNode | null) => void;
 	onExpandNode?: (address: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => void;
 	onShareCanvas?: () => void;
@@ -67,10 +71,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			} else if (n.category === 'SCAMMER' || n.riskScore >= 50) {
 				palette = NODE_COLORS.risk;
 				badge = 'High Risk';
-			} else if (n.entityType === EntityType.ENTITY_TYPE_EXCHANGE) {
+			} else if (n.entityType === EntityType.EXCHANGE) {
 				palette = NODE_COLORS.exchange;
 				badge = 'Exchange';
-			} else if (n.entityType === EntityType.ENTITY_TYPE_CONTRACT) {
+			} else if (n.entityType === EntityType.CONTRACT) {
 				palette = NODE_COLORS.contract;
 				badge = 'Contract';
 			}
@@ -108,6 +112,55 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				},
 			});
 		});
+
+		if (cyRef.current) {
+			// Incremental batch merge using parent-relative position offset
+			const cy = cyRef.current;
+			cy.batch(() => {
+				const existingIds = new Set(cy.nodes().map((n) => n.id()));
+				let parentPos = { x: 200, y: 200 };
+				if (selectedNode) {
+					const pNode = cy.getElementById(selectedNode.id);
+					if (pNode && pNode.length > 0) {
+						parentPos = pNode.position();
+					}
+				}
+
+				let deltaIdx = 0;
+				elements.forEach((el) => {
+					if (el.group === 'nodes' && el.data.id && !existingIds.has(el.data.id)) {
+						deltaIdx++;
+						const added = cy.add({
+							...el,
+							position: {
+								x: parentPos.x + deltaIdx * 60,
+								y: parentPos.y + (deltaIdx % 2 === 0 ? 40 : -40),
+							},
+						});
+						added.data(el.data);
+					} else if (
+						el.group === 'edges' &&
+						el.data.id &&
+						cy.getElementById(el.data.id).length === 0
+					) {
+						if (
+							cy.getElementById(el.data.source).length > 0 &&
+							cy.getElementById(el.data.target).length > 0
+						) {
+							cy.add(el);
+						}
+					}
+				});
+			});
+
+			const layout = cy.layout({
+				name: layoutName,
+				fit: false, // Preserve viewport zoom
+				animate: true,
+			});
+			layout.run();
+			return;
+		}
 
 		const cy = cytoscape({
 			container: containerRef.current,
@@ -198,8 +251,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		cyRef.current = cy;
 		return () => {
 			cy.destroy();
+			cyRef.current = null;
 		};
-	}, [graphData, layoutName, onNodeSelect]);
+	}, [graphData, layoutName, onNodeSelect, selectedNode]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
@@ -209,12 +263,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		cyRef.current?.fit();
 	};
 
-	// Shared button style for toolbar icon buttons
 	const toolBtn =
 		'p-1.5 rounded-lg transition hover:bg-[var(--slate)] text-[var(--ink-3)] hover:text-[var(--ink)]';
 
 	return (
 		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
+			{/* Index Sync Warning Banner (Lucide AlertTriangle icon - NO emojis) */}
+			{graphData?.sync_state?.warning_message && (
+				<div
+					className="px-4 py-2 flex items-center gap-2 text-xs shrink-0"
+					style={{
+						background: '#FEF3C7',
+						borderBottom: '1px solid #FCD34D',
+						color: '#92400E',
+					}}
+				>
+					<AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+					<span className="font-medium">{graphData.sync_state.warning_message}</span>
+				</div>
+			)}
+
 			{/* Toolbar */}
 			<div
 				className="h-11 px-4 flex items-center justify-between text-xs shrink-0"
@@ -257,11 +325,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								<ArrowRight className="w-3 h-3" />
 								Outflow
 							</button>
+							<button
+								type="button"
+								onClick={() => onExpandNode?.(selectedNode.id, 'BOTH')}
+								className="btn-outline text-[11px] flex items-center gap-1"
+								style={{ padding: '0.25rem 0.625rem' }}
+							>
+								<PlusCircle className="w-3 h-3 text-[var(--accent)]" />
+								Expand Both
+							</button>
 						</div>
 					)}
 				</div>
 
 				{/* Right: layout + actions */}
+
 				<div className="flex items-center gap-2">
 					<select
 						value={layoutName}
