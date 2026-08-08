@@ -49,7 +49,6 @@ function Index() {
 				}
 			}
 		}
-
 		handleSearch([DEFAULT_SEPOLIA_ADDR], selectedTokens);
 	}, []);
 
@@ -60,14 +59,13 @@ function Index() {
 		try {
 			if (addrs.length === 1) {
 				const data = await lookupAddress(addrs[0]);
-				setSummary(data.summary);
-				setRisk(data.risk);
+				setSummary(data.summary ?? null);
+				setRisk(data.risk ?? null);
 				setLabels(data.labels || []);
 			} else {
 				setSummary(null);
 				setRisk(null);
 			}
-
 			const gData = await fetchMultiTraceGraph(addrs, 2, 'BOTH', tokens);
 			setGraphData(gData);
 		} catch (err) {
@@ -83,13 +81,10 @@ function Index() {
 			if (gData && graphData) {
 				const existingNodeIds = new Set((graphData.nodes || []).map((n) => n.id));
 				const newNodes = (gData.nodes || []).filter((n) => !existingNodeIds.has(n.id));
-
 				const existingEdgeIds = new Set((graphData.edges || []).map((e) => e.id));
 				const newEdges = (gData.edges || []).filter((e) => !existingEdgeIds.has(e.id));
-
 				const updatedNodes = [...(graphData.nodes || []), ...newNodes];
 				const updatedEdges = [...(graphData.edges || []), ...newEdges];
-
 				setGraphData({
 					...graphData,
 					nodes: updatedNodes,
@@ -108,8 +103,8 @@ function Index() {
 		if (node) {
 			try {
 				const data = await lookupAddress(node.id);
-				setSummary(data.summary);
-				setRisk(data.risk);
+				setSummary(data.summary ?? null);
+				setRisk(data.risk ?? null);
 				setLabels(data.labels || []);
 			} catch (err) {
 				console.error(err);
@@ -131,7 +126,7 @@ function Index() {
 	};
 
 	return (
-		<div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+		<div className="min-h-screen flex flex-col" style={{ background: 'var(--snow)' }}>
 			<Header
 				currentAddress={addresses[0] || DEFAULT_SEPOLIA_ADDR}
 				onSearch={handleSearch}
@@ -139,6 +134,7 @@ function Index() {
 			/>
 
 			<div className="flex-1 flex overflow-hidden">
+				{/* Graph area */}
 				<div className="flex-1 relative">
 					<GraphCanvas
 						graphData={graphData}
@@ -148,9 +144,20 @@ function Index() {
 					/>
 				</div>
 
-				<div className="w-80 border-l border-slate-800 bg-slate-900 overflow-y-auto p-4 flex flex-col gap-4">
-					<h3 className="text-xs uppercase font-bold tracking-wider text-slate-400">
-						{selectedNode ? 'Selected Node Detail' : 'Address Inspector'}
+				{/* Inspector sidebar */}
+				<div
+					className="w-80 overflow-y-auto p-4 flex flex-col gap-4"
+					style={{
+						borderLeft: '1px solid var(--border)',
+						background: 'rgba(255,255,255,0.70)',
+						backdropFilter: 'blur(8px)',
+					}}
+				>
+					<h3
+						className="text-[10px] uppercase font-bold tracking-widest"
+						style={{ color: 'var(--ink-3)' }}
+					>
+						{selectedNode ? 'Selected Node' : 'Address Inspector'}
 					</h3>
 					<WalletLookup
 						summary={summary}

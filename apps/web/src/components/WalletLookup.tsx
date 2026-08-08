@@ -4,6 +4,7 @@ import {
 	type AddressLabel,
 	type AddressSummary,
 	type RiskEvaluation,
+	type RiskFlag,
 	entityLabel,
 } from '../services/api';
 
@@ -24,16 +25,25 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 }) => {
 	if (loading) {
 		return (
-			<div className="p-6 flex flex-col items-center justify-center text-slate-400 gap-3">
-				<div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-				<p className="text-xs">Querying EVM RPC...</p>
+			<div className="p-6 flex flex-col items-center justify-center gap-3">
+				{/* Prism spinner */}
+				<div
+					className="w-6 h-6 rounded-full border-2 border-transparent animate-spin"
+					style={{
+						borderTopColor: 'var(--accent)',
+						borderRightColor: 'var(--prism-3)',
+					}}
+				/>
+				<p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+					Querying EVM RPC…
+				</p>
 			</div>
 		);
 	}
 
 	if (!summary) {
 		return (
-			<div className="p-6 text-center text-slate-500 text-xs">
+			<div className="p-6 text-center text-xs" style={{ color: 'var(--ink-3)' }}>
 				Select a node on the canvas to inspect wallet details and transaction history.
 			</div>
 		);
@@ -41,32 +51,46 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 
 	const safeLabels = Array.isArray(labels) ? labels : [];
 	const safeFlags = Array.isArray(risk?.flags) ? risk.flags : [];
+	const riskScore = risk?.totalScore ?? 0;
+	const isHighRisk = riskScore >= 50;
 
 	return (
-		<div className="space-y-4 text-xs">
-			{/* Address Header Banner */}
-			<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5">
-				<div className="flex items-center justify-between text-[11px] text-slate-400">
-					<span className="font-semibold text-blue-400 uppercase">Target Address</span>
+		<div className="space-y-3 text-xs rise-in">
+			{/* Address header */}
+			<div
+				className="p-3 rounded-xl space-y-2"
+				style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
+			>
+				<div className="flex items-center justify-between">
+					<span
+						className="text-[9px] uppercase font-bold tracking-widest"
+						style={{ color: 'var(--accent)' }}
+					>
+						Target Address
+					</span>
 					<a
 						href={`https://sepolia.etherscan.io/address/${summary.address}`}
 						target="_blank"
 						rel="noreferrer"
-						className="text-slate-400 hover:text-white transition flex items-center gap-1"
+						className="flex items-center gap-1 text-[10px] transition"
+						style={{ color: 'var(--ink-3)' }}
 					>
 						Etherscan <ExternalLink className="w-3 h-3" />
 					</a>
 				</div>
-				<p className="font-mono font-bold text-slate-100 break-all select-all text-[11px]">
+
+				<p
+					className="font-mono font-semibold break-all select-all text-[11px]"
+					style={{ color: 'var(--ink)' }}
+				>
 					{summary.address}
 				</p>
+
+				{/* Labels as prism pills */}
 				{safeLabels.length > 0 && (
-					<div className="flex flex-wrap gap-1 pt-1">
+					<div className="flex flex-wrap gap-1 pt-0.5">
 						{safeLabels.map((l) => (
-							<span
-								key={l.id}
-								className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20"
-							>
+							<span key={l.id} className="prism-pill">
 								{l.category}: {l.label}
 							</span>
 						))}
@@ -74,64 +98,97 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 				)}
 			</div>
 
-			{/* Metric Grid */}
+			{/* Metrics grid */}
 			<div className="grid grid-cols-2 gap-2">
-				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1">
-					<div className="flex items-center justify-between text-slate-400 text-[11px]">
-						<span>Balance</span>
-						<Wallet className="w-3.5 h-3.5 text-blue-400" />
-					</div>
-					<p className="font-bold font-mono text-slate-100 text-sm">{summary.balanceFormatted}</p>
-				</div>
-
-				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1">
-					<div className="flex items-center justify-between text-slate-400 text-[11px]">
-						<span>Tx Count</span>
-						<Clock className="w-3.5 h-3.5 text-blue-400" />
-					</div>
-					<p className="font-bold font-mono text-slate-100 text-sm">{summary.txCount}</p>
-				</div>
-
-				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1">
-					<div className="flex items-center justify-between text-slate-400 text-[11px]">
-						<span>Entity</span>
-						<Tag className="w-3.5 h-3.5 text-purple-400" />
-					</div>
-					<p className="font-bold text-slate-100 uppercase text-xs">
-						{entityLabel(summary.entityType)}
-					</p>
-				</div>
-
-				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1">
-					<div className="flex items-center justify-between text-slate-400 text-[11px]">
-						<span>Risk Level</span>
-						<ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-					</div>
-					<p
-						className={`font-bold font-mono text-xs ${(risk?.totalScore ?? 0) >= 50 ? 'text-red-400' : 'text-emerald-400'}`}
+				{[
+					{
+						label: 'Balance',
+						value: summary.balanceFormatted || '—',
+						icon: <Wallet className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
+					},
+					{
+						label: 'Tx Count',
+						value: String(summary.txCount ?? '—'),
+						icon: <Clock className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
+					},
+					{
+						label: 'Entity',
+						value: entityLabel(summary.entityType),
+						icon: <Tag className="w-3.5 h-3.5" style={{ color: 'var(--prism-4)' }} />,
+					},
+					{
+						label: 'Risk Score',
+						value: `${riskScore}`,
+						icon: (
+							<ShieldAlert
+								className="w-3.5 h-3.5"
+								style={{ color: isHighRisk ? 'var(--danger)' : 'var(--success)' }}
+							/>
+						),
+					},
+				].map(({ label, value, icon }) => (
+					<div
+						key={label}
+						className="p-2.5 rounded-xl space-y-1"
+						style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
 					>
-						{risk?.riskLevel ?? 'N/A'} ({risk?.totalScore ?? 0})
-					</p>
-				</div>
+						<div
+							className="flex items-center justify-between text-[10px]"
+							style={{ color: 'var(--ink-3)' }}
+						>
+							<span>{label}</span>
+							{icon}
+						</div>
+						<p
+							className="font-semibold font-mono text-xs"
+							style={{
+								color:
+									label === 'Risk Score'
+										? isHighRisk
+											? 'var(--danger)'
+											: 'var(--success)'
+										: 'var(--ink)',
+							}}
+						>
+							{value}
+						</p>
+					</div>
+				))}
 			</div>
 
-			{/* Risk Flags List */}
+			{/* Risk flags */}
 			{safeFlags.length > 0 && (
-				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
-					<span className="font-semibold text-slate-400 text-[11px] block">
-						Triggered Risk Factors ({safeFlags.length})
+				<div
+					className="p-3 rounded-xl space-y-2"
+					style={{
+						background: 'rgba(255,77,79,0.04)',
+						border: '1px solid rgba(255,77,79,0.16)',
+					}}
+				>
+					<span
+						className="text-[10px] font-bold uppercase tracking-wider block"
+						style={{ color: 'var(--danger)' }}
+					>
+						Risk Factors ({safeFlags.length})
 					</span>
 					<div className="space-y-1.5">
-						{safeFlags.map((flag) => (
+						{safeFlags.map((flag: RiskFlag) => (
 							<div
 								key={flag.ruleId}
-								className="p-2 bg-slate-900 rounded border border-slate-800 text-[11px] space-y-0.5"
+								className="p-2 rounded-lg text-[10px] space-y-0.5"
+								style={{
+									background: 'rgba(255,77,79,0.06)',
+									border: '1px solid rgba(255,77,79,0.12)',
+								}}
 							>
-								<div className="flex items-center justify-between font-medium text-slate-200">
+								<div
+									className="flex items-center justify-between font-medium"
+									style={{ color: 'var(--ink)' }}
+								>
 									<span>{flag.ruleName}</span>
-									<span className="text-red-400 font-mono">+{flag.scoreImpact}</span>
+									<span style={{ color: 'var(--danger)' }}>+{flag.scoreImpact}</span>
 								</div>
-								<p className="text-slate-400 text-[10px]">{flag.description}</p>
+								<p style={{ color: 'var(--ink-3)' }}>{flag.description}</p>
 							</div>
 						))}
 					</div>

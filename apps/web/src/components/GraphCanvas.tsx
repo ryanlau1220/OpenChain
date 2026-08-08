@@ -28,6 +28,15 @@ interface GraphCanvasProps {
 	onExportCase?: () => void;
 }
 
+// PRISM node palette (light mode)
+const NODE_COLORS = {
+	seed: { bg: '#887DFF', border: '#A7F9FF', text: '#fff' },
+	risk: { bg: '#FF4D4F', border: '#FFB3B3', text: '#fff' },
+	exchange: { bg: '#F59E0B', border: '#FDE68A', text: '#fff' },
+	contract: { bg: '#8B5CF6', border: '#DDD6FE', text: '#fff' },
+	default: { bg: '#4B5068', border: '#C8CADC', text: '#fff' },
+};
+
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	graphData,
 	onNodeSelect,
@@ -48,58 +57,53 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		const elements: cytoscape.ElementDefinition[] = [];
 
-		// Map Nodes
 		(graphData?.nodes || []).forEach((n) => {
-			let bg = '#2563EB'; // Default Blue EOA
+			let palette = NODE_COLORS.default;
 			let badge = entityLabel(n.entityType);
 
 			if (n.isSeed) {
-				bg = '#0284C7'; // Target Seed Cyan/Sky
-				badge = 'Target Wallet';
+				palette = NODE_COLORS.seed;
+				badge = 'Target';
 			} else if (n.category === 'SCAMMER' || n.riskScore >= 50) {
-				bg = '#DC2626'; // Red Risk / Scammer
-				badge = 'Scammer';
+				palette = NODE_COLORS.risk;
+				badge = 'High Risk';
 			} else if (n.entityType === EntityType.ENTITY_TYPE_EXCHANGE) {
-				bg = '#D97706'; // Amber Exchange
+				palette = NODE_COLORS.exchange;
 				badge = 'Exchange';
 			} else if (n.entityType === EntityType.ENTITY_TYPE_CONTRACT) {
-				bg = '#7C3AED'; // Purple Contract
+				palette = NODE_COLORS.contract;
 				badge = 'Contract';
 			}
 
 			const inCount = n.inTxCount ?? 0;
 			const outCount = n.outTxCount ?? 0;
-			const countStr = `${outCount} Out / ${inCount} In`;
-			const displayLabel = `${countStr}\n${n.label || n.id.substring(0, 8)}`;
+			const displayLabel = `${outCount}↑ ${inCount}↓\n${n.label || n.id.substring(0, 8)}`;
 
 			elements.push({
 				group: 'nodes',
 				data: {
 					id: n.id,
 					label: displayLabel,
-					badge: badge,
-					risk_score: n.riskScore,
+					badge,
 					is_seed: n.isSeed,
-					entity_type: badge,
-					bg: bg,
+					bg: palette.bg,
+					borderColor: palette.border,
 					raw: n,
 				},
 			});
 		});
 
-		// Map Edges
 		(graphData?.edges || []).forEach((e) => {
-			const isToken = e.assetSymbol === 'USDT' || e.assetSymbol === 'USDC';
-			const edgeColor = isToken ? '#059669' : '#DC2626'; // Green for Token, Red for ETH
-
+			const isStable = e.assetSymbol === 'USDT' || e.assetSymbol === 'USDC';
+			const lineColor = isStable ? '#34D399' : '#887DFF';
 			elements.push({
 				group: 'edges',
 				data: {
 					id: e.id,
 					source: e.source,
 					target: e.target,
-					label: `${e.txCount} Tx / Total ${e.valueFormatted || 'Transfer'}`,
-					color: edgeColor,
+					label: `${e.txCount} Tx`,
+					color: lineColor,
 					raw: e,
 				},
 			});
@@ -107,57 +111,64 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		const cy = cytoscape({
 			container: containerRef.current,
-			elements: elements,
+			elements,
 			style: [
 				{
 					selector: 'node',
 					style: {
 						'background-color': 'data(bg)',
 						label: 'data(label)',
-						color: '#F8FAFC',
+						color: '#FFFFFF',
 						'font-size': '10px',
 						'font-family': 'Inter, sans-serif',
 						'text-valign': 'top',
 						'text-margin-y': -8,
 						'text-wrap': 'wrap',
 						'text-max-width': '120px',
-						width: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 50 : 36),
-						height: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 50 : 36),
-						'border-width': (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 3 : 1.5),
-						'border-color': (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? '#38BDF8' : '#FFFFFF',
+						'text-outline-width': 2,
+						'text-outline-color': 'data(bg)',
+						width: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
+						height: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
+						'border-width': (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 3 : 2),
+						'border-color': 'data(borderColor)',
+						'border-opacity': 1,
 						'overlay-padding': '4px',
 					},
 				},
 				{
 					selector: 'edge',
 					style: {
-						width: 2,
+						width: 1.5,
 						'line-color': 'data(color)',
 						'target-arrow-color': 'data(color)',
 						'target-arrow-shape': 'triangle',
 						'curve-style': 'bezier',
 						label: 'data(label)',
 						'font-size': '9px',
-						color: '#E2E8F0',
+						color: '#4B5068',
 						'text-background-opacity': 1,
-						'text-background-color': '#0F172A',
-						'text-background-padding': '3px',
+						'text-background-color': '#FFFFFF',
+						'text-background-padding': '2px',
 						'text-background-shape': 'roundrectangle',
+						'text-border-opacity': 1,
+						'text-border-width': 1,
+						'text-border-color': '#E6E8EF',
+						opacity: 0.85,
 					},
 				},
 				{
 					selector: ':selected',
 					style: {
 						'border-width': 4,
-						'border-color': '#38BDF8',
-						'line-color': '#38BDF8',
-						'target-arrow-color': '#38BDF8',
+						'border-color': '#A7F9FF',
+						'line-color': '#887DFF',
+						'target-arrow-color': '#887DFF',
+						opacity: 1,
 					},
 				},
 			],
 			layout: {
-				name: layoutName === 'breadthfirst' ? 'breadthfirst' : layoutName,
+				name: layoutName,
 				directed: true,
 				padding: 60,
 				animate: true,
@@ -165,7 +176,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		cy.minZoom(0.3);
-		cy.maxZoom(1.8);
+		cy.maxZoom(2.0);
 
 		cy.on('tap', 'node', (evt) => {
 			const nData = evt.target.data('raw');
@@ -173,12 +184,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			setSelectedEdge(null);
 			onNodeSelect(nData);
 		});
-
 		cy.on('tap', 'edge', (evt) => {
-			const eData = evt.target.data('raw');
-			setSelectedEdge(eData);
+			setSelectedEdge(evt.target.data('raw'));
 		});
-
 		cy.on('tap', (evt) => {
 			if (evt.target === cy) {
 				setSelectedNode(null);
@@ -188,7 +196,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		cyRef.current = cy;
-
 		return () => {
 			cy.destroy();
 		};
@@ -202,125 +209,147 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		cyRef.current?.fit();
 	};
 
+	// Shared button style for toolbar icon buttons
+	const toolBtn =
+		'p-1.5 rounded-lg transition hover:bg-[var(--slate)] text-[var(--ink-3)] hover:text-[var(--ink)]';
+
 	return (
-		<div className="relative w-full h-full bg-slate-950 flex flex-col">
-			{/* Action Toolbar */}
-			<div className="h-12 border-b border-slate-800 bg-slate-900 px-4 flex items-center justify-between text-xs sticky top-0 z-20">
+		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
+			{/* Toolbar */}
+			<div
+				className="h-11 px-4 flex items-center justify-between text-xs shrink-0"
+				style={{
+					background: 'rgba(255,255,255,0.85)',
+					borderBottom: '1px solid var(--border)',
+					backdropFilter: 'blur(8px)',
+				}}
+			>
+				{/* Left: selected + expand */}
 				<div className="flex items-center gap-3">
-					<div className="flex items-center gap-1.5 text-slate-300 font-medium">
-						<Layers className="w-3.5 h-3.5 text-blue-400" />
+					<div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--ink-2)' }}>
+						<Layers className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
 						<span>Selected:</span>
-						<span className="text-blue-400 font-semibold">
+						<span style={{ color: 'var(--accent)' }}>
 							{selectedNode ? '1 address' : '0 addresses'}
 						</span>
 					</div>
 
-					{/* Directional Hop Expansion Actions */}
 					{selectedNode && (
-						<div className="flex items-center gap-2 ml-3 pl-3 border-l border-slate-800">
+						<div
+							className="flex items-center gap-1.5 ml-2 pl-2"
+							style={{ borderLeft: '1px solid var(--border)' }}
+						>
 							<button
 								type="button"
 								onClick={() => onExpandNode?.(selectedNode.id, 'INFLOW')}
-								className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-medium transition flex items-center gap-1"
+								className="btn-outline text-[11px] flex items-center gap-1"
+								style={{ padding: '0.25rem 0.625rem' }}
 							>
-								<ArrowRight className="w-3 h-3 rotate-180 text-blue-400" />
-								Expand Inflow
+								<ArrowRight className="w-3 h-3 rotate-180" />
+								Inflow
 							</button>
 							<button
 								type="button"
 								onClick={() => onExpandNode?.(selectedNode.id, 'OUTFLOW')}
-								className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded font-medium transition flex items-center gap-1"
+								className="btn-outline text-[11px] flex items-center gap-1"
+								style={{ padding: '0.25rem 0.625rem' }}
 							>
-								<ArrowRight className="w-3 h-3 text-blue-400" />
-								Expand Outflow
+								<ArrowRight className="w-3 h-3" />
+								Outflow
 							</button>
 						</div>
 					)}
 				</div>
 
-				{/* Layout Selector & Canvas Actions */}
+				{/* Right: layout + actions */}
 				<div className="flex items-center gap-2">
 					<select
 						value={layoutName}
 						onChange={(e) =>
 							setLayoutName(e.target.value as 'cose' | 'concentric' | 'breadthfirst' | 'grid')
 						}
-						className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2.5 py-1 focus:outline-none"
+						className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+						style={{
+							background: 'var(--slate)',
+							border: '1px solid var(--border)',
+							color: 'var(--ink-2)',
+						}}
 					>
-						<option value="breadthfirst">Flow Layout (Left to Right)</option>
-						<option value="cose">Force Directed (Cose)</option>
-						<option value="concentric">Concentric Circles</option>
-						<option value="grid">Grid Layout</option>
+						<option value="breadthfirst">Flow (L→R)</option>
+						<option value="cose">Force Directed</option>
+						<option value="concentric">Concentric</option>
+						<option value="grid">Grid</option>
 					</select>
 
 					<button
 						type="button"
 						onClick={onShareCanvas}
-						className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded flex items-center gap-1.5 transition shadow"
+						className="btn-primary text-[11px] flex items-center gap-1.5"
+						style={{ padding: '0.3rem 0.75rem' }}
 					>
 						<Share2 className="w-3.5 h-3.5" />
-						Share Canvas
+						Share
 					</button>
 
 					{onExportCase && (
 						<button
 							type="button"
 							onClick={onExportCase}
-							className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded flex items-center gap-1.5 transition"
+							className="btn-outline text-[11px] flex items-center gap-1.5"
+							style={{ padding: '0.3rem 0.75rem' }}
 						>
 							<Download className="w-3.5 h-3.5" />
-							Export Report
+							Export
 						</button>
 					)}
 				</div>
 			</div>
 
-			{/* Cytoscape Canvas */}
+			{/* Cytoscape canvas */}
 			<div ref={containerRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing" />
 
-			{/* Floating Controls */}
-			<div className="absolute bottom-6 left-6 flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-10">
-				<button
-					type="button"
-					onClick={handleZoomIn}
-					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
-					title="Zoom In"
-				>
-					<ZoomIn className="w-4 h-4" />
-				</button>
-				<button
-					type="button"
-					onClick={handleZoomOut}
-					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
-					title="Zoom Out"
-				>
-					<ZoomOut className="w-4 h-4" />
-				</button>
-				<button
-					type="button"
-					onClick={handleFit}
-					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
-					title="Fit View"
-				>
-					<Maximize2 className="w-4 h-4" />
-				</button>
-				<button
-					type="button"
-					onClick={handleReset}
-					className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
-					title="Reset View"
-				>
-					<RotateCcw className="w-4 h-4" />
-				</button>
+			{/* Floating zoom controls */}
+			<div
+				className="absolute bottom-5 left-5 flex flex-col gap-0.5 p-1 rounded-xl z-10"
+				style={{
+					background: 'rgba(255,255,255,0.90)',
+					border: '1px solid var(--border)',
+					boxShadow: '0 4px 16px rgba(26,29,35,0.08)',
+					backdropFilter: 'blur(8px)',
+				}}
+			>
+				{[
+					{ icon: <ZoomIn className="w-4 h-4" />, action: handleZoomIn, title: 'Zoom In' },
+					{ icon: <ZoomOut className="w-4 h-4" />, action: handleZoomOut, title: 'Zoom Out' },
+					{ icon: <Maximize2 className="w-4 h-4" />, action: handleFit, title: 'Fit View' },
+					{ icon: <RotateCcw className="w-4 h-4" />, action: handleReset, title: 'Reset' },
+				].map(({ icon, action, title }) => (
+					<button key={title} type="button" onClick={action} className={toolBtn} title={title}>
+						{icon}
+					</button>
+				))}
 			</div>
 
-			{/* Empty State Overlay */}
+			{/* Empty state */}
 			{(!graphData || (graphData.nodes || []).length === 0) && (
-				<div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 pointer-events-none">
-					<ArrowLeftRight className="w-10 h-10 text-slate-600 mb-2" />
-					<h3 className="text-sm font-semibold text-slate-300">No Address Flow Rendered</h3>
-					<p className="text-xs text-slate-500 mt-1">
-						Enter target address(es) above to start tracing
+				<div
+					className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+					style={{ background: 'rgba(250,250,252,0.85)' }}
+				>
+					<div
+						className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+						style={{
+							background: 'linear-gradient(135deg, rgba(136,125,255,0.10), rgba(167,249,255,0.10))',
+							border: '1px solid var(--border)',
+						}}
+					>
+						<ArrowLeftRight className="w-7 h-7" style={{ color: 'var(--accent)' }} />
+					</div>
+					<h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--ink)' }}>
+						No Address Flow Rendered
+					</h3>
+					<p className="text-xs" style={{ color: 'var(--ink-3)' }}>
+						Enter a target address above to start tracing
 					</p>
 				</div>
 			)}

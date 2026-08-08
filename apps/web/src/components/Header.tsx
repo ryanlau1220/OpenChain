@@ -30,117 +30,175 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 				.split(/[\s,\n]+/)
 				.map((a) => a.trim())
 				.filter(Boolean);
-			if (addrs.length > 0) {
-				onSearch(addrs, selectedTokens);
-			}
+			if (addrs.length > 0) onSearch(addrs, selectedTokens);
 		} else if (singleInput.trim()) {
 			onSearch([singleInput.trim()], selectedTokens);
 		}
 	};
 
 	return (
-		<header className="border-b border-slate-800 bg-slate-900 px-6 py-3 flex flex-col md:flex-row items-center justify-between sticky top-0 z-50 gap-4">
-			{/* Brand & Logo */}
-			<div className="flex items-center gap-3">
+		<header
+			style={{
+				background: 'rgba(255,255,255,0.85)',
+				borderBottom: '1px solid var(--border)',
+				backdropFilter: 'blur(12px)',
+				WebkitBackdropFilter: 'blur(12px)',
+			}}
+			className="px-5 py-2.5 flex flex-col md:flex-row items-center justify-between sticky top-0 z-50 gap-3"
+		>
+			{/* Brand */}
+			<div className="flex items-center gap-3 shrink-0">
 				<img
 					src="/logo.png"
 					alt="OpenChain Logo"
-					className="w-9 h-9 rounded-lg object-cover shadow border border-emerald-500/30"
+					className="w-8 h-8 rounded-lg object-cover"
+					style={{ boxShadow: '0 0 0 1px var(--border)' }}
 				/>
 				<div>
 					<div className="flex items-center gap-2">
-						<span className="font-bold text-base tracking-wide text-slate-100">OpenChain</span>
-						<span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+						<span className="font-bold text-sm tracking-tight" style={{ color: 'var(--ink)' }}>
+							OpenChain
+						</span>
+						<span
+							className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full"
+							style={{
+								background:
+									'linear-gradient(135deg, rgba(136,125,255,0.12), rgba(167,249,255,0.12))',
+								border: '1px solid rgba(136,125,255,0.28)',
+								color: 'var(--accent)',
+							}}
+						>
 							TRACE
 						</span>
 					</div>
-					<p className="text-[11px] text-slate-400">
-						Blockchain Fund Flow & Multi-Address Investigation
+					<p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
+						Fund Flow &amp; Multi-Address Investigation
 					</p>
 				</div>
 			</div>
 
-			{/* Search Input & Token Multiselect Controls */}
+			{/* Search */}
 			<form onSubmit={handleSubmit} className="flex-1 max-w-2xl w-full">
-				<div className="flex flex-col gap-2">
-					<div className="flex items-center justify-between text-xs text-slate-400 px-1">
-						<div className="flex items-center gap-2">
+				<div className="flex flex-col gap-1.5">
+					{/* Mode + Token row */}
+					<div className="flex items-center justify-between px-0.5">
+						<div className="flex items-center gap-1.5">
 							<button
 								type="button"
 								onClick={() => setIsMultiMode(false)}
-								className={`px-2.5 py-0.5 rounded font-medium text-[11px] transition ${!isMultiMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}
+								className="px-2.5 py-0.5 rounded-full text-[11px] font-medium transition"
+								style={
+									!isMultiMode
+										? {
+												background: 'linear-gradient(135deg, var(--prism-4), var(--prism-5))',
+												color: '#fff',
+												border: 'none',
+											}
+										: {
+												background: 'var(--slate)',
+												color: 'var(--ink-2)',
+												border: '1px solid var(--border)',
+											}
+								}
 							>
-								Single Address
+								Single
 							</button>
 							<button
 								type="button"
 								onClick={() => setIsMultiMode(true)}
-								className={`px-2.5 py-0.5 rounded font-medium text-[11px] transition flex items-center gap-1.5 ${isMultiMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}
+								className="px-2.5 py-0.5 rounded-full text-[11px] font-medium transition flex items-center gap-1"
+								style={
+									isMultiMode
+										? {
+												background: 'linear-gradient(135deg, var(--prism-4), var(--prism-5))',
+												color: '#fff',
+												border: 'none',
+											}
+										: {
+												background: 'var(--slate)',
+												color: 'var(--ink-2)',
+												border: '1px solid var(--border)',
+											}
+								}
 							>
 								<Layers className="w-3 h-3" />
-								Multi-Address Investigation
+								Multi-Address
 							</button>
 						</div>
 
-						{/* Token Multiselect Filters */}
-						<div className="flex items-center gap-1.5">
-							<Filter className="w-3 h-3 text-slate-500" />
-							<button
-								type="button"
-								onClick={() => toggleToken('ETH')}
-								className={`px-2 py-0.5 text-[11px] rounded font-medium flex items-center gap-1 transition ${selectedTokens.includes('ETH') ? 'bg-slate-700 text-slate-100 border border-blue-500/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-750'}`}
-							>
-								<EthIcon className="w-3 h-3" />
-								ETH
-							</button>
-							<button
-								type="button"
-								onClick={() => toggleToken('USDT')}
-								className={`px-2 py-0.5 text-[11px] rounded font-medium flex items-center gap-1 transition ${selectedTokens.includes('USDT') ? 'bg-slate-700 text-slate-100 border border-emerald-500/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-750'}`}
-							>
-								<UsdtIcon className="w-3 h-3" />
-								USDT
-							</button>
-							<button
-								type="button"
-								onClick={() => toggleToken('USDC')}
-								className={`px-2 py-0.5 text-[11px] rounded font-medium flex items-center gap-1 transition ${selectedTokens.includes('USDC') ? 'bg-slate-700 text-slate-100 border border-blue-400/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-750'}`}
-							>
-								<UsdcIcon className="w-3 h-3" />
-								USDC
-							</button>
+						{/* Token filters */}
+						<div className="flex items-center gap-1">
+							<Filter className="w-3 h-3" style={{ color: 'var(--ink-3)' }} />
+							{[
+								{ key: 'ETH', Icon: EthIcon, color: '#627EEA' },
+								{ key: 'USDT', Icon: UsdtIcon, color: '#26A17B' },
+								{ key: 'USDC', Icon: UsdcIcon, color: '#2775CA' },
+							].map(({ key, Icon, color }) => {
+								const active = selectedTokens.includes(key);
+								return (
+									<button
+										key={key}
+										type="button"
+										onClick={() => toggleToken(key)}
+										className="px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 transition"
+										style={
+											active
+												? {
+														background: `${color}18`,
+														border: `1px solid ${color}55`,
+														color: color,
+													}
+												: {
+														background: 'var(--slate)',
+														border: '1px solid var(--border)',
+														color: 'var(--ink-3)',
+													}
+										}
+									>
+										<Icon className="w-3 h-3" />
+										{key}
+									</button>
+								);
+							})}
 						</div>
 					</div>
 
+					{/* Input */}
 					{isMultiMode ? (
 						<div className="relative">
 							<textarea
 								rows={2}
 								value={bulkInput}
 								onChange={(e) => setBulkInput(e.target.value)}
-								placeholder="Please enter address (separated by spaces or newlines)"
-								className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition font-mono resize-none"
+								placeholder="Enter addresses separated by spaces or newlines…"
+								className="prism-input font-mono resize-none pr-28"
+								style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}
 							/>
 							<button
 								type="submit"
-								className="absolute right-2 bottom-2.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded transition shadow"
+								className="btn-primary absolute right-2 bottom-2 text-[11px]"
+								style={{ padding: '0.3rem 0.75rem' }}
 							>
 								Analyze Flow
 							</button>
 						</div>
 					) : (
 						<div className="relative">
-							<Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+							<Search
+								className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2"
+								style={{ color: 'var(--ink-3)' }}
+							/>
 							<input
 								type="text"
 								value={singleInput}
 								onChange={(e) => setSingleInput(e.target.value)}
-								placeholder="Search target address (0x...)"
-								className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-20 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition font-mono"
+								placeholder="Search target address (0x…)"
+								className="prism-input font-mono pl-9 pr-20"
 							/>
 							<button
 								type="submit"
-								className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded transition shadow"
+								className="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px]"
+								style={{ padding: '0.3rem 0.75rem' }}
 							>
 								Trace
 							</button>
@@ -149,12 +207,17 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 				</div>
 			</form>
 
-			{/* Network Indicator */}
-			<div className="flex items-center gap-2">
-				<div className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs">
-					<Database className="w-3.5 h-3.5 text-blue-400" />
-					<span className="text-slate-300 font-mono">{network}</span>
-				</div>
+			{/* Network badge */}
+			<div
+				className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg shrink-0 text-xs"
+				style={{
+					background: 'var(--slate)',
+					border: '1px solid var(--border)',
+					color: 'var(--ink-2)',
+				}}
+			>
+				<Database className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
+				<span className="font-mono">{network}</span>
 			</div>
 		</header>
 	);
