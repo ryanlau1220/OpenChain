@@ -211,12 +211,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					},
 				},
 				{
-					selector: ':selected',
+					selector: 'node:selected',
 					style: {
-						'border-width': 4,
-						'border-color': '#A7F9FF',
-						'line-color': '#887DFF',
-						'target-arrow-color': '#887DFF',
+						'border-width': 5,
+						'border-color': '#34D399',
+						'border-opacity': 1,
+						'line-color': '#34D399',
+						'target-arrow-color': '#34D399',
 						opacity: 1,
 					},
 				},
@@ -269,6 +270,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		cyRef.current?.fit();
 	};
 
+	const seedNode = (graphData?.nodes || []).find((n) => n.isSeed);
+	const activeTargetAddress = selectedNode?.id || seedNode?.id || graphData?.seed_address || '';
+
 	const toolBtn =
 		'p-1.5 rounded-lg transition hover:bg-[var(--slate)] text-[var(--ink-3)] hover:text-[var(--ink)]';
 
@@ -303,45 +307,60 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					<div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--ink-2)' }}>
 						<Layers className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
 						<span>Selected:</span>
-						<span style={{ color: 'var(--accent)' }}>
-							{selectedNode ? '1 address' : '0 addresses'}
+						<span
+							className="font-mono px-2 py-0.5 rounded text-[11px]"
+							style={{
+								background: selectedNode ? 'rgba(52, 211, 153, 0.12)' : 'rgba(136, 125, 255, 0.12)',
+								color: selectedNode ? '#059669' : 'var(--accent)',
+								border: selectedNode
+									? '1px solid rgba(52, 211, 153, 0.3)'
+									: '1px solid rgba(136, 125, 255, 0.3)',
+							}}
+						>
+							{selectedNode
+								? `${selectedNode.id.substring(0, 6)}…${selectedNode.id.substring(38)}`
+								: 'Target Seed'}
 						</span>
 					</div>
 
-					{selectedNode && (
-						<div
-							className="flex items-center gap-1.5 ml-2 pl-2"
-							style={{ borderLeft: '1px solid var(--border)' }}
+					<div
+						className="flex items-center gap-1.5 ml-1 pl-3"
+						style={{ borderLeft: '1px solid var(--border)' }}
+					>
+						<button
+							type="button"
+							disabled={!activeTargetAddress}
+							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress, 'INFLOW')}
+							className="btn-outline text-[11px] flex items-center gap-1 transition"
+							style={{ padding: '0.25rem 0.625rem' }}
+							title={selectedNode ? `Expand Inflows for ${selectedNode.id}` : 'Expand Inflows'}
 						>
-							<button
-								type="button"
-								onClick={() => onExpandNode?.(selectedNode.id, 'INFLOW')}
-								className="btn-outline text-[11px] flex items-center gap-1"
-								style={{ padding: '0.25rem 0.625rem' }}
-							>
-								<ArrowRight className="w-3 h-3 rotate-180" />
-								Inflow
-							</button>
-							<button
-								type="button"
-								onClick={() => onExpandNode?.(selectedNode.id, 'OUTFLOW')}
-								className="btn-outline text-[11px] flex items-center gap-1"
-								style={{ padding: '0.25rem 0.625rem' }}
-							>
-								<ArrowRight className="w-3 h-3" />
-								Outflow
-							</button>
-							<button
-								type="button"
-								onClick={() => onExpandNode?.(selectedNode.id, 'BOTH')}
-								className="btn-outline text-[11px] flex items-center gap-1"
-								style={{ padding: '0.25rem 0.625rem' }}
-							>
-								<PlusCircle className="w-3 h-3 text-[var(--accent)]" />
-								Expand Both
-							</button>
-						</div>
-					)}
+							<ArrowLeftRight className="w-3 h-3" />
+							Inflow
+						</button>
+						<button
+							type="button"
+							disabled={!activeTargetAddress}
+							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress, 'OUTFLOW')}
+							className="btn-outline text-[11px] flex items-center gap-1 transition"
+							style={{ padding: '0.25rem 0.625rem' }}
+							title={selectedNode ? `Expand Outflows for ${selectedNode.id}` : 'Expand Outflows'}
+						>
+							<ArrowRight className="w-3 h-3" />
+							Outflow
+						</button>
+						<button
+							type="button"
+							disabled={!activeTargetAddress}
+							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress, 'BOTH')}
+							className="btn-outline text-[11px] flex items-center gap-1 transition"
+							style={{ padding: '0.25rem 0.625rem' }}
+							title={selectedNode ? `Expand Both for ${selectedNode.id}` : 'Expand Both'}
+						>
+							<PlusCircle className="w-3 h-3" />
+							Expand Both
+						</button>
+					</div>
 				</div>
 
 				{/* Right: layout + actions */}
