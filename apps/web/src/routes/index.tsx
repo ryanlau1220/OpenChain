@@ -195,13 +195,18 @@ function Index() {
 						className="text-[10px] uppercase font-bold tracking-widest"
 						style={{ color: 'var(--ink-3)' }}
 					>
-						{selectedNode ? 'Selected Node' : 'Address Inspector'}
+						{selectedNode
+							? selectedNode.id.toLowerCase() === (addresses[0] || '').toLowerCase()
+								? 'Target Address Inspector'
+								: 'Selected Node Inspector'
+							: 'Address Inspector'}
 					</h3>
 					<WalletLookup
 						summary={summary}
 						risk={risk}
 						labels={labels}
 						loading={loading}
+						targetSeedAddress={addresses[0] || (graphData?.nodes || []).find((n) => n.isSeed)?.id}
 						onTraceAddress={(addr: string) => handleSearch([addr], selectedTokens)}
 					/>
 				</div>

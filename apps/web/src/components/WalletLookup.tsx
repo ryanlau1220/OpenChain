@@ -25,6 +25,7 @@ interface WalletLookupProps {
 	labels: AddressLabel[];
 	loading: boolean;
 	onTraceAddress: (addr: string) => void;
+	targetSeedAddress?: string;
 }
 
 export const WalletLookup: React.FC<WalletLookupProps> = ({
@@ -33,6 +34,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	labels,
 	loading,
 	onTraceAddress: _onTraceAddress,
+	targetSeedAddress,
 }) => {
 	const [copied, setCopied] = useState<boolean>(false);
 
@@ -78,6 +80,11 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	const riskScore = risk?.totalScore ?? 0;
 	const isHighRisk = riskScore >= 50;
 
+	const isSeedAddress =
+		Boolean(summary.address) &&
+		Boolean(targetSeedAddress) &&
+		summary.address.toLowerCase() === targetSeedAddress?.toLowerCase();
+
 	return (
 		<div className="space-y-3 text-xs rise-in">
 			{/* Address header */}
@@ -87,10 +94,16 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 			>
 				<div className="flex items-center justify-between">
 					<span
-						className="text-[9px] uppercase font-bold tracking-widest"
-						style={{ color: 'var(--accent)' }}
+						className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded"
+						style={{
+							color: isSeedAddress ? 'var(--accent)' : '#059669',
+							background: isSeedAddress ? 'rgba(136, 125, 255, 0.12)' : 'rgba(52, 211, 153, 0.12)',
+							border: isSeedAddress
+								? '1px solid rgba(136, 125, 255, 0.3)'
+								: '1px solid rgba(52, 211, 153, 0.3)',
+						}}
 					>
-						Target Address
+						{isSeedAddress ? 'Target Address' : 'Selected Address'}
 					</span>
 					<div className="flex items-center gap-2">
 						<button
