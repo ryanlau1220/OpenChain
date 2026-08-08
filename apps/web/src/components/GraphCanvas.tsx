@@ -28,6 +28,7 @@ interface GraphCanvasProps {
 	graphData:
 		| (GraphData & { sync_state?: { warning_message?: string; is_synced?: boolean } })
 		| null;
+	selectedNode?: GraphNode | null;
 	onNodeSelect: (node: GraphNode | null) => void;
 	onExpandNode?: (address: string) => void;
 	onCollapseNode?: (address: string) => void;
@@ -48,8 +49,52 @@ const NODE_COLORS = {
 	default: { bg: '#4B5068', border: '#C8CADC', text: '#fff' },
 };
 
+const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
+	const cleanTarget = targetNodeId?.toLowerCase();
+	cy.batch(() => {
+		cy.nodes().forEach((n) => {
+			const isSeed = n.data('is_seed');
+			const palette = n.data('palette') || NODE_COLORS.default;
+			const isSelected = Boolean(cleanTarget) && n.id().toLowerCase() === cleanTarget;
+
+			if (isSelected) {
+				n.data('borderColor', '#34D399');
+				n.data('borderWidth', 6);
+				n.addClass('selected-node');
+				n.style({
+					'border-color': '#34D399',
+					'border-width': 6,
+					'overlay-color': '#34D399',
+					'overlay-padding': '8px',
+					'overlay-opacity': 0.4,
+				});
+			} else if (isSeed) {
+				n.data('borderColor', '#A7F9FF');
+				n.data('borderWidth', 4);
+				n.removeClass('selected-node');
+				n.style({
+					'border-color': '#A7F9FF',
+					'border-width': 4,
+					'overlay-opacity': 0,
+				});
+			} else {
+				const defColor = palette.border || '#C8CADC';
+				n.data('borderColor', defColor);
+				n.data('borderWidth', 2);
+				n.removeClass('selected-node');
+				n.style({
+					'border-color': defColor,
+					'border-width': 2,
+					'overlay-opacity': 0,
+				});
+			}
+		});
+	});
+};
+
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	graphData,
+	selectedNode: propSelectedNode,
 	onNodeSelect,
 	onExpandNode,
 	onCollapseNode,
@@ -62,16 +107,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
-	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+	const [internalSelectedNode, setInternalSelectedNode] = useState<GraphNode | null>(null);
 	const [_selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
 	const [layoutName, setLayoutName] = useState<'cose' | 'concentric' | 'breadthfirst' | 'grid'>(
 		'breadthfirst',
 	);
 
+	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
+
 	const onNodeSelectRef = useRef(onNodeSelect);
 	useEffect(() => {
 		onNodeSelectRef.current = onNodeSelect;
 	}, [onNodeSelect]);
+
+	useEffect(() => {
+		if (!cyRef.current) return;
+		applyNodeStyles(cyRef.current, selectedNode?.id);
+	}, [selectedNode?.id, graphData]);
 
 	useEffect(() => {
 		if (!containerRef.current || !graphData) return;
@@ -109,6 +161,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					is_seed: n.isSeed,
 					bg: palette.bg,
 					borderColor: palette.border,
+					borderWidth: n.isSeed ? 4 : 2,
+					palette,
 					raw: n,
 				},
 			});
@@ -141,10 +195,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			);
 
 			if (newElements.length === 0) {
-				if (selectedNode?.id) {
-					cy.nodes().unselect();
-					cy.getElementById(selectedNode.id).select();
-				}
+				applyNodeStyles(cy, selectedNode?.id);
 				return;
 			}
 
@@ -152,16 +203,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.batch(() => {
 					cy.add(newElements);
 				});
-				if (selectedNode?.id) {
-					cy.nodes().unselect();
-					cy.getElementById(selectedNode.id).select();
-				}
+				applyNodeStyles(cy, selectedNode?.id);
 				const layout = cy.layout({
 					name: effectiveLayout,
 					fit: false,
 					animate: true,
 				});
 				layout.run();
+				applyNodeStyles(cy, selectedNode?.id);
 				return;
 			}
 
@@ -169,10 +218,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.elements().remove();
 				cy.add(elements);
 			});
-			if (selectedNode?.id) {
-				cy.nodes().unselect();
-				cy.getElementById(selectedNode.id).select();
-			}
+			applyNodeStyles(cy, selectedNode?.id);
 			const layout = cy.layout({
 				name: effectiveLayout,
 				fit: true,
@@ -180,6 +226,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				animate: true,
 			});
 			layout.run();
+			applyNodeStyles(cy, selectedNode?.id);
 			if (cy.nodes().length > 0) {
 				cy.fit(cy.nodes(), 100);
 				cy.center(cy.nodes());
@@ -207,10 +254,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'text-outline-color': 'data(bg)',
 						width: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
 						height: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
-						'border-width': (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 3 : 2),
+						'border-width': 'data(borderWidth)',
 						'border-color': 'data(borderColor)',
 						'border-opacity': 1,
 						'overlay-padding': '4px',
+					},
+				},
+				{
+					selector: 'node[?is_seed]',
+					style: {
+						width: 52,
+						height: 52,
+						'border-width': 4,
+						'border-color': '#A7F9FF',
+					},
+				},
+				{
+					selector: 'node.selected-node',
+					style: {
+						'border-width': 6,
+						'border-color': '#34D399',
+						'border-opacity': 1,
 					},
 				},
 				{
@@ -234,17 +298,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						opacity: 0.85,
 					},
 				},
-				{
-					selector: 'node:selected',
-					style: {
-						'border-width': 5,
-						'border-color': '#34D399',
-						'border-opacity': 1,
-						'line-color': '#34D399',
-						'target-arrow-color': '#34D399',
-						opacity: 1,
-					},
-				},
 			],
 			layout: {
 				name: effectiveLayout,
@@ -259,23 +312,38 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			cy.center(cy.nodes());
 		}
 
+		applyNodeStyles(cy, selectedNode?.id);
+
 		cy.minZoom(0.3);
 		cy.maxZoom(2.0);
 
-		cy.on('tap', 'node', (evt) => {
+		let isPanningCanvas = false;
+		cy.on('pan', () => {
+			isPanningCanvas = true;
+		});
+		cy.on('vmousedown', () => {
+			isPanningCanvas = false;
+		});
+
+		cy.on('tap select click', 'node', (evt) => {
 			const nData = evt.target.data('raw');
-			setSelectedNode(nData);
+			if (!nData) return;
+			setInternalSelectedNode(nData);
 			setSelectedEdge(null);
 			onNodeSelectRef.current(nData);
+			applyNodeStyles(cy, nData.id);
 		});
+
 		cy.on('tap', 'edge', (evt) => {
 			setSelectedEdge(evt.target.data('raw'));
 		});
+
 		cy.on('tap', (evt) => {
-			if (evt.target === cy) {
-				setSelectedNode(null);
+			if (evt.target === cy && !isPanningCanvas) {
+				setInternalSelectedNode(null);
 				setSelectedEdge(null);
 				onNodeSelectRef.current(null);
+				applyNodeStyles(cy, undefined);
 			}
 		});
 

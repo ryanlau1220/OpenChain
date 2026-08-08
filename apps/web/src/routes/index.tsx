@@ -202,6 +202,7 @@ function Index() {
 				<div className="flex-1 relative">
 					<GraphCanvas
 						graphData={graphData}
+						selectedNode={selectedNode}
 						onNodeSelect={handleNodeSelect}
 						onExpandNode={handleExpandNode}
 						onCollapseNode={handleCollapseNode}

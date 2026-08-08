@@ -7,6 +7,7 @@ import {
 	ShieldAlert,
 	ShieldCheck,
 	Tag,
+	Target,
 	Wallet,
 } from 'lucide-react';
 import type React from 'react';
@@ -147,6 +148,17 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 				>
 					{summary.address}
 				</p>
+
+				{!isSeedAddress && (
+					<button
+						type="button"
+						onClick={() => _onTraceAddress(summary.address)}
+						className="btn-primary w-full text-[11px] py-1.5 flex items-center justify-center gap-1.5 transition font-medium mt-2"
+					>
+						<Target className="w-3.5 h-3.5" />
+						<span>Set as Main Target</span>
+					</button>
+				)}
 
 				{/* Labels as OLI Trust Tier pills */}
 				{safeLabels.length > 0 && (
