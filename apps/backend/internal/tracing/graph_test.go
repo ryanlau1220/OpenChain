@@ -12,7 +12,7 @@ import (
 func TestTracingEngine(t *testing.T) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
-	riskEvaluator := risk.NewEvaluator(labelRegistry)
+	riskEvaluator := risk.NewEvaluator(labelRegistry, nil)
 	engine := NewEngine(evmClient, nil, nil, labelRegistry, riskEvaluator)
 
 	ctx := context.Background()
@@ -41,7 +41,7 @@ func TestTracingEngine(t *testing.T) {
 func TestMultiAddressTracing(t *testing.T) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
-	riskEvaluator := risk.NewEvaluator(labelRegistry)
+	riskEvaluator := risk.NewEvaluator(labelRegistry, nil)
 	engine := NewEngine(evmClient, nil, nil, labelRegistry, riskEvaluator)
 
 	ctx := context.Background()

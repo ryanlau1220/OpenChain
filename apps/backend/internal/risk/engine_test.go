@@ -9,7 +9,8 @@ import (
 
 func TestRiskEvaluator(t *testing.T) {
 	registry := labels.NewRegistry()
-	evaluator := NewEvaluator(registry)
+	evaluator := NewEvaluator(registry, nil)
+
 	ctx := context.Background()
 
 	// Test 1: Fresh address with zero transactions

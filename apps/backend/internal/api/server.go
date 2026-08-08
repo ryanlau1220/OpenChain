@@ -54,6 +54,7 @@ type Server struct {
 	tracingEngine *tracing.Engine
 	caseService   *cases.Service
 	wsHub         *Hub
+	pubSub        PubSubEngine
 }
 
 func NewServer(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator, te *tracing.Engine, cs *cases.Service, hub *Hub) *Server {
@@ -64,8 +65,10 @@ func NewServer(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator, 
 		tracingEngine: te,
 		caseService:   cs,
 		wsHub:         hub,
+		pubSub:        NewMemoryPubSub(),
 	}
 }
+
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	// All business logic is served via ConnectRPC

@@ -48,7 +48,8 @@ func main() {
 	tier1Worker := labels.NewTier1Worker(database, labelRegistry, "")
 	go tier1Worker.StartCron(context.Background(), 1*time.Hour)
 
-	riskEvaluator := risk.NewEvaluator(labelRegistry)
+	riskEvaluator := risk.NewEvaluator(labelRegistry, database)
+
 	tracingEngine := tracing.NewEngine(evmClient, tbClient, database, labelRegistry, riskEvaluator)
 	caseService := cases.NewService()
 	wsHub := api.NewHub()

@@ -293,6 +293,67 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
 }
 
 /**
+ * @generated from message openchain.v1.SyncStateMsg
+ */
+export class SyncStateMsg extends Message<SyncStateMsg> {
+  /**
+   * @generated from field: int64 indexed_up_to_block = 1;
+   */
+  indexedUpToBlock = protoInt64.zero;
+
+  /**
+   * @generated from field: int64 latest_chain_block = 2;
+   */
+  latestChainBlock = protoInt64.zero;
+
+  /**
+   * @generated from field: bool is_synced = 3;
+   */
+  isSynced = false;
+
+  /**
+   * @generated from field: string scrape_status = 4;
+   */
+  scrapeStatus = "";
+
+  /**
+   * @generated from field: string warning_message = 5;
+   */
+  warningMessage = "";
+
+  constructor(data?: PartialMessage<SyncStateMsg>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.SyncStateMsg";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "indexed_up_to_block", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "latest_chain_block", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "is_synced", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 4, name: "scrape_status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "warning_message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SyncStateMsg {
+    return new SyncStateMsg().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SyncStateMsg {
+    return new SyncStateMsg().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SyncStateMsg {
+    return new SyncStateMsg().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SyncStateMsg | PlainMessage<SyncStateMsg> | undefined, b: SyncStateMsg | PlainMessage<SyncStateMsg> | undefined): boolean {
+    return proto3.util.equals(SyncStateMsg, a, b);
+  }
+}
+
+/**
  * @generated from message openchain.v1.TraceGraphResponse
  */
 export class TraceGraphResponse extends Message<TraceGraphResponse> {
@@ -321,6 +382,11 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
    */
   totalEdges = 0;
 
+  /**
+   * @generated from field: openchain.v1.SyncStateMsg sync_state = 6;
+   */
+  syncState?: SyncStateMsg;
+
   constructor(data?: PartialMessage<TraceGraphResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -334,6 +400,7 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
     { no: 3, name: "edges", kind: "message", T: GraphEdge, repeated: true },
     { no: 4, name: "total_nodes", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "total_edges", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 6, name: "sync_state", kind: "message", T: SyncStateMsg },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphResponse {
@@ -454,6 +521,104 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
 
   static equals(a: ExpandNodeResponse | PlainMessage<ExpandNodeResponse> | undefined, b: ExpandNodeResponse | PlainMessage<ExpandNodeResponse> | undefined): boolean {
     return proto3.util.equals(ExpandNodeResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message openchain.v1.StreamGraphUpdatesRequest
+ */
+export class StreamGraphUpdatesRequest extends Message<StreamGraphUpdatesRequest> {
+  /**
+   * @generated from field: string case_id = 1;
+   */
+  caseId = "";
+
+  constructor(data?: PartialMessage<StreamGraphUpdatesRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.StreamGraphUpdatesRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "case_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StreamGraphUpdatesRequest {
+    return new StreamGraphUpdatesRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StreamGraphUpdatesRequest {
+    return new StreamGraphUpdatesRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StreamGraphUpdatesRequest {
+    return new StreamGraphUpdatesRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StreamGraphUpdatesRequest | PlainMessage<StreamGraphUpdatesRequest> | undefined, b: StreamGraphUpdatesRequest | PlainMessage<StreamGraphUpdatesRequest> | undefined): boolean {
+    return proto3.util.equals(StreamGraphUpdatesRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message openchain.v1.StreamGraphUpdatesResponse
+ */
+export class StreamGraphUpdatesResponse extends Message<StreamGraphUpdatesResponse> {
+  /**
+   * @generated from field: string case_id = 1;
+   */
+  caseId = "";
+
+  /**
+   * @generated from field: string event_type = 2;
+   */
+  eventType = "";
+
+  /**
+   * @generated from field: repeated openchain.v1.GraphNode nodes = 3;
+   */
+  nodes: GraphNode[] = [];
+
+  /**
+   * @generated from field: repeated openchain.v1.GraphEdge edges = 4;
+   */
+  edges: GraphEdge[] = [];
+
+  /**
+   * @generated from field: openchain.v1.SyncStateMsg sync_state = 5;
+   */
+  syncState?: SyncStateMsg;
+
+  constructor(data?: PartialMessage<StreamGraphUpdatesResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.StreamGraphUpdatesResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "case_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "event_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "nodes", kind: "message", T: GraphNode, repeated: true },
+    { no: 4, name: "edges", kind: "message", T: GraphEdge, repeated: true },
+    { no: 5, name: "sync_state", kind: "message", T: SyncStateMsg },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StreamGraphUpdatesResponse {
+    return new StreamGraphUpdatesResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StreamGraphUpdatesResponse {
+    return new StreamGraphUpdatesResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StreamGraphUpdatesResponse {
+    return new StreamGraphUpdatesResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StreamGraphUpdatesResponse | PlainMessage<StreamGraphUpdatesResponse> | undefined, b: StreamGraphUpdatesResponse | PlainMessage<StreamGraphUpdatesResponse> | undefined): boolean {
+    return proto3.util.equals(StreamGraphUpdatesResponse, a, b);
   }
 }
 

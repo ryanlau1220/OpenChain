@@ -19,7 +19,8 @@ import (
 func setupTestServer() (http.Handler, *Server) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
-	riskEvaluator := risk.NewEvaluator(labelRegistry)
+	riskEvaluator := risk.NewEvaluator(labelRegistry, nil)
+
 	tracingEngine := tracing.NewEngine(evmClient, nil, nil, labelRegistry, riskEvaluator)
 
 	caseService := cases.NewService()

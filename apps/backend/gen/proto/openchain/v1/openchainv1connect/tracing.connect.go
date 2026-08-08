@@ -39,19 +39,24 @@ const (
 	// TracingServiceExpandNodeProcedure is the fully-qualified name of the TracingService's ExpandNode
 	// RPC.
 	TracingServiceExpandNodeProcedure = "/openchain.v1.TracingService/ExpandNode"
+	// TracingServiceStreamGraphUpdatesProcedure is the fully-qualified name of the TracingService's
+	// StreamGraphUpdates RPC.
+	TracingServiceStreamGraphUpdatesProcedure = "/openchain.v1.TracingService/StreamGraphUpdates"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	tracingServiceServiceDescriptor          = v1.File_openchain_v1_tracing_proto.Services().ByName("TracingService")
-	tracingServiceTraceGraphMethodDescriptor = tracingServiceServiceDescriptor.Methods().ByName("TraceGraph")
-	tracingServiceExpandNodeMethodDescriptor = tracingServiceServiceDescriptor.Methods().ByName("ExpandNode")
+	tracingServiceServiceDescriptor                  = v1.File_openchain_v1_tracing_proto.Services().ByName("TracingService")
+	tracingServiceTraceGraphMethodDescriptor         = tracingServiceServiceDescriptor.Methods().ByName("TraceGraph")
+	tracingServiceExpandNodeMethodDescriptor         = tracingServiceServiceDescriptor.Methods().ByName("ExpandNode")
+	tracingServiceStreamGraphUpdatesMethodDescriptor = tracingServiceServiceDescriptor.Methods().ByName("StreamGraphUpdates")
 )
 
 // TracingServiceClient is a client for the openchain.v1.TracingService service.
 type TracingServiceClient interface {
 	TraceGraph(context.Context, *connect.Request[v1.TraceGraphRequest]) (*connect.Response[v1.TraceGraphResponse], error)
 	ExpandNode(context.Context, *connect.Request[v1.ExpandNodeRequest]) (*connect.Response[v1.ExpandNodeResponse], error)
+	StreamGraphUpdates(context.Context, *connect.Request[v1.StreamGraphUpdatesRequest]) (*connect.ServerStreamForClient[v1.StreamGraphUpdatesResponse], error)
 }
 
 // NewTracingServiceClient constructs a client for the openchain.v1.TracingService service. By
@@ -76,13 +81,20 @@ func NewTracingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(tracingServiceExpandNodeMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		streamGraphUpdates: connect.NewClient[v1.StreamGraphUpdatesRequest, v1.StreamGraphUpdatesResponse](
+			httpClient,
+			baseURL+TracingServiceStreamGraphUpdatesProcedure,
+			connect.WithSchema(tracingServiceStreamGraphUpdatesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tracingServiceClient implements TracingServiceClient.
 type tracingServiceClient struct {
-	traceGraph *connect.Client[v1.TraceGraphRequest, v1.TraceGraphResponse]
-	expandNode *connect.Client[v1.ExpandNodeRequest, v1.ExpandNodeResponse]
+	traceGraph         *connect.Client[v1.TraceGraphRequest, v1.TraceGraphResponse]
+	expandNode         *connect.Client[v1.ExpandNodeRequest, v1.ExpandNodeResponse]
+	streamGraphUpdates *connect.Client[v1.StreamGraphUpdatesRequest, v1.StreamGraphUpdatesResponse]
 }
 
 // TraceGraph calls openchain.v1.TracingService.TraceGraph.
@@ -95,10 +107,16 @@ func (c *tracingServiceClient) ExpandNode(ctx context.Context, req *connect.Requ
 	return c.expandNode.CallUnary(ctx, req)
 }
 
+// StreamGraphUpdates calls openchain.v1.TracingService.StreamGraphUpdates.
+func (c *tracingServiceClient) StreamGraphUpdates(ctx context.Context, req *connect.Request[v1.StreamGraphUpdatesRequest]) (*connect.ServerStreamForClient[v1.StreamGraphUpdatesResponse], error) {
+	return c.streamGraphUpdates.CallServerStream(ctx, req)
+}
+
 // TracingServiceHandler is an implementation of the openchain.v1.TracingService service.
 type TracingServiceHandler interface {
 	TraceGraph(context.Context, *connect.Request[v1.TraceGraphRequest]) (*connect.Response[v1.TraceGraphResponse], error)
 	ExpandNode(context.Context, *connect.Request[v1.ExpandNodeRequest]) (*connect.Response[v1.ExpandNodeResponse], error)
+	StreamGraphUpdates(context.Context, *connect.Request[v1.StreamGraphUpdatesRequest], *connect.ServerStream[v1.StreamGraphUpdatesResponse]) error
 }
 
 // NewTracingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -119,12 +137,20 @@ func NewTracingServiceHandler(svc TracingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(tracingServiceExpandNodeMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	tracingServiceStreamGraphUpdatesHandler := connect.NewServerStreamHandler(
+		TracingServiceStreamGraphUpdatesProcedure,
+		svc.StreamGraphUpdates,
+		connect.WithSchema(tracingServiceStreamGraphUpdatesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/openchain.v1.TracingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TracingServiceTraceGraphProcedure:
 			tracingServiceTraceGraphHandler.ServeHTTP(w, r)
 		case TracingServiceExpandNodeProcedure:
 			tracingServiceExpandNodeHandler.ServeHTTP(w, r)
+		case TracingServiceStreamGraphUpdatesProcedure:
+			tracingServiceStreamGraphUpdatesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -140,4 +166,8 @@ func (UnimplementedTracingServiceHandler) TraceGraph(context.Context, *connect.R
 
 func (UnimplementedTracingServiceHandler) ExpandNode(context.Context, *connect.Request[v1.ExpandNodeRequest]) (*connect.Response[v1.ExpandNodeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openchain.v1.TracingService.ExpandNode is not implemented"))
+}
+
+func (UnimplementedTracingServiceHandler) StreamGraphUpdates(context.Context, *connect.Request[v1.StreamGraphUpdatesRequest], *connect.ServerStream[v1.StreamGraphUpdatesResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("openchain.v1.TracingService.StreamGraphUpdates is not implemented"))
 }
