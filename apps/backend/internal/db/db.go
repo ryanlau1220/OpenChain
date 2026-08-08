@@ -70,7 +70,8 @@ func (d *DB) InitSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin schema tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
+
 
 	initSQL := `
 		CREATE EXTENSION IF NOT EXISTS age;

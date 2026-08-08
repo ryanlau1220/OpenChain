@@ -41,7 +41,8 @@ func TestNewDBInitialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected NewDB not to fail on constructor, got %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
+
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // instantly canceled context

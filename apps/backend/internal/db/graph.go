@@ -68,7 +68,7 @@ func (d *DB) UpsertNode(ctx context.Context, node Node) error {
 	if err != nil {
 		return fmt.Errorf("age begin error: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	label := node.Label
 	if label == "" {
@@ -103,7 +103,7 @@ func (d *DB) UpsertEdge(ctx context.Context, edge Edge) error {
 	if err != nil {
 		return fmt.Errorf("age begin error: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	fromAddr := strings.ToLower(edge.FromAddress)
 	toAddr := strings.ToLower(edge.ToAddress)
@@ -147,13 +147,14 @@ func (d *DB) QueryHopGraph(ctx context.Context, rootAddr string, maxHops int) (*
 	if err != nil {
 		return nil, fmt.Errorf("age begin error: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if maxHops <= 0 {
 		maxHops = 1
 	}
 
 	addr := strings.ToLower(rootAddr)
+	slog.Debug("Querying hop graph", "address", addr, "maxHops", maxHops)
 
 	// Fetch 1-hop connections
 	cypher := fmt.Sprintf(`
@@ -237,6 +238,4 @@ func (d *DB) QueryHopGraph(ctx context.Context, rootAddr string, maxHops int) (*
 	}, nil
 }
 
-func nodeMapKey(addr string) string {
-	return strings.ToLower(addr)
-}
+

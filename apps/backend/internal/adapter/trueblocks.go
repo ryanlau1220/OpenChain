@@ -79,7 +79,7 @@ func (t *TrueBlocksAdapter) GetSyncStatus(ctx context.Context) (*SyncState, erro
 			WarningMessage:   "TrueBlocks local scraper offline. Historical index syncing pending.",
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return &SyncState{
@@ -146,7 +146,7 @@ func (t *TrueBlocksAdapter) GetAddressTransactions(ctx context.Context, address 
 		slog.Warn("TrueBlocks export query unavailable, returning empty set with sync metadata", "address", address)
 		return []TrueBlocksTransaction{}, syncState, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -177,7 +177,7 @@ func (t *TrueBlocksAdapter) GetSingleTransactionRPC(ctx context.Context, txHash 
 	if err != nil {
 		return nil, fmt.Errorf("RPC request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var rpcResult struct {
 		Result struct {
