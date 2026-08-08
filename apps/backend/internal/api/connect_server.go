@@ -97,6 +97,39 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges}), nil
 }
 
+func (h *connectTracingHandler) StreamGraphUpdates(
+	ctx context.Context,
+	req *connect.Request[pb.StreamGraphUpdatesRequest],
+	stream *connect.ServerStream[pb.StreamGraphUpdatesResponse],
+) error {
+	caseID := req.Msg.GetCaseId()
+	if caseID == "" {
+		caseID = "default-case"
+	}
+
+	ch, unsub := h.server.pubSub.Subscribe(caseID)
+	defer unsub()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			res := &pb.StreamGraphUpdatesResponse{
+				CaseId:    evt.CaseID,
+				EventType: evt.EventType,
+			}
+			if err := stream.Send(res); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+
 // ── Lookup Service ─────────────────────────────────────────────────────────────
 
 type connectLookupHandler struct{ server *Server }
