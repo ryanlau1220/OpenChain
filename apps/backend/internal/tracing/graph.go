@@ -151,10 +151,11 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 					}
 
 					// Direction filter
-					if direction == "INFLOW" && to != clean {
+					dirUpper := strings.ToUpper(direction)
+					if (strings.Contains(dirUpper, "INBOUND") || dirUpper == "INFLOW") && to != clean {
 						continue
 					}
-					if direction == "OUTFLOW" && from != clean {
+					if (strings.Contains(dirUpper, "OUTBOUND") || dirUpper == "OUTFLOW") && from != clean {
 						continue
 					}
 

@@ -30,37 +30,31 @@ function Index() {
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [history, setHistory] = useState<GraphData[]>([]);
 	const [historyIndex, setHistoryIndex] = useState<number>(-1);
+	const [loading, setLoading] = useState<boolean>(false);
+	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
-	const pushGraphHistory = (newGraph: GraphData) => {
+	const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
+	const [shareUrl, setShareUrl] = useState<string>('');
+	const [shareExpiresAt, setShareExpiresAt] = useState<string>('');
+
+	const graphData =
+		historyIndex >= 0 && historyIndex < history.length ? history[historyIndex] : null;
+
+	const pushGraphHistory = useCallback((newGraph: GraphData) => {
 		setHistory((prev) => {
-			const sliced = prev.slice(0, historyIndex + 1);
-			return [...sliced, newGraph];
+			const nextHistory = [...prev, newGraph];
+			setHistoryIndex(nextHistory.length - 1);
+			return nextHistory;
 		});
-		setHistoryIndex((prev) => prev + 1);
-		setGraphData(newGraph);
-	};
+	}, []);
 
 	const handleUndo = useCallback(() => {
-		setHistoryIndex((prevIdx) => {
-			if (prevIdx > 0) {
-				const newIdx = prevIdx - 1;
-				setGraphData(history[newIdx]);
-				return newIdx;
-			}
-			return prevIdx;
-		});
-	}, [history]);
+		setHistoryIndex((prevIdx) => (prevIdx > 0 ? prevIdx - 1 : prevIdx));
+	}, []);
 
 	const handleRedo = useCallback(() => {
-		setHistoryIndex((prevIdx) => {
-			if (prevIdx < history.length - 1) {
-				const newIdx = prevIdx + 1;
-				setGraphData(history[newIdx]);
-				return newIdx;
-			}
-			return prevIdx;
-		});
-	}, [history]);
+		setHistoryIndex((prevIdx) => (prevIdx < history.length - 1 ? prevIdx + 1 : prevIdx));
+	}, [history.length]);
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
