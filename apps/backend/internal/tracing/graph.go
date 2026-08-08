@@ -247,66 +247,9 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 				Source:         from,
 				Target:         to,
 				ValueWei:       rawVal.String(),
-				ValueFormatted: fmt.Sprintf("%s Token", rawVal.String()),
+				ValueFormatted: fmt.Sprintf("%s Tokens", rawVal.String()),
 				TxCount:        1,
 				AssetSymbol:    "USDT",
-			}
-		}
-
-		// Fallback: If public RPC return zero logs for seed (due to RPC rate limits or old transfer history),
-		// generate representative trace topology so the flow graph is never empty!
-		if len(logs) == 0 {
-			counterparties := []struct {
-				Addr    string
-				Label   string
-				Entity  string
-				Value   string
-				Symbol  string
-				IsInflow bool
-			}{
-				{Addr: "0x567f042da35a404d300000000000000000000001", Label: "Inflow EOA", Entity: "EOA", Value: "15.5 ETH", Symbol: "ETH", IsInflow: true},
-				{Addr: "0x10f81fe17a747405600000000000000000000002", Label: "Binance Hot Wallet", Entity: "EXCHANGE", Value: "50,000 USDT", Symbol: "USDT", IsInflow: true},
-				{Addr: "0x3655f4df07bb9d1ce00000000000000000000003", Label: "Deployer / Fund", Entity: "CONTRACT", Value: "120.0 ETH", Symbol: "ETH", IsInflow: true},
-				{Addr: "0x7890abcdef1234567890abcdef1234567890abc4", Label: "Outflow Treasury", Entity: "EOA", Value: "5.2 ETH", Symbol: "ETH", IsInflow: false},
-				{Addr: "0x9876543210fedcba9876543210fedcba98765435", Label: "Suspicious Pool", Entity: "SCAMMER", Value: "100,000 USDC", Symbol: "USDC", IsInflow: false},
-			}
-
-			for idx, cp := range counterparties {
-				if direction == "INFLOW" && !cp.IsInflow {
-					continue
-				}
-				if direction == "OUTFLOW" && cp.IsInflow {
-					continue
-				}
-
-				nodeMap[cp.Addr] = GraphNode{
-					ID:             cp.Addr,
-					Label:          cp.Label,
-					EntityType:     cp.Entity,
-					RiskScore:      func() float64 { if cp.Entity == "SCAMMER" { return 85.0 }; return 10.0 }(),
-					Category:       func() string { if cp.Entity == "SCAMMER" { return "CRITICAL" }; return "LOW" }(),
-					IsSeed:         false,
-					TotalVolumeWei: "1000000000000000000",
-				}
-
-				src, tgt := cp.Addr, clean
-				if !cp.IsInflow {
-					src, tgt = clean, cp.Addr
-				}
-
-				outCountMap[src]++
-				inCountMap[tgt]++
-
-				eID := fmt.Sprintf("%s-%s-%d", src, tgt, idx)
-				edgeMap[eID] = GraphEdge{
-					ID:             eID,
-					Source:         src,
-					Target:         tgt,
-					ValueWei:       "1000000000000000000",
-					ValueFormatted: cp.Value,
-					TxCount:        uint32(idx + 1),
-					AssetSymbol:    cp.Symbol,
-				}
 			}
 		}
 	}
