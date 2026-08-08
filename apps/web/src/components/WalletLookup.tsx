@@ -1,6 +1,16 @@
-import { Clock, ExternalLink, Shield, ShieldAlert, ShieldCheck, Tag, Wallet } from 'lucide-react';
-
+import {
+	Check,
+	Clock,
+	Copy,
+	ExternalLink,
+	Shield,
+	ShieldAlert,
+	ShieldCheck,
+	Tag,
+	Wallet,
+} from 'lucide-react';
 import type React from 'react';
+import { useState } from 'react';
 import {
 	type AddressLabel,
 	type AddressSummary,
@@ -24,6 +34,19 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	loading,
 	onTraceAddress: _onTraceAddress,
 }) => {
+	const [copied, setCopied] = useState<boolean>(false);
+
+	const handleCopyAddress = async () => {
+		if (!summary?.address) return;
+		try {
+			await navigator.clipboard.writeText(summary.address);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch (err) {
+			console.error('Failed to copy address:', err);
+		}
+	};
+
 	if (loading) {
 		return (
 			<div className="p-6 flex flex-col items-center justify-center gap-3">
@@ -69,15 +92,40 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					>
 						Target Address
 					</span>
-					<a
-						href={`https://sepolia.etherscan.io/address/${summary.address}`}
-						target="_blank"
-						rel="noreferrer"
-						className="flex items-center gap-1 text-[10px] transition"
-						style={{ color: 'var(--ink-3)' }}
-					>
-						Etherscan <ExternalLink className="w-3 h-3" />
-					</a>
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							onClick={handleCopyAddress}
+							className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition font-medium"
+							style={{
+								background: copied ? 'rgba(52, 211, 153, 0.15)' : 'var(--slate)',
+								color: copied ? '#059669' : 'var(--ink-2)',
+								border: copied ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid var(--border)',
+							}}
+							title="Copy wallet address to clipboard"
+						>
+							{copied ? (
+								<>
+									<Check className="w-3 h-3 text-emerald-600" />
+									<span>Copied</span>
+								</>
+							) : (
+								<>
+									<Copy className="w-3 h-3 text-slate-500" />
+									<span>Copy</span>
+								</>
+							)}
+						</button>
+						<a
+							href={`https://sepolia.etherscan.io/address/${summary.address}`}
+							target="_blank"
+							rel="noreferrer"
+							className="flex items-center gap-1 text-[10px] transition hover:text-[var(--accent)]"
+							style={{ color: 'var(--ink-3)' }}
+						>
+							Etherscan <ExternalLink className="w-3 h-3" />
+						</a>
+					</div>
 				</div>
 
 				<p
