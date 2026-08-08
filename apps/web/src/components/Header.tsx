@@ -1,7 +1,7 @@
-import { Database, Filter, Layers, Search } from 'lucide-react';
+import { Layers, Search } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
-import { EthIcon, UsdcIcon, UsdtIcon } from './Icons';
+import { EthIcon } from './Icons';
 
 interface HeaderProps {
 	currentAddress: string;
@@ -13,15 +13,7 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 	const [isMultiMode, setIsMultiMode] = useState(false);
 	const [singleInput, setSingleInput] = useState(currentAddress);
 	const [bulkInput, setBulkInput] = useState('');
-	const [selectedTokens, setSelectedTokens] = useState<string[]>(['ETH', 'USDT']);
-
-	const toggleToken = (token: string) => {
-		if (selectedTokens.includes(token)) {
-			setSelectedTokens(selectedTokens.filter((t) => t !== token));
-		} else {
-			setSelectedTokens([...selectedTokens, token]);
-		}
-	};
+	const [selectedTokens] = useState<string[]>(['ETH', 'USDT']);
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -126,40 +118,17 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 							</button>
 						</div>
 
-						{/* Token filters */}
-						<div className="flex items-center gap-1">
-							<Filter className="w-3 h-3" style={{ color: 'var(--ink-3)' }} />
-							{[
-								{ key: 'ETH', Icon: EthIcon, color: '#627EEA' },
-								{ key: 'USDT', Icon: UsdtIcon, color: '#26A17B' },
-								{ key: 'USDC', Icon: UsdcIcon, color: '#2775CA' },
-							].map(({ key, Icon, color }) => {
-								const active = selectedTokens.includes(key);
-								return (
-									<button
-										key={key}
-										type="button"
-										onClick={() => toggleToken(key)}
-										className="px-2 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 transition"
-										style={
-											active
-												? {
-														background: `${color}18`,
-														border: `1px solid ${color}55`,
-														color: color,
-													}
-												: {
-														background: 'var(--slate)',
-														border: '1px solid var(--border)',
-														color: 'var(--ink-3)',
-													}
-										}
-									>
-										<Icon className="w-3 h-3" />
-										{key}
-									</button>
-								);
-							})}
+						{/* Single Dynamic Network Badge with Ethereum Logo */}
+						<div
+							className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium"
+							style={{
+								background: 'rgba(98, 126, 234, 0.10)',
+								border: '1px solid rgba(98, 126, 234, 0.30)',
+								color: '#627EEA',
+							}}
+						>
+							<EthIcon className="w-3.5 h-3.5" />
+							<span>{network}</span>
 						</div>
 					</div>
 
@@ -171,54 +140,37 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 								value={bulkInput}
 								onChange={(e) => setBulkInput(e.target.value)}
 								placeholder="Enter addresses separated by spaces or newlines…"
-								className="prism-input font-mono resize-none pr-28"
+								className="prism-input font-mono resize-none pr-12"
 								style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}
 							/>
 							<button
 								type="submit"
-								className="btn-primary absolute right-2 bottom-2 text-[11px]"
-								style={{ padding: '0.3rem 0.75rem' }}
+								className="btn-primary absolute right-1.5 bottom-2 text-xs flex items-center justify-center p-2 rounded-lg"
+								title="Search Multi-Address Flow"
 							>
-								Analyze Flow
+								<Search className="w-4 h-4" />
 							</button>
 						</div>
 					) : (
 						<div className="relative">
-							<Search
-								className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2"
-								style={{ color: 'var(--ink-3)' }}
-							/>
 							<input
 								type="text"
 								value={singleInput}
 								onChange={(e) => setSingleInput(e.target.value)}
 								placeholder="Search target address (0x…)"
-								className="prism-input font-mono pl-9 pr-20"
+								className="prism-input font-mono pl-3.5 pr-12"
 							/>
 							<button
 								type="submit"
-								className="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px]"
-								style={{ padding: '0.3rem 0.75rem' }}
+								className="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 text-xs flex items-center justify-center p-2 rounded-lg"
+								title="Investigate Address"
 							>
-								Trace
+								<Search className="w-4 h-4" />
 							</button>
 						</div>
 					)}
 				</div>
 			</form>
-
-			{/* Network badge */}
-			<div
-				className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg shrink-0 text-xs"
-				style={{
-					background: 'var(--slate)',
-					border: '1px solid var(--border)',
-					color: 'var(--ink-2)',
-				}}
-			>
-				<Database className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
-				<span className="font-mono">{network}</span>
-			</div>
 		</header>
 	);
 };

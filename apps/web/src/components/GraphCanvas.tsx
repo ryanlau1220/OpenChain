@@ -118,6 +118,28 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		if (cyRef.current) {
 			const cy = cyRef.current;
+			const currentElementIds = new Set(cy.elements().map((e) => e.id()));
+			const newElements = elements.filter(
+				(e) => Boolean(e.data.id) && !currentElementIds.has(e.data.id as string),
+			);
+
+			if (newElements.length === 0 && cy.elements().length === elements.length) {
+				return;
+			}
+
+			if (newElements.length > 0 && cy.elements().length > 0) {
+				cy.batch(() => {
+					cy.add(newElements);
+				});
+				const layout = cy.layout({
+					name: effectiveLayout,
+					fit: false,
+					animate: true,
+				});
+				layout.run();
+				return;
+			}
+
 			cy.batch(() => {
 				cy.elements().remove();
 				cy.add(elements);
@@ -232,7 +254,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			cy.destroy();
 			cyRef.current = null;
 		};
-	}, [graphData, layoutName, onNodeSelect, selectedNode]);
+	}, [graphData, layoutName, onNodeSelect]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
