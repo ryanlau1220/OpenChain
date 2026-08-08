@@ -13,7 +13,7 @@ func TestTracingEngine(t *testing.T) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
 	riskEvaluator := risk.NewEvaluator(labelRegistry)
-	engine := NewEngine(evmClient, labelRegistry, riskEvaluator)
+	engine := NewEngine(evmClient, nil, nil, labelRegistry, riskEvaluator)
 
 	ctx := context.Background()
 	seed := "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
@@ -42,7 +42,7 @@ func TestMultiAddressTracing(t *testing.T) {
 	evmClient := adapter.NewEVMClient("https://ethereum-sepolia-rpc.publicnode.com")
 	labelRegistry := labels.NewRegistry()
 	riskEvaluator := risk.NewEvaluator(labelRegistry)
-	engine := NewEngine(evmClient, labelRegistry, riskEvaluator)
+	engine := NewEngine(evmClient, nil, nil, labelRegistry, riskEvaluator)
 
 	ctx := context.Background()
 	seeds := []string{

@@ -14,10 +14,12 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/api"
 	"github.com/openchain/openchain/apps/backend/internal/cases"
 	"github.com/openchain/openchain/apps/backend/internal/config"
+	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/risk"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
+
 
 func main() {
 	cfg := config.LoadConfig()
@@ -26,13 +28,33 @@ func main() {
 	log.Printf("Connecting to EVM Testnet RPC: %s", cfg.EthSepoliaRPCURL)
 
 	evmClient := adapter.NewEVMClient(cfg.EthSepoliaRPCURL)
+	tbClient := adapter.NewTrueBlocksAdapter(cfg.TrueBlocksAPIURL, cfg.EthSepoliaRPCURL)
+
+	dbCfg := db.DefaultConfig(cfg.DatabaseURL)
+	database, err := db.NewDB(dbCfg)
+	if err != nil {
+		log.Printf("Warning: Database pool initialization skipped: %v", err)
+	} else {
+		defer func() { _ = database.Close() }()
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = database.InitSchema(ctx)
+		}()
+	}
+
 	labelRegistry := labels.NewRegistry()
+	tier1Worker := labels.NewTier1Worker(database, labelRegistry, "")
+	go tier1Worker.StartCron(context.Background(), 1*time.Hour)
+
 	riskEvaluator := risk.NewEvaluator(labelRegistry)
-	tracingEngine := tracing.NewEngine(evmClient, labelRegistry, riskEvaluator)
+	tracingEngine := tracing.NewEngine(evmClient, tbClient, database, labelRegistry, riskEvaluator)
 	caseService := cases.NewService()
 	wsHub := api.NewHub()
 
 	server := api.NewServer(evmClient, labelRegistry, riskEvaluator, tracingEngine, caseService, wsHub)
+
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,

@@ -8,6 +8,93 @@ import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 import { Network } from "./common_pb.js";
 
 /**
+ * @generated from enum openchain.v1.TrustTier
+ */
+export enum TrustTier {
+  /**
+   * @generated from enum value: TRUST_TIER_UNSPECIFIED = 0;
+   */
+  TRUST_TIER_UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TRUST_TIER_1_AUTHORITATIVE = 1;
+   */
+  TRUST_TIER_1_AUTHORITATIVE = 1,
+
+  /**
+   * @generated from enum value: TRUST_TIER_2_COMMUNITY_VERIFIED = 2;
+   */
+  TRUST_TIER_2_COMMUNITY_VERIFIED = 2,
+
+  /**
+   * @generated from enum value: TRUST_TIER_3_LOCAL_WORKSPACE = 3;
+   */
+  TRUST_TIER_3_LOCAL_WORKSPACE = 3,
+}
+// Retrieve enum metadata with: proto3.getEnumType(TrustTier)
+proto3.util.setEnumType(TrustTier, "openchain.v1.TrustTier", [
+  { no: 0, name: "TRUST_TIER_UNSPECIFIED" },
+  { no: 1, name: "TRUST_TIER_1_AUTHORITATIVE" },
+  { no: 2, name: "TRUST_TIER_2_COMMUNITY_VERIFIED" },
+  { no: 3, name: "TRUST_TIER_3_LOCAL_WORKSPACE" },
+]);
+
+/**
+ * @generated from message openchain.v1.Attestation
+ */
+export class Attestation extends Message<Attestation> {
+  /**
+   * @generated from field: string attestation_type = 1;
+   */
+  attestationType = "";
+
+  /**
+   * @generated from field: string reference_url = 2;
+   */
+  referenceUrl = "";
+
+  /**
+   * @generated from field: string proof_hash = 3;
+   */
+  proofHash = "";
+
+  /**
+   * @generated from field: int64 timestamp = 4;
+   */
+  timestamp = protoInt64.zero;
+
+  constructor(data?: PartialMessage<Attestation>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.Attestation";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "attestation_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reference_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "proof_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Attestation {
+    return new Attestation().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Attestation {
+    return new Attestation().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Attestation {
+    return new Attestation().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Attestation | PlainMessage<Attestation> | undefined, b: Attestation | PlainMessage<Attestation> | undefined): boolean {
+    return proto3.util.equals(Attestation, a, b);
+  }
+}
+
+/**
  * @generated from message openchain.v1.AddressLabel
  */
 export class AddressLabel extends Message<AddressLabel> {
@@ -61,6 +148,16 @@ export class AddressLabel extends Message<AddressLabel> {
    */
   createdAt = protoInt64.zero;
 
+  /**
+   * @generated from field: openchain.v1.TrustTier trust_tier = 11;
+   */
+  trustTier = TrustTier.TRUST_TIER_UNSPECIFIED;
+
+  /**
+   * @generated from field: repeated openchain.v1.Attestation attestations = 12;
+   */
+  attestations: Attestation[] = [];
+
   constructor(data?: PartialMessage<AddressLabel>) {
     super();
     proto3.util.initPartial(data, this);
@@ -79,6 +176,8 @@ export class AddressLabel extends Message<AddressLabel> {
     { no: 8, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 9, name: "created_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 10, name: "created_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 11, name: "trust_tier", kind: "enum", T: proto3.getEnumType(TrustTier) },
+    { no: 12, name: "attestations", kind: "message", T: Attestation, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AddressLabel {
@@ -137,6 +236,16 @@ export class AddLabelRequest extends Message<AddLabelRequest> {
    */
   source = "";
 
+  /**
+   * @generated from field: openchain.v1.TrustTier trust_tier = 8;
+   */
+  trustTier = TrustTier.TRUST_TIER_UNSPECIFIED;
+
+  /**
+   * @generated from field: repeated openchain.v1.Attestation attestations = 9;
+   */
+  attestations: Attestation[] = [];
+
   constructor(data?: PartialMessage<AddLabelRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -152,6 +261,8 @@ export class AddLabelRequest extends Message<AddLabelRequest> {
     { no: 5, name: "confidence", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
     { no: 6, name: "evidence_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "trust_tier", kind: "enum", T: proto3.getEnumType(TrustTier) },
+    { no: 9, name: "attestations", kind: "message", T: Attestation, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AddLabelRequest {
