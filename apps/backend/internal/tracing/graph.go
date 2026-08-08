@@ -49,21 +49,26 @@ type GraphResult struct {
 type Engine struct {
 	evmClient        *adapter.EVMClient
 	trueBlocksClient *adapter.TrueBlocksAdapter
+	chainAdapter     adapter.ChainAdapter
 	db               *db.DB
 	labelRegistry    *labels.Registry
 	riskEvaluator    *risk.Evaluator
 }
 
 func NewEngine(evm *adapter.EVMClient, tb *adapter.TrueBlocksAdapter, database *db.DB, lr *labels.Registry, re *risk.Evaluator) *Engine {
+	var ca adapter.ChainAdapter
+	if evm != nil {
+		ca = adapter.NewEVMChainAdapter("ETHEREUM_SEPOLIA", "", "", evm)
+	}
 	return &Engine{
 		evmClient:        evm,
 		trueBlocksClient: tb,
+		chainAdapter:     ca,
 		db:               database,
 		labelRegistry:    lr,
 		riskEvaluator:    re,
 	}
 }
-
 
 func (e *Engine) TraceMultiHopGraph(ctx context.Context, seedAddress string, network string, maxHops uint32, direction string) (*GraphResult, error) {
 	return e.TraceMultiAddressGraph(ctx, []string{seedAddress}, network, maxHops, direction, nil)
@@ -84,9 +89,24 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 		}
 		cleanedSeeds = append(cleanedSeeds, clean)
 
-		isContract, _ := e.evmClient.IsContract(ctx, clean)
-		txCount, _ := e.evmClient.GetTxCount(ctx, clean)
-		bal, _ := e.evmClient.GetBalance(ctx, clean)
+		isContract := false
+		var txCount uint64
+		bal := new(big.Int)
+
+		if e.evmClient != nil {
+			isContract, _ = e.evmClient.IsContract(ctx, clean)
+			txCount, _ = e.evmClient.GetTxCount(ctx, clean)
+			bal, _ = e.evmClient.GetBalance(ctx, clean)
+		}
+
+		// Dynamic contract metadata inspection via adapter
+		if e.chainAdapter != nil {
+			meta, err := e.chainAdapter.GetContractMetadata(ctx, clean)
+			if err == nil && meta != nil && meta.ContractName != "" {
+				isContract = true
+			}
+		}
+
 		riskEval := e.riskEvaluator.EvaluateAddress(ctx, clean, network, isContract, txCount)
 
 		entityType := "EOA"
@@ -115,141 +135,186 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 			TotalVolumeWei: bal.String(),
 		}
 
+		// Fetch account transactions via ChainAdapter (1-2 layer transfers)
+		if e.chainAdapter != nil {
+			txItems, err := e.chainAdapter.GetAccountTransactions(ctx, clean, 15)
+			if err == nil {
+				for idx, tx := range txItems {
+					from := strings.ToLower(tx.From)
+					to := strings.ToLower(tx.To)
+					if from == "" || to == "" {
+						continue
+					}
+
+					// Direction filter
+					if direction == "INFLOW" && to != clean {
+						continue
+					}
+					if direction == "OUTFLOW" && from != clean {
+						continue
+					}
+
+					outCountMap[from]++
+					inCountMap[to]++
+
+					for _, a := range []string{from, to} {
+						if _, exists := nodeMap[a]; !exists {
+							nodeLabel := shortAddress(a)
+							nodeEntity := "EOA"
+
+							regLabels := e.labelRegistry.GetLabels(ctx, a)
+							if len(regLabels) > 0 {
+								nodeLabel = regLabels[0].Label
+								if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
+									nodeEntity = "EXCHANGE"
+								} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
+									nodeEntity = "SCAMMER"
+								}
+							}
+
+							nodeMap[a] = GraphNode{
+								ID:             a,
+								Label:          nodeLabel,
+								EntityType:     nodeEntity,
+								RiskScore:      0.0,
+								Category:       "LOW",
+								IsSeed:         a == clean,
+								TotalVolumeWei: "0",
+							}
+
+							if e.db != nil {
+								_ = e.db.UpsertNode(ctx, db.Node{
+									Address: a,
+									Label:   db.VertexWallet,
+								})
+							}
+						}
+					}
+
+					edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
+					edgeMap[edgeID] = GraphEdge{
+						ID:             edgeID,
+						Source:         from,
+						Target:         to,
+						ValueWei:       tx.ValueWei,
+						ValueFormatted: fmt.Sprintf("%s %s", adapter.FormatWeiToETH(func() *big.Int { v, _ := new(big.Int).SetString(tx.ValueWei, 10); return v }()), tx.AssetSymbol),
+						TxCount:        1,
+						AssetSymbol:    tx.AssetSymbol,
+					}
+				}
+			}
+		}
+
 		if e.trueBlocksClient != nil {
 			tbTxs, state, _ := e.trueBlocksClient.GetAddressTransactions(ctx, clean)
 			syncState = state
 
+			for idx, tx := range tbTxs {
+				from := strings.ToLower(tx.From)
+				to := strings.ToLower(tx.To)
+				if from == "" || to == "" {
+					continue
+				}
 
-		for idx, tx := range tbTxs {
-			from := strings.ToLower(tx.From)
-			to := strings.ToLower(tx.To)
-			if from == "" || to == "" {
-				continue
-			}
+				outCountMap[from]++
+				inCountMap[to]++
 
-			outCountMap[from]++
-			inCountMap[to]++
+				for _, a := range []string{from, to} {
+					if _, exists := nodeMap[a]; !exists {
+						nodeLabel := shortAddress(a)
+						nodeEntity := "EOA"
 
-			for _, a := range []string{from, to} {
-				if _, exists := nodeMap[a]; !exists {
-					nodeLabel := shortAddress(a)
-					nodeEntity := "EOA"
+						regLabels := e.labelRegistry.GetLabels(ctx, a)
+						if len(regLabels) > 0 {
+							nodeLabel = regLabels[0].Label
+						}
 
-					regLabels := e.labelRegistry.GetLabels(ctx, a)
-					if len(regLabels) > 0 {
-						nodeLabel = regLabels[0].Label
-						if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
-							nodeEntity = "EXCHANGE"
-						} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
-							nodeEntity = "SCAMMER"
+						nodeMap[a] = GraphNode{
+							ID:             a,
+							Label:          nodeLabel,
+							EntityType:     nodeEntity,
+							RiskScore:      0.0,
+							Category:       "LOW",
+							IsSeed:         a == clean,
+							TotalVolumeWei: "0",
 						}
 					}
-
-					nodeMap[a] = GraphNode{
-						ID:             a,
-						Label:          nodeLabel,
-						EntityType:     nodeEntity,
-						RiskScore:      0.0,
-						Category:       "LOW",
-						IsSeed:         a == clean,
-						TotalVolumeWei: "0",
-					}
-
-					if e.db != nil {
-						_ = e.db.UpsertNode(ctx, db.Node{
-							Address: a,
-							Label:   db.VertexWallet,
-						})
-					}
 				}
-			}
 
-			edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
-			edgeMap[edgeID] = GraphEdge{
-				ID:             edgeID,
-				Source:         from,
-				Target:         to,
-				ValueWei:       tx.ValueWei,
-				ValueFormatted: fmt.Sprintf("%s Wei", tx.ValueWei),
-				TxCount:        1,
-				AssetSymbol:    "ETH",
-			}
-
-			if e.db != nil {
-				_ = e.db.UpsertEdge(ctx, db.Edge{
-					Hash:        tx.Hash,
-					FromAddress: from,
-					ToAddress:   to,
-					Label:       db.EdgeTransfer,
-					ValueWei:    tx.ValueWei,
-					BlockNumber: tx.BlockNumber,
-				})
+				edgeID := fmt.Sprintf("tb-%s-%s-%d", from, to, idx)
+				edgeMap[edgeID] = GraphEdge{
+					ID:             edgeID,
+					Source:         from,
+					Target:         to,
+					ValueWei:       tx.ValueWei,
+					ValueFormatted: fmt.Sprintf("%s Wei", tx.ValueWei),
+					TxCount:        1,
+					AssetSymbol:    "ETH",
+				}
 			}
 		}
-	}
+		// Fetch logs / transfers via EVM RPC with dynamic block window
+		if e.evmClient != nil {
+			logs, _ := e.evmClient.GetERC20Transfers(ctx, clean, "")
+			for idx, l := range logs {
+				if len(l.Topics) < 3 {
+					continue
+				}
 
-	// Fetch logs / transfers via EVM RPC with dynamic block window
-	logs, _ := e.evmClient.GetERC20Transfers(ctx, clean, "")
+				from := strings.ToLower("0x" + strings.TrimPrefix(l.Topics[1], "0x000000000000000000000000"))
+				to := strings.ToLower("0x" + strings.TrimPrefix(l.Topics[2], "0x000000000000000000000000"))
 
+				// Direction filter
+				if direction == "INFLOW" && to != clean {
+					continue
+				}
+				if direction == "OUTFLOW" && from != clean {
+					continue
+				}
 
-		for idx, l := range logs {
-			if len(l.Topics) < 3 {
-				continue
-			}
+				outCountMap[from]++
+				inCountMap[to]++
 
-			from := strings.ToLower("0x" + strings.TrimPrefix(l.Topics[1], "0x000000000000000000000000"))
-			to := strings.ToLower("0x" + strings.TrimPrefix(l.Topics[2], "0x000000000000000000000000"))
+				for _, a := range []string{from, to} {
+					if _, exists := nodeMap[a]; !exists {
+						nodeLabel := shortAddress(a)
+						nodeEntity := "EOA"
 
-			// Direction filter
-			if direction == "INFLOW" && to != clean {
-				continue
-			}
-			if direction == "OUTFLOW" && from != clean {
-				continue
-			}
+						regLabels := e.labelRegistry.GetLabels(ctx, a)
+						if len(regLabels) > 0 {
+							nodeLabel = regLabels[0].Label
+							if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
+								nodeEntity = "EXCHANGE"
+							} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
+								nodeEntity = "SCAMMER"
+							}
+						}
 
-			outCountMap[from]++
-			inCountMap[to]++
-
-			for _, a := range []string{from, to} {
-				if _, exists := nodeMap[a]; !exists {
-					nodeLabel := shortAddress(a)
-					nodeEntity := "EOA"
-
-					regLabels := e.labelRegistry.GetLabels(ctx, a)
-					if len(regLabels) > 0 {
-						nodeLabel = regLabels[0].Label
-						if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
-							nodeEntity = "EXCHANGE"
-						} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
-							nodeEntity = "SCAMMER"
+						nodeMap[a] = GraphNode{
+							ID:             a,
+							Label:          nodeLabel,
+							EntityType:     nodeEntity,
+							RiskScore:      0.0,
+							Category:       "LOW",
+							IsSeed:         false,
+							TotalVolumeWei: "0",
 						}
 					}
-
-					nodeMap[a] = GraphNode{
-						ID:             a,
-						Label:          nodeLabel,
-						EntityType:     nodeEntity,
-						RiskScore:      0.0,
-						Category:       "LOW",
-						IsSeed:         false,
-						TotalVolumeWei: "0",
-					}
 				}
-			}
 
-			edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
-			rawVal := new(big.Int)
-			rawVal.SetString(strings.TrimPrefix(l.Data, "0x"), 16)
+				edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
+				rawVal := new(big.Int)
+				rawVal.SetString(strings.TrimPrefix(l.Data, "0x"), 16)
 
-			edgeMap[edgeID] = GraphEdge{
-				ID:             edgeID,
-				Source:         from,
-				Target:         to,
-				ValueWei:       rawVal.String(),
-				ValueFormatted: fmt.Sprintf("%s Tokens", rawVal.String()),
-				TxCount:        1,
-				AssetSymbol:    "USDT",
+				edgeMap[edgeID] = GraphEdge{
+					ID:             edgeID,
+					Source:         from,
+					Target:         to,
+					ValueWei:       rawVal.String(),
+					ValueFormatted: fmt.Sprintf("%s Tokens", rawVal.String()),
+					TxCount:        1,
+					AssetSymbol:    "USDT",
+				}
 			}
 		}
 	}
