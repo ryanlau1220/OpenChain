@@ -163,10 +163,12 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 		}
 	}
 
-	if entityType == pb.EntityType_ENTITY_TYPE_CONTRACT && txCount == 0 {
-		logs, err := h.server.evm.GetERC20Transfers(ctx, address, "")
-		if err == nil && len(logs) > 0 {
-			txCount = uint64(len(logs))
+	if txCount == 0 {
+		if ca := h.server.tracingEngine.ChainAdapter(); ca != nil {
+			txs, err := ca.GetAccountTransactions(ctx, address, 15)
+			if err == nil && len(txs) > 0 {
+				txCount = uint64(len(txs))
+			}
 		}
 	}
 

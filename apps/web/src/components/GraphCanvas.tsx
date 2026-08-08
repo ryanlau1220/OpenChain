@@ -123,7 +123,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				(e) => Boolean(e.data.id) && !currentElementIds.has(e.data.id as string),
 			);
 
-			if (newElements.length === 0 && cy.elements().length === elements.length) {
+			if (newElements.length === 0 && cy.elements().length > 0) {
 				return;
 			}
 

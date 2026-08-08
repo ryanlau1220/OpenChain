@@ -159,7 +159,7 @@ func TestConnectLabelService(t *testing.T) {
 
 	// GetLabels for known seeded address
 	gResp, err := handler.GetLabels(context.Background(), connect.NewRequest(&pb.GetLabelsRequest{
-		Address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+		Address: "0xee567fe1712faf6149d80da1e6934e354124cfe3",
 	}))
 	if err != nil {
 		t.Fatalf("GetLabels failed: %v", err)

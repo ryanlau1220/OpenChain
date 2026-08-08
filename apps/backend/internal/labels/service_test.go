@@ -10,7 +10,7 @@ func TestLabelRegistry(t *testing.T) {
 	ctx := context.Background()
 
 	// Verify well-known seed labels
-	uniswapAddr := "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+	uniswapAddr := "0xee567fe1712faf6149d80da1e6934e354124cfe3"
 	lbls := registry.GetLabels(ctx, uniswapAddr)
 	if len(lbls) == 0 {
 		t.Fatalf("expected seeded label for Uniswap V2 Router")

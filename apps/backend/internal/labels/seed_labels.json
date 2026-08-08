@@ -1,12 +1,12 @@
 [
   {
     "id": "uniswap-v2-router-sepolia",
-    "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+    "address": "0xee567fe1712faf6149d80da1e6934e354124cfe3",
     "network": "ETHEREUM_SEPOLIA",
     "category": "DeFi",
     "label": "Uniswap V2 Router",
     "confidence": 1.0,
-    "evidence_url": "https://sepolia.etherscan.io/address/0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+    "evidence_url": "https://sepolia.etherscan.io/address/0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3",
     "source": "Etherscan",
     "created_by": "SYSTEM"
   },

@@ -70,6 +70,10 @@ func NewEngine(evm *adapter.EVMClient, tb *adapter.TrueBlocksAdapter, database *
 	}
 }
 
+func (e *Engine) ChainAdapter() adapter.ChainAdapter {
+	return e.chainAdapter
+}
+
 func (e *Engine) TraceMultiHopGraph(ctx context.Context, seedAddress string, network string, maxHops uint32, direction string) (*GraphResult, error) {
 	return e.TraceMultiAddressGraph(ctx, []string{seedAddress}, network, maxHops, direction, nil)
 }
