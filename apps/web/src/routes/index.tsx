@@ -7,9 +7,9 @@ import { WalletLookup } from '../components/WalletLookup';
 import {
 	type AddressLabel,
 	type AddressSummary,
-	type GraphData,
 	type GraphNode,
 	type RiskEvaluation,
+	TraceGraphResponse,
 	fetchMultiTraceGraph,
 	getSharedCanvas,
 	lookupAddress,
@@ -28,7 +28,7 @@ function Index() {
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [risk, setRisk] = useState<RiskEvaluation | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
-	const [history, setHistory] = useState<GraphData[]>([]);
+	const [history, setHistory] = useState<TraceGraphResponse[]>([]);
 	const [historyIndex, setHistoryIndex] = useState<number>(-1);
 	const [loading, setLoading] = useState<boolean>(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -40,13 +40,35 @@ function Index() {
 	const graphData =
 		historyIndex >= 0 && historyIndex < history.length ? history[historyIndex] : null;
 
-	const pushGraphHistory = useCallback((newGraph: GraphData) => {
+	const pushGraphHistory = useCallback((newGraph: TraceGraphResponse) => {
 		setHistory((prev) => {
 			const nextHistory = [...prev, newGraph];
 			setHistoryIndex(nextHistory.length - 1);
 			return nextHistory;
 		});
 	}, []);
+
+	const loadGraph = useCallback(
+		async (addrs: string[], tokens: string[]) => {
+			setLoading(true);
+			try {
+				const gData = await fetchMultiTraceGraph(addrs, 2, undefined, tokens);
+				pushGraphHistory(gData);
+				if (addrs.length > 0) {
+					const mainAddr = addrs[0];
+					const lookupRes = await lookupAddress(mainAddr);
+					setSummary(lookupRes.summary ?? null);
+					setRisk(lookupRes.risk ?? null);
+					setLabels(lookupRes.labels || []);
+				}
+			} catch (err) {
+				console.error(err);
+			} finally {
+				setLoading(false);
+			}
+		},
+		[pushGraphHistory],
+	);
 
 	const handleUndo = useCallback(() => {
 		setHistoryIndex((prevIdx) => (prevIdx > 0 ? prevIdx - 1 : prevIdx));
@@ -57,74 +79,52 @@ function Index() {
 	}, [history.length]);
 
 	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			const hash = window.location.hash;
-			if (hash.includes('shareId=')) {
-				const sId = new URLSearchParams(hash.split('?')[1]).get('shareId');
-				if (sId) {
-					getSharedCanvas(sId)
-						.then((res) => pushGraphHistory(res.graph_data))
-						.catch((err) => console.error(err));
-					return;
-				}
+		const hash = window.location.hash;
+		if (hash.includes('shareId=')) {
+			const match = hash.match(/shareId=([^&]+)/);
+			if (match?.[1]) {
+				getSharedCanvas(match[1]).then((res) => {
+					if (res.graphData) {
+						pushGraphHistory(res.graphData);
+						if (res.graphData.seedAddress) {
+							setAddresses([res.graphData.seedAddress]);
+						}
+					}
+				});
+				return;
 			}
 		}
-		handleSearch([DEFAULT_SEPOLIA_ADDR], selectedTokens);
+		loadGraph(addresses, selectedTokens);
 	}, []);
 
-	const handleSearch = async (addrs: string[], tokens = selectedTokens) => {
+	const handleSearch = (addrs: string[], tokens = selectedTokens) => {
 		setAddresses(addrs);
 		setSelectedTokens(tokens);
-		setLoading(true);
-
-		const lookupPromise = (async () => {
-			if (addrs.length === 1) {
-				try {
-					const data = await lookupAddress(addrs[0]);
-					setSummary(data.summary ?? null);
-					setRisk(data.risk ?? null);
-					setLabels(data.labels || []);
-				} catch (err) {
-					console.error('Lookup address failed:', err);
-				}
-			} else {
-				setSummary(null);
-				setRisk(null);
-			}
-		})();
-
-		const tracePromise = (async () => {
-			try {
-				const gData = await fetchMultiTraceGraph(addrs, 2, 'BOTH', tokens);
-				if (gData) {
-					pushGraphHistory(gData);
-				}
-			} catch (err) {
-				console.error('Fetch graph trace failed:', err);
-			}
-		})();
-
-		await Promise.allSettled([lookupPromise, tracePromise]);
-		setLoading(false);
+		loadGraph(addrs, tokens);
 	};
 
 	const handleExpandNode = async (nodeAddr: string) => {
+		if (!graphData) return;
 		try {
-			const gData = await fetchMultiTraceGraph([nodeAddr], 2, 'BOTH', selectedTokens);
-			if (gData && graphData) {
-				const existingNodeIds = new Set((graphData.nodes || []).map((n) => n.id));
-				const newNodes = (gData.nodes || []).filter((n) => !existingNodeIds.has(n.id));
-				const existingEdgeIds = new Set((graphData.edges || []).map((e) => e.id));
-				const newEdges = (gData.edges || []).filter((e) => !existingEdgeIds.has(e.id));
+			const expandedRes = await fetchMultiTraceGraph([nodeAddr], 1, undefined, selectedTokens);
+			const existingNodeIds = new Set((graphData.nodes || []).map((n) => n.id.toLowerCase()));
+			const existingEdgeIds = new Set((graphData.edges || []).map((e) => e.id));
+
+			const newNodes = (expandedRes.nodes || []).filter(
+				(n) => !existingNodeIds.has(n.id.toLowerCase()),
+			);
+			const newEdges = (expandedRes.edges || []).filter((e) => !existingEdgeIds.has(e.id));
+
+			if (newNodes.length > 0 || newEdges.length > 0) {
 				const updatedNodes = [...(graphData.nodes || []), ...newNodes];
 				const updatedEdges = [...(graphData.edges || []), ...newEdges];
-				const updatedGraph = {
+				const updatedGraph = new TraceGraphResponse({
 					...graphData,
 					nodes: updatedNodes,
 					edges: updatedEdges,
-					total_nodes: updatedNodes.length,
-					total_edges: updatedEdges.length,
-				};
+					totalNodes: updatedNodes.length,
+					totalEdges: updatedEdges.length,
+				});
 				pushGraphHistory(updatedGraph);
 			}
 		} catch (err) {
@@ -151,13 +151,13 @@ function Index() {
 			return n.isSeed || nId === cleanAddr || connectedNodeIds.has(nId);
 		});
 
-		const updatedGraph = {
+		const updatedGraph = new TraceGraphResponse({
 			...graphData,
 			nodes: keptNodes,
 			edges: keptEdges,
-			total_nodes: keptNodes.length,
-			total_edges: keptEdges.length,
-		};
+			totalNodes: keptNodes.length,
+			totalEdges: keptEdges.length,
+		});
 
 		pushGraphHistory(updatedGraph);
 	};
@@ -180,9 +180,9 @@ function Index() {
 		if (!graphData) return;
 		try {
 			const res = await shareCanvas(graphData);
-			const url = `${window.location.origin}${window.location.pathname}#/share?shareId=${res.share_id}`;
+			const url = `${window.location.origin}${window.location.pathname}#/share?shareId=${res.shareId}`;
 			setShareUrl(url);
-			setShareExpiresAt(res.expires_at);
+			setShareExpiresAt(res.expiresAt);
 			setShareModalOpen(true);
 		} catch (err) {
 			console.error(err);

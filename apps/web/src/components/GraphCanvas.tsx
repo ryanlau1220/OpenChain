@@ -18,16 +18,14 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
 	EntityType,
-	type GraphData,
 	type GraphEdge,
 	type GraphNode,
+	type TraceGraphResponse,
 	entityLabel,
 } from '../services/api';
 
 interface GraphCanvasProps {
-	graphData:
-		| (GraphData & { sync_state?: { warning_message?: string; is_synced?: boolean } })
-		| null;
+	graphData: TraceGraphResponse | null;
 	selectedNode?: GraphNode | null;
 	onNodeSelect: (node: GraphNode | null) => void;
 	onExpandNode?: (address: string) => void;
@@ -64,9 +62,7 @@ const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 				n.style({
 					'border-color': '#34D399',
 					'border-width': 6,
-					'overlay-color': '#34D399',
-					'overlay-padding': '8px',
-					'overlay-opacity': 0.4,
+					'overlay-opacity': 0,
 				});
 			} else if (isSeed) {
 				n.data('borderColor', '#A7F9FF');
@@ -363,7 +359,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	};
 
 	const seedNode = (graphData?.nodes || []).find((n) => n.isSeed);
-	const activeTargetAddress = selectedNode?.id || seedNode?.id || graphData?.seed_address || '';
+	const activeTargetAddress = selectedNode?.id || seedNode?.id || graphData?.seedAddress || '';
 
 	const toolBtn =
 		'p-1.5 rounded-lg transition hover:bg-[var(--slate)] text-[var(--ink-3)] hover:text-[var(--ink)]';
@@ -371,7 +367,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	return (
 		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
 			{/* Index Sync Warning Banner (Lucide AlertTriangle icon - NO emojis) */}
-			{graphData?.sync_state?.warning_message && (
+			{graphData?.syncState?.warningMessage && (
 				<div
 					className="px-4 py-2 flex items-center gap-2 text-xs shrink-0"
 					style={{
@@ -381,7 +377,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					}}
 				>
 					<AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-					<span className="font-medium">{graphData.sync_state.warning_message}</span>
+					<span className="font-medium">{graphData.syncState.warningMessage}</span>
 				</div>
 			)}
 
