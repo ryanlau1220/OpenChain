@@ -51,11 +51,31 @@ type Edge struct {
 	TokenAddress string   `json:"token_address,omitempty"`
 }
 
+// LabelNode represents an OLI label vertex in Apache AGE
+type LabelNode struct {
+	ID         string  `json:"id"`
+	Category   string  `json:"category"`
+	Name       string  `json:"name"`
+	Confidence float64 `json:"confidence"`
+	Source     string  `json:"source"`
+	CreatedBy  string  `json:"created_by"`
+	CreatedAt  int64   `json:"created_at"`
+}
+
+// AttestationData represents metadata attached to a HAS_LABEL edge
+type AttestationData struct {
+	Type         string `json:"attestation_type"`
+	ReferenceURL string `json:"reference_url"`
+	ProofHash    string `json:"proof_hash"`
+	Timestamp    int64  `json:"timestamp"`
+}
+
 // GraphResult holds nodes and edges returned from graph traversals
 type GraphResult struct {
 	Nodes []Node `json:"nodes"`
 	Edges []Edge `json:"edges"`
 }
+
 
 // UpsertNode creates or updates a vertex in the OpenChain graph
 func (d *DB) UpsertNode(ctx context.Context, node Node) error {
@@ -237,5 +257,65 @@ func (d *DB) QueryHopGraph(ctx context.Context, rootAddr string, maxHops int) (*
 		Edges: edges,
 	}, nil
 }
+
+// UpsertLabelVertex creates or updates a :Label vertex in Apache AGE
+func (d *DB) UpsertLabelVertex(ctx context.Context, label LabelNode) error {
+	ag, err := d.ConnectAge()
+	if err != nil {
+		return fmt.Errorf("age connect error: %w", err)
+	}
+
+	tx, err := ag.Begin()
+	if err != nil {
+		return fmt.Errorf("age begin error: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	cypher := fmt.Sprintf(`
+		MERGE (l:Label {id: '%s'})
+		ON CREATE SET l.category = '%s', l.name = '%s', l.confidence = %f, l.source = '%s', l.created_by = '%s', l.created_at = %d
+		ON MATCH SET l.confidence = %f
+	`, label.ID, label.Category, label.Name, label.Confidence, label.Source, label.CreatedBy, label.CreatedAt, label.Confidence)
+
+	_, err = tx.ExecCypher(0, "%s", cypher)
+	if err != nil {
+		return fmt.Errorf("failed to upsert label %s: %w", label.ID, err)
+	}
+
+	return tx.Commit()
+}
+
+// AttachLabelEdge connects a :Wallet/:Contract vertex to a :Label vertex via :HAS_LABEL edge
+func (d *DB) AttachLabelEdge(ctx context.Context, address string, labelID string, trustTier int32, attestation AttestationData) error {
+	ag, err := d.ConnectAge()
+	if err != nil {
+		return fmt.Errorf("age connect error: %w", err)
+	}
+
+	tx, err := ag.Begin()
+	if err != nil {
+		return fmt.Errorf("age begin error: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	addr := strings.ToLower(address)
+
+	// Ensure wallet vertex exists
+	cypherWallet := fmt.Sprintf(`MERGE (a:Wallet {address: '%s'})`, addr)
+	_, _ = tx.ExecCypher(0, "%s", cypherWallet)
+
+	cypherEdge := fmt.Sprintf(`
+		MATCH (a {address: '%s'}), (l:Label {id: '%s'})
+		CREATE (a)-[r:HAS_LABEL {trust_tier: %d, attestation_type: '%s', reference_url: '%s', proof_hash: '%s', timestamp: %d}]->(l)
+	`, addr, labelID, trustTier, attestation.Type, attestation.ReferenceURL, attestation.ProofHash, attestation.Timestamp)
+
+	_, err = tx.ExecCypher(0, "%s", cypherEdge)
+	if err != nil {
+		return fmt.Errorf("failed to attach label edge for %s -> %s: %w", addr, labelID, err)
+	}
+
+	return tx.Commit()
+}
+
 
 

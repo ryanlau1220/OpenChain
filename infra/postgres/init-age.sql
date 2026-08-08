@@ -24,6 +24,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM ag_catalog.ag_label WHERE name = 'Exchange' AND graph = (SELECT graphid FROM ag_catalog.ag_graph WHERE name = 'openchain')) THEN
         PERFORM create_vlabel('openchain', 'Exchange');
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM ag_catalog.ag_label WHERE name = 'Label' AND graph = (SELECT graphid FROM ag_catalog.ag_graph WHERE name = 'openchain')) THEN
+        PERFORM create_vlabel('openchain', 'Label');
+    END IF;
 END $$;
 
 -- Create domain-specific edge labels
@@ -38,4 +41,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM ag_catalog.ag_label WHERE name = 'SWAP' AND graph = (SELECT graphid FROM ag_catalog.ag_graph WHERE name = 'openchain')) THEN
         PERFORM create_elabel('openchain', 'SWAP');
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM ag_catalog.ag_label WHERE name = 'HAS_LABEL' AND graph = (SELECT graphid FROM ag_catalog.ag_graph WHERE name = 'openchain')) THEN
+        PERFORM create_elabel('openchain', 'HAS_LABEL');
+    END IF;
 END $$;
+
