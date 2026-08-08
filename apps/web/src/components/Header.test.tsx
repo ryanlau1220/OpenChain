@@ -6,13 +6,7 @@ import { Header } from './Header';
 
 describe('Header Component', () => {
 	it('renders brand title and network name', () => {
-		render(
-			<Header
-				currentAddress="0x1234"
-				onSearch={vi.fn()}
-				network="Sepolia Testnet"
-			/>,
-		);
+		render(<Header currentAddress="0x1234" onSearch={vi.fn()} network="Sepolia Testnet" />);
 		expect(screen.getByText('OpenChain')).toBeTruthy();
 		expect(screen.getByText('Sepolia Testnet')).toBeTruthy();
 	});

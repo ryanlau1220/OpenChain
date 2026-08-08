@@ -1,39 +1,19 @@
 import type React from 'react';
 
-export const EthIcon: React.FC<{ className?: string }> = ({
-	className = 'w-4 h-4',
-}) => (
-	<svg
-		className={className}
-		viewBox="0 0 784 1277"
-		fill="none"
-		xmlns="http://www.w3.org/2000/svg"
-	>
+export const EthIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+	<svg className={className} viewBox="0 0 784 1277" fill="none" xmlns="http://www.w3.org/2000/svg">
 		<title>Ethereum Logo</title>
-		<path
-			d="M392 0L383.5 28.8V872.2L392 880.7L784 649.3L392 0Z"
-			fill="#627EEA"
-		/>
+		<path d="M392 0L383.5 28.8V872.2L392 880.7L784 649.3L392 0Z" fill="#627EEA" />
 		<path d="M392 0L0 649.3L392 880.7V470.9V0Z" fill="#8A9D8F" />
-		<path
-			d="M392 956L386.8 962.3V1268.4L392 1277L784 725.1L392 956Z"
-			fill="#627EEA"
-		/>
+		<path d="M392 956L386.8 962.3V1268.4L392 1277L784 725.1L392 956Z" fill="#627EEA" />
 		<path d="M392 1277V956L0 725.1L392 1277Z" fill="#8A9D8F" />
 		<path d="M392 880.7L784 649.3L392 470.9V880.7Z" fill="#454A75" />
 		<path d="M0 649.3L392 880.7V470.9L0 649.3Z" fill="#5A6665" />
 	</svg>
 );
 
-export const UsdtIcon: React.FC<{ className?: string }> = ({
-	className = 'w-4 h-4',
-}) => (
-	<svg
-		className={className}
-		viewBox="0 0 2000 2000"
-		fill="none"
-		xmlns="http://www.w3.org/2000/svg"
-	>
+export const UsdtIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+	<svg className={className} viewBox="0 0 2000 2000" fill="none" xmlns="http://www.w3.org/2000/svg">
 		<title>Tether USDT Logo</title>
 		<path
 			d="M1000 2000C1552.28 2000 2000 1552.28 2000 1000C2000 447.715 1552.28 0 1000 0C447.715 0 0 447.715 0 1000C0 1552.28 447.715 2000 1000 2000Z"
@@ -46,15 +26,8 @@ export const UsdtIcon: React.FC<{ className?: string }> = ({
 	</svg>
 );
 
-export const UsdcIcon: React.FC<{ className?: string }> = ({
-	className = 'w-4 h-4',
-}) => (
-	<svg
-		className={className}
-		viewBox="0 0 2000 2000"
-		fill="none"
-		xmlns="http://www.w3.org/2000/svg"
-	>
+export const UsdcIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+	<svg className={className} viewBox="0 0 2000 2000" fill="none" xmlns="http://www.w3.org/2000/svg">
 		<title>USD Coin Logo</title>
 		<circle cx="1000" cy="1000" r="1000" fill="#2775CA" />
 		<path
@@ -68,15 +41,8 @@ export const UsdcIcon: React.FC<{ className?: string }> = ({
 	</svg>
 );
 
-export const BtcIcon: React.FC<{ className?: string }> = ({
-	className = 'w-4 h-4',
-}) => (
-	<svg
-		className={className}
-		viewBox="0 0 2000 2000"
-		fill="none"
-		xmlns="http://www.w3.org/2000/svg"
-	>
+export const BtcIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+	<svg className={className} viewBox="0 0 2000 2000" fill="none" xmlns="http://www.w3.org/2000/svg">
 		<title>Bitcoin Logo</title>
 		<circle cx="1000" cy="1000" r="1000" fill="#F7931A" />
 		<path

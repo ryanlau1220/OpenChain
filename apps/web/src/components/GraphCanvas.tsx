@@ -23,10 +23,7 @@ import {
 interface GraphCanvasProps {
 	graphData: GraphData | null;
 	onNodeSelect: (node: GraphNode | null) => void;
-	onExpandNode?: (
-		address: string,
-		direction: 'INFLOW' | 'OUTFLOW' | 'BOTH',
-	) => void;
+	onExpandNode?: (address: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => void;
 	onShareCanvas?: () => void;
 	onExportCase?: () => void;
 }
@@ -42,9 +39,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const cyRef = useRef<cytoscape.Core | null>(null);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 	const [_selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
-	const [layoutName, setLayoutName] = useState<
-		'cose' | 'concentric' | 'breadthfirst' | 'grid'
-	>('breadthfirst');
+	const [layoutName, setLayoutName] = useState<'cose' | 'concentric' | 'breadthfirst' | 'grid'>(
+		'breadthfirst',
+	);
 
 	useEffect(() => {
 		if (!containerRef.current || !graphData) return;
@@ -124,12 +121,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'text-margin-y': -8,
 						'text-wrap': 'wrap',
 						'text-max-width': '120px',
-						width: (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? 50 : 36,
-						height: (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? 50 : 36,
-						'border-width': (ele: cytoscape.NodeSingular) =>
-							ele.data('is_seed') ? 3 : 1.5,
+						width: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 50 : 36),
+						height: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 50 : 36),
+						'border-width': (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 3 : 1.5),
 						'border-color': (ele: cytoscape.NodeSingular) =>
 							ele.data('is_seed') ? '#38BDF8' : '#FFFFFF',
 						'overlay-padding': '4px',
@@ -249,13 +243,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					<select
 						value={layoutName}
 						onChange={(e) =>
-							setLayoutName(
-								e.target.value as
-									| 'cose'
-									| 'concentric'
-									| 'breadthfirst'
-									| 'grid',
-							)
+							setLayoutName(e.target.value as 'cose' | 'concentric' | 'breadthfirst' | 'grid')
 						}
 						className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2.5 py-1 focus:outline-none"
 					>
@@ -288,10 +276,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			</div>
 
 			{/* Cytoscape Canvas */}
-			<div
-				ref={containerRef}
-				className="flex-1 w-full h-full cursor-grab active:cursor-grabbing"
-			/>
+			<div ref={containerRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing" />
 
 			{/* Floating Controls */}
 			<div className="absolute bottom-6 left-6 flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-10">
@@ -333,9 +318,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			{(!graphData || (graphData.nodes || []).length === 0) && (
 				<div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 pointer-events-none">
 					<ArrowLeftRight className="w-10 h-10 text-slate-600 mb-2" />
-					<h3 className="text-sm font-semibold text-slate-300">
-						No Address Flow Rendered
-					</h3>
+					<h3 className="text-sm font-semibold text-slate-300">No Address Flow Rendered</h3>
 					<p className="text-xs text-slate-500 mt-1">
 						Enter target address(es) above to start tracing
 					</p>

@@ -13,10 +13,7 @@ import { RiskService } from '@openchain/proto/openchain/v1/risk_connect';
 import type { RiskEvaluation } from '@openchain/proto/openchain/v1/risk_pb';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import { TraceDirection } from '@openchain/proto/openchain/v1/tracing_pb';
-import type {
-	GraphEdge,
-	GraphNode,
-} from '@openchain/proto/openchain/v1/tracing_pb';
+import type { GraphEdge, GraphNode } from '@openchain/proto/openchain/v1/tracing_pb';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8081';
 
@@ -75,11 +72,7 @@ export interface CanvasShareResponse {
 
 // ── Tracing ─────────────────────────────────────────────────────────────────────
 
-export async function fetchTraceGraph(
-	seedAddress: string,
-	maxHops = 2,
-	direction = 'BOTH',
-) {
+export async function fetchTraceGraph(seedAddress: string, maxHops = 2, direction = 'BOTH') {
 	return fetchMultiTraceGraph([seedAddress], maxHops, direction, []);
 }
 

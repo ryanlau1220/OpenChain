@@ -24,10 +24,7 @@ const DEFAULT_SEPOLIA_ADDR = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
 
 function Index() {
 	const [addresses, setAddresses] = useState<string[]>([DEFAULT_SEPOLIA_ADDR]);
-	const [selectedTokens, setSelectedTokens] = useState<string[]>([
-		'ETH',
-		'USDT',
-	]);
+	const [selectedTokens, setSelectedTokens] = useState<string[]>(['ETH', 'USDT']);
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [risk, setRisk] = useState<RiskEvaluation | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
@@ -80,31 +77,15 @@ function Index() {
 		}
 	};
 
-	const handleExpandNode = async (
-		nodeAddr: string,
-		direction: 'INFLOW' | 'OUTFLOW' | 'BOTH',
-	) => {
+	const handleExpandNode = async (nodeAddr: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => {
 		try {
-			const gData = await fetchMultiTraceGraph(
-				[nodeAddr],
-				2,
-				direction,
-				selectedTokens,
-			);
+			const gData = await fetchMultiTraceGraph([nodeAddr], 2, direction, selectedTokens);
 			if (gData && graphData) {
-				const existingNodeIds = new Set(
-					(graphData.nodes || []).map((n) => n.id),
-				);
-				const newNodes = (gData.nodes || []).filter(
-					(n) => !existingNodeIds.has(n.id),
-				);
+				const existingNodeIds = new Set((graphData.nodes || []).map((n) => n.id));
+				const newNodes = (gData.nodes || []).filter((n) => !existingNodeIds.has(n.id));
 
-				const existingEdgeIds = new Set(
-					(graphData.edges || []).map((e) => e.id),
-				);
-				const newEdges = (gData.edges || []).filter(
-					(e) => !existingEdgeIds.has(e.id),
-				);
+				const existingEdgeIds = new Set((graphData.edges || []).map((e) => e.id));
+				const newEdges = (gData.edges || []).filter((e) => !existingEdgeIds.has(e.id));
 
 				const updatedNodes = [...(graphData.nodes || []), ...newNodes];
 				const updatedEdges = [...(graphData.edges || []), ...newEdges];
@@ -176,9 +157,7 @@ function Index() {
 						risk={risk}
 						labels={labels}
 						loading={loading}
-						onTraceAddress={(addr: string) =>
-							handleSearch([addr], selectedTokens)
-						}
+						onTraceAddress={(addr: string) => handleSearch([addr], selectedTokens)}
 					/>
 				</div>
 			</div>

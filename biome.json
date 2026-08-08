@@ -1,17 +1,25 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "vcs": {
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
-    "ignore": [
-      "**/node_modules/**/*",
-      "**/dist/**/*",
-      "**/build/**/*",
-      "**/gen/**/*",
-      "**/tmp/**/*",
-      "**/.turbo/**/*",
-      "**/*.gen.ts",
-      "**/routeTree.gen.ts"
+    "include": [
+      "apps/*/src/**/*.ts",
+      "apps/*/src/**/*.tsx",
+      "packages/*/src/**/*.ts",
+      "packages/*/src/**/*.tsx"
     ]
   },
+  "overrides": [
+    {
+      "include": ["**/routeTree.gen.ts", "**/gen/**/*"],
+      "linter": { "enabled": false },
+      "formatter": { "enabled": false },
+      "organizeImports": { "enabled": false }
+    }
+  ],
   "organizeImports": {
     "enabled": true
   },
@@ -23,7 +31,8 @@
         "noForEach": "off"
       },
       "suspicious": {
-        "noArrayIndexKey": "off"
+        "noArrayIndexKey": "off",
+        "noExplicitAny": "off"
       },
       "a11y": {
         "useButtonType": "off",
@@ -33,6 +42,11 @@
         "useExhaustiveDependencies": "off"
       }
     }
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab",
+    "lineWidth": 100
   },
   "javascript": {
     "formatter": {

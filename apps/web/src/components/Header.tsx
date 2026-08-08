@@ -9,18 +9,11 @@ interface HeaderProps {
 	network: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-	currentAddress,
-	onSearch,
-	network,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, network }) => {
 	const [isMultiMode, setIsMultiMode] = useState(false);
 	const [singleInput, setSingleInput] = useState(currentAddress);
 	const [bulkInput, setBulkInput] = useState('');
-	const [selectedTokens, setSelectedTokens] = useState<string[]>([
-		'ETH',
-		'USDT',
-	]);
+	const [selectedTokens, setSelectedTokens] = useState<string[]>(['ETH', 'USDT']);
 
 	const toggleToken = (token: string) => {
 		if (selectedTokens.includes(token)) {
@@ -56,9 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
 				/>
 				<div>
 					<div className="flex items-center gap-2">
-						<span className="font-bold text-base tracking-wide text-slate-100">
-							OpenChain
-						</span>
+						<span className="font-bold text-base tracking-wide text-slate-100">OpenChain</span>
 						<span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
 							TRACE
 						</span>

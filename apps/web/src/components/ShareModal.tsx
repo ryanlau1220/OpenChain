@@ -9,12 +9,7 @@ interface ShareModalProps {
 	expiresAt?: string;
 }
 
-export const ShareModal: React.FC<ShareModalProps> = ({
-	isOpen,
-	onClose,
-	shareUrl,
-	expiresAt,
-}) => {
+export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUrl, expiresAt }) => {
 	const [copied, setCopied] = useState(false);
 
 	if (!isOpen) return null;
@@ -41,9 +36,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 						<Share2 className="w-5 h-5" />
 					</div>
 					<div>
-						<h3 className="text-base font-bold text-slate-100">
-							Canvas Sharing
-						</h3>
+						<h3 className="text-base font-bold text-slate-100">Canvas Sharing</h3>
 						<p className="text-xs text-slate-400">
 							Share the contents of the current canvas with other team users
 						</p>
@@ -76,11 +69,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 						onClick={handleCopy}
 						className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-lg transition shadow flex items-center gap-1.5"
 					>
-						{copied ? (
-							<Check className="w-4 h-4" />
-						) : (
-							<Copy className="w-4 h-4" />
-						)}
+						{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
 						{copied ? 'Copied!' : 'Copy Link'}
 					</button>
 				</div>

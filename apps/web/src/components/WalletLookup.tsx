@@ -34,8 +34,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	if (!summary) {
 		return (
 			<div className="p-6 text-center text-slate-500 text-xs">
-				Select a node on the canvas to inspect wallet details and transaction
-				history.
+				Select a node on the canvas to inspect wallet details and transaction history.
 			</div>
 		);
 	}
@@ -48,9 +47,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 			{/* Address Header Banner */}
 			<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5">
 				<div className="flex items-center justify-between text-[11px] text-slate-400">
-					<span className="font-semibold text-blue-400 uppercase">
-						Target Address
-					</span>
+					<span className="font-semibold text-blue-400 uppercase">Target Address</span>
 					<a
 						href={`https://sepolia.etherscan.io/address/${summary.address}`}
 						target="_blank"
@@ -84,9 +81,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						<span>Balance</span>
 						<Wallet className="w-3.5 h-3.5 text-blue-400" />
 					</div>
-					<p className="font-bold font-mono text-slate-100 text-sm">
-						{summary.balanceFormatted}
-					</p>
+					<p className="font-bold font-mono text-slate-100 text-sm">{summary.balanceFormatted}</p>
 				</div>
 
 				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1">
@@ -94,9 +89,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						<span>Tx Count</span>
 						<Clock className="w-3.5 h-3.5 text-blue-400" />
 					</div>
-					<p className="font-bold font-mono text-slate-100 text-sm">
-						{summary.txCount}
-					</p>
+					<p className="font-bold font-mono text-slate-100 text-sm">{summary.txCount}</p>
 				</div>
 
 				<div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1">
@@ -136,9 +129,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 							>
 								<div className="flex items-center justify-between font-medium text-slate-200">
 									<span>{flag.ruleName}</span>
-									<span className="text-red-400 font-mono">
-										+{flag.scoreImpact}
-									</span>
+									<span className="text-red-400 font-mono">+{flag.scoreImpact}</span>
 								</div>
 								<p className="text-slate-400 text-[10px]">{flag.description}</p>
 							</div>
