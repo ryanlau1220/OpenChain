@@ -35,6 +35,11 @@ case "$1" in
 
         trap cleanup_dev INT TERM
 
+        echo -e "${YELLOW}Checking PostgreSQL + Apache AGE container readiness...${RESET}"
+        if command -v docker >/dev/null 2>&1 && [ -f infra/docker-compose.yml ]; then
+            docker compose -f infra/docker-compose.yml up -d postgres 2>/dev/null || true
+        fi
+
         echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081} with Air Live Reload)...${RESET}"
         if command -v air >/dev/null 2>&1; then
             (cd apps/backend && air -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
@@ -52,6 +57,7 @@ case "$1" in
         (pnpm --filter @openchain/web dev 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
         wait
         ;;
+
 
     docker)
         echo -e "${YELLOW}Building and starting Docker Compose containers...${RESET}"
