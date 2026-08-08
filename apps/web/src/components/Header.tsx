@@ -1,30 +1,21 @@
-import { Layers, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import { EthIcon } from './Icons';
 
 interface HeaderProps {
 	currentAddress: string;
-	onSearch: (addresses: string[], tokens: string[]) => void;
+	onSearch: (address: string) => void;
 	network: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, network }) => {
-	const [isMultiMode, setIsMultiMode] = useState(false);
 	const [singleInput, setSingleInput] = useState(currentAddress);
-	const [bulkInput, setBulkInput] = useState('');
-	const [selectedTokens] = useState<string[]>(['ETH', 'USDT']);
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
-		if (isMultiMode) {
-			const addrs = bulkInput
-				.split(/[\s,\n]+/)
-				.map((a) => a.trim())
-				.filter(Boolean);
-			if (addrs.length > 0) onSearch(addrs, selectedTokens);
-		} else if (singleInput.trim()) {
-			onSearch([singleInput.trim()], selectedTokens);
+		if (singleInput.trim()) {
+			onSearch(singleInput.trim());
 		}
 	};
 
@@ -64,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 						</span>
 					</div>
 					<p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-						Fund Flow &amp; Multi-Address Investigation
+						Fund Flow Investigation
 					</p>
 				</div>
 			</div>
@@ -72,53 +63,8 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 			{/* Search */}
 			<form onSubmit={handleSubmit} className="flex-1 max-w-2xl w-full">
 				<div className="flex flex-col gap-1.5">
-					{/* Mode + Token row */}
-					<div className="flex items-center justify-between px-0.5">
-						<div className="flex items-center gap-1.5">
-							<button
-								type="button"
-								onClick={() => setIsMultiMode(false)}
-								className="px-2.5 py-0.5 rounded-full text-[11px] font-medium transition"
-								style={
-									!isMultiMode
-										? {
-												background: 'linear-gradient(135deg, var(--prism-4), var(--prism-5))',
-												color: '#fff',
-												border: 'none',
-											}
-										: {
-												background: 'var(--slate)',
-												color: 'var(--ink-2)',
-												border: '1px solid var(--border)',
-											}
-								}
-							>
-								Single
-							</button>
-							<button
-								type="button"
-								onClick={() => setIsMultiMode(true)}
-								className="px-2.5 py-0.5 rounded-full text-[11px] font-medium transition flex items-center gap-1"
-								style={
-									isMultiMode
-										? {
-												background: 'linear-gradient(135deg, var(--prism-4), var(--prism-5))',
-												color: '#fff',
-												border: 'none',
-											}
-										: {
-												background: 'var(--slate)',
-												color: 'var(--ink-2)',
-												border: '1px solid var(--border)',
-											}
-								}
-							>
-								<Layers className="w-3 h-3" />
-								Multi-Address
-							</button>
-						</div>
-
-						{/* Single Dynamic Network Badge with Ethereum Logo */}
+					{/* Network Badge Row */}
+					<div className="flex items-center justify-end px-0.5">
 						<div
 							className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium"
 							style={{
@@ -132,43 +78,23 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 						</div>
 					</div>
 
-					{/* Input */}
-					{isMultiMode ? (
-						<div className="relative">
-							<textarea
-								rows={2}
-								value={bulkInput}
-								onChange={(e) => setBulkInput(e.target.value)}
-								placeholder="Enter addresses separated by spaces or newlines…"
-								className="prism-input font-mono resize-none pr-12"
-								style={{ paddingTop: '0.5rem', paddingBottom: '0.5rem' }}
-							/>
-							<button
-								type="submit"
-								className="btn-primary absolute right-1.5 bottom-2 text-xs flex items-center justify-center p-2 rounded-lg"
-								title="Search Multi-Address Flow"
-							>
-								<Search className="w-4 h-4" />
-							</button>
-						</div>
-					) : (
-						<div className="relative">
-							<input
-								type="text"
-								value={singleInput}
-								onChange={(e) => setSingleInput(e.target.value)}
-								placeholder="Search target address (0x…)"
-								className="prism-input font-mono pl-3.5 pr-12"
-							/>
-							<button
-								type="submit"
-								className="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 text-xs flex items-center justify-center p-2 rounded-lg"
-								title="Investigate Address"
-							>
-								<Search className="w-4 h-4" />
-							</button>
-						</div>
-					)}
+					{/* Single Input */}
+					<div className="relative">
+						<input
+							type="text"
+							value={singleInput}
+							onChange={(e) => setSingleInput(e.target.value)}
+							placeholder="Search target address (0x…)"
+							className="prism-input font-mono pl-3.5 pr-12"
+						/>
+						<button
+							type="submit"
+							className="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 text-xs flex items-center justify-center p-2 rounded-lg"
+							title="Investigate Address"
+						>
+							<Search className="w-4 h-4" />
+						</button>
+					</div>
 				</div>
 			</form>
 		</header>

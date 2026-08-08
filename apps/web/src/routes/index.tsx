@@ -97,10 +97,9 @@ function Index() {
 		loadGraph(addresses, selectedTokens);
 	}, []);
 
-	const handleSearch = (addrs: string[], tokens = selectedTokens) => {
-		setAddresses(addrs);
-		setSelectedTokens(tokens);
-		loadGraph(addrs, tokens);
+	const handleSearch = (address: string) => {
+		setAddresses([address]);
+		loadGraph([address], selectedTokens);
 	};
 
 	const handleExpandNode = async (nodeAddr: string) => {
@@ -239,7 +238,7 @@ function Index() {
 						labels={labels}
 						loading={loading}
 						targetSeedAddress={addresses[0] || (graphData?.nodes || []).find((n) => n.isSeed)?.id}
-						onTraceAddress={(addr: string) => handleSearch([addr], selectedTokens)}
+						onTraceAddress={handleSearch}
 					/>
 				</div>
 			</div>
