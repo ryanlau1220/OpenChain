@@ -113,52 +113,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 		});
 
+		const effectiveLayout =
+			layoutName === 'breadthfirst' && (graphData?.edges || []).length === 0 ? 'grid' : layoutName;
+
 		if (cyRef.current) {
-			// Incremental batch merge using parent-relative position offset
 			const cy = cyRef.current;
 			cy.batch(() => {
-				const existingIds = new Set(cy.nodes().map((n) => n.id()));
-				let parentPos = { x: 200, y: 200 };
-				if (selectedNode) {
-					const pNode = cy.getElementById(selectedNode.id);
-					if (pNode && pNode.length > 0) {
-						parentPos = pNode.position();
-					}
-				}
-
-				let deltaIdx = 0;
-				elements.forEach((el) => {
-					if (el.group === 'nodes' && el.data.id && !existingIds.has(el.data.id)) {
-						deltaIdx++;
-						const added = cy.add({
-							...el,
-							position: {
-								x: parentPos.x + deltaIdx * 60,
-								y: parentPos.y + (deltaIdx % 2 === 0 ? 40 : -40),
-							},
-						});
-						added.data(el.data);
-					} else if (
-						el.group === 'edges' &&
-						el.data.id &&
-						cy.getElementById(el.data.id).length === 0
-					) {
-						if (
-							cy.getElementById(el.data.source).length > 0 &&
-							cy.getElementById(el.data.target).length > 0
-						) {
-							cy.add(el);
-						}
-					}
-				});
+				cy.elements().remove();
+				cy.add(elements);
 			});
-
 			const layout = cy.layout({
-				name: layoutName,
-				fit: false, // Preserve viewport zoom
+				name: effectiveLayout,
+				fit: true,
+				padding: 80,
 				animate: true,
 			});
 			layout.run();
+			if (cy.nodes().length > 0) {
+				cy.fit(cy.nodes(), 100);
+				cy.center(cy.nodes());
+			}
 			return;
 		}
 
@@ -221,12 +195,17 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				},
 			],
 			layout: {
-				name: layoutName,
+				name: effectiveLayout,
 				directed: true,
 				padding: 60,
 				animate: true,
 			},
 		});
+
+		if (cy.nodes().length > 0) {
+			cy.fit(cy.nodes(), 100);
+			cy.center(cy.nodes());
+		}
 
 		cy.minZoom(0.3);
 		cy.maxZoom(2.0);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -153,6 +154,20 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 	labelStr := shortAddress(address)
 	if len(lbls) > 0 {
 		labelStr = lbls[0].Label
+		lblLower := strings.ToLower(lbls[0].Label)
+		catLower := strings.ToLower(lbls[0].Category)
+		if catLower == "defi" || catLower == "contract" || strings.Contains(lblLower, "router") || strings.Contains(lblLower, "vault") || strings.Contains(lblLower, "contract") {
+			entityType = pb.EntityType_ENTITY_TYPE_CONTRACT
+		} else if catLower == "exchange" || strings.Contains(lblLower, "binance") || strings.Contains(lblLower, "exchange") {
+			entityType = pb.EntityType_ENTITY_TYPE_EXCHANGE
+		}
+	}
+
+	if entityType == pb.EntityType_ENTITY_TYPE_CONTRACT && txCount == 0 {
+		logs, err := h.server.evm.GetERC20Transfers(ctx, address, "")
+		if err == nil && len(logs) > 0 {
+			txCount = uint64(len(logs))
+		}
 	}
 
 	summary := &pb.AddressSummary{

@@ -109,6 +109,10 @@ func (e *Evaluator) EvaluateAddress(ctx context.Context, address string, network
 	addressLabels := e.labelRegistry.GetLabels(ctx, address)
 	for _, l := range addressLabels {
 		cat := strings.ToUpper(l.Category)
+		lblLower := strings.ToLower(l.Label)
+		if cat == "DEFI" || cat == "CONTRACT" || strings.Contains(lblLower, "router") || strings.Contains(lblLower, "contract") || strings.Contains(lblLower, "vault") {
+			isContract = true
+		}
 		switch cat {
 		case "SANCTION":
 			flags = append(flags, RiskFlag{
