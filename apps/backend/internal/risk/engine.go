@@ -1,10 +1,15 @@
 package risk
 
 import (
+
 	"context"
+	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 )
 
@@ -26,15 +31,75 @@ type RiskEvaluation struct {
 	EvaluatedAt time.Time  `json:"evaluated_at"`
 }
 
-type Evaluator struct {
-	labelRegistry *labels.Registry
+type evalRequest struct {
+	Address string
+	CaseID  string
 }
 
-func NewEvaluator(lr *labels.Registry) *Evaluator {
+type Evaluator struct {
+	labelRegistry *labels.Registry
+	DB            *db.DB
+	queueMu       sync.Mutex
+	queue         map[string]evalRequest // address -> evalRequest
+}
+
+func NewEvaluator(lr *labels.Registry, database *db.DB) *Evaluator {
 	return &Evaluator{
 		labelRegistry: lr,
+		DB:            database,
+		queue:         make(map[string]evalRequest),
 	}
 }
+
+// EnqueueAddress adds an address to the debounced evaluation queue
+func (e *Evaluator) EnqueueAddress(address string, caseID string) {
+	if address == "" {
+		return
+	}
+	e.queueMu.Lock()
+	defer e.queueMu.Unlock()
+	e.queue[strings.ToLower(address)] = evalRequest{
+		Address: strings.ToLower(address),
+		CaseID:  caseID,
+	}
+}
+
+// StartDebounceWorker processes enqueued addresses asynchronously every 2-3 seconds
+func (e *Evaluator) StartDebounceWorker(ctx context.Context, interval time.Duration, callback func(caseID string, eval *RiskEvaluation)) {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			e.processQueue(ctx, callback)
+		}
+	}
+}
+
+func (e *Evaluator) processQueue(ctx context.Context, callback func(caseID string, eval *RiskEvaluation)) {
+	e.queueMu.Lock()
+	if len(e.queue) == 0 {
+		e.queueMu.Unlock()
+		return
+	}
+	pending := e.queue
+	e.queue = make(map[string]evalRequest)
+	e.queueMu.Unlock()
+
+	for _, req := range pending {
+		eval := e.EvaluateAddress(ctx, req.Address, "ETHEREUM_SEPOLIA", false, 1)
+		if callback != nil && req.CaseID != "" {
+			callback(req.CaseID, eval)
+		}
+	}
+}
+
 
 func (e *Evaluator) EvaluateAddress(ctx context.Context, address string, network string, isContract bool, txCount uint64) *RiskEvaluation {
 	var flags []RiskFlag
@@ -104,6 +169,44 @@ func (e *Evaluator) EvaluateAddress(ctx context.Context, address string, network
 		})
 		totalScore += 5.0
 	}
+
+	// Rule 4: Bounded Cypher hop-distance path evaluation to Tier 1 Sanctioned vertex (max 5 hops)
+	if e.DB != nil {
+		ag, err := e.DB.ConnectAge()
+		if err == nil {
+			cypher := fmt.Sprintf(`
+				MATCH p=(w:Wallet {address: '%s'})-[:TRANSFER*0..5]->(target:Wallet)-[hl:HAS_LABEL]->(l:Label)
+				WHERE hl.trust_tier = 1
+				RETURN target, l LIMIT 50
+			`, strings.ToLower(address))
+
+			tx, err := ag.Begin()
+			if err == nil {
+				cursor, err := tx.ExecCypher(0, "%s", cypher)
+				if err == nil {
+					foundTier1 := false
+					for cursor.Next() {
+						foundTier1 = true
+					}
+					if foundTier1 {
+						flags = append(flags, RiskFlag{
+							RuleID:         "R006",
+							RuleName:       "Proximity to Tier 1 Authoritative Sanctioned Entity",
+							Severity:       "CRITICAL",
+							ScoreImpact:    85.0,
+							Description:    "Address is within 5 transfer hops of a Tier 1 Authoritative sanctioned vertex.",
+							EvidenceDetail: "OpenChain Graph Traversal (*0..5 hops)",
+						})
+						totalScore += 85.0
+					}
+				}
+				_ = tx.Rollback()
+			}
+		}
+	} else {
+		slog.Debug("DB pool unattached, skipping Cypher graph path evaluation")
+	}
+
 
 	if totalScore > 100.0 {
 		totalScore = 100.0
