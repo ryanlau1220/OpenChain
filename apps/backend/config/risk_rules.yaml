@@ -1,0 +1,36 @@
+rules:
+  - rule_id: R001
+    rule_name: Sanction List Entity
+    severity: CRITICAL
+    score_impact: 90.0
+    description: Address is directly associated with a designated sanctioned entity.
+  - rule_id: R002
+    rule_name: Privacy Mixer Interaction
+    severity: HIGH
+    score_impact: 50.0
+    description: Address identified as a liquidity pool or mixing contract.
+  - rule_id: R003
+    rule_name: Exploit & Hack Associated
+    severity: HIGH
+    score_impact: 70.0
+    description: Address flagged in historical exploit or security incident.
+  - rule_id: R004
+    rule_name: High-Frequency Contract Interaction
+    severity: MEDIUM
+    score_impact: 15.0
+    description: Smart contract exhibits unusually high volume execution.
+  - rule_id: R005
+    rule_name: Unused / Fresh Address
+    severity: LOW
+    score_impact: 5.0
+    description: Address has zero recorded transactions on the current network.
+  - rule_id: R006
+    rule_name: Proximity to Tier 1 Authoritative Sanctioned Entity
+    severity: CRITICAL
+    score_impact: 85.0
+    description: Address is within 5 transfer hops of a Tier 1 Authoritative sanctioned vertex.
+
+thresholds:
+  severe: 75.0
+  high: 50.0
+  medium: 25.0
