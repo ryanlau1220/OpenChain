@@ -41,17 +41,21 @@ case "$1" in
         fi
 
         if command -v docker >/dev/null 2>&1; then
-            echo -e "${YELLOW}Waiting for PostgreSQL + Apache AGE container to become ready...${RESET}"
-            until [ "$(docker inspect --format='{{.State.Health.Status}}' openchain-postgres 2>/dev/null)" = "healthy" ]; do
-                sleep 1
+            echo -e "${YELLOW}Waiting for PostgreSQL + Apache AGE database...${RESET}"
+            count=0
+            until docker exec openchain-postgres pg_isready -U openchain -d openchain >/dev/null 2>&1 || [ $count -ge 10 ]; do
+                sleep 0.5
+                count=$((count+1))
             done
             echo -e "${GREEN}✓ [OK] PostgreSQL + Apache AGE Service is READY!${RESET}"
 
-            echo -e "${YELLOW}Waiting for TrueBlocks indexing service to become ready on port 8080...${RESET}"
-            until curl -s -f http://localhost:8080/status?fmt=json >/dev/null 2>&1; do
-                sleep 1
+            echo -e "${YELLOW}Waiting for TrueBlocks indexing service...${RESET}"
+            count=0
+            until curl -s -f --connect-timeout 1 --max-time 1 http://localhost:8080/status?fmt=json >/dev/null 2>&1 || [ $count -ge 10 ]; do
+                sleep 0.5
+                count=$((count+1))
             done
-            echo -e "${GREEN}✓ [OK] TrueBlocks Indexing Engine is READY on port 8080!${RESET}"
+            echo -e "${GREEN}✓ [OK] TrueBlocks Indexing Engine is READY!${RESET}"
         fi
 
         echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081} with Air Live Reload)...${RESET}"

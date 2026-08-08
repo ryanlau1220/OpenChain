@@ -51,15 +51,18 @@ func NewTrueBlocksAdapter(baseURL, rpcURL string) *TrueBlocksAdapter {
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		RPCURL:  rpcURL,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 3 * time.Second,
 		},
 	}
 }
 
 // GetSyncStatus polls TrueBlocks admin API (chifra status)
 func (t *TrueBlocksAdapter) GetSyncStatus(ctx context.Context) (*SyncState, error) {
+	statusCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
 	statusURL := fmt.Sprintf("%s/status?fmt=json", t.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
+	req, err := http.NewRequestWithContext(statusCtx, http.MethodGet, statusURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create status request: %w", err)
 	}
@@ -140,13 +143,15 @@ func (t *TrueBlocksAdapter) GetSyncStatus(ctx context.Context) (*SyncState, erro
 	}, nil
 }
 
-
 // GetAddressTransactions queries TrueBlocks address export endpoint for address history
 func (t *TrueBlocksAdapter) GetAddressTransactions(ctx context.Context, address string) ([]TrueBlocksTransaction, *SyncState, error) {
 	syncState, _ := t.GetSyncStatus(ctx)
 
+	exportCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
 	exportURL := fmt.Sprintf("%s/export?addrs=%s&fmt=json", t.BaseURL, strings.ToLower(address))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, exportURL, nil)
+	req, err := http.NewRequestWithContext(exportCtx, http.MethodGet, exportURL, nil)
 	if err != nil {
 		return nil, syncState, fmt.Errorf("failed to create export request: %w", err)
 	}
@@ -157,6 +162,7 @@ func (t *TrueBlocksAdapter) GetAddressTransactions(ctx context.Context, address 
 		return []TrueBlocksTransaction{}, syncState, nil
 	}
 	defer func() { _ = resp.Body.Close() }()
+
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

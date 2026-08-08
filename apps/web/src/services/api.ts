@@ -77,7 +77,7 @@ export async function fetchTraceGraph(seedAddress: string, maxHops = 2, directio
 }
 
 export async function lookupAddress(address: string) {
-	const [lookupResp, riskResp, labelsResp] = await Promise.all([
+	const [lookupRes, riskRes, labelsRes] = await Promise.allSettled([
 		lookupClient.lookupAddress({
 			address,
 			network: 1 /* NETWORK_ETHEREUM_SEPOLIA */,
@@ -86,9 +86,9 @@ export async function lookupAddress(address: string) {
 		labelClient.getLabels({ address, network: 1 }),
 	]);
 	return {
-		summary: lookupResp.summary,
-		risk: riskResp.evaluation,
-		labels: labelsResp.labels,
+		summary: lookupRes.status === 'fulfilled' ? lookupRes.value.summary : undefined,
+		risk: riskRes.status === 'fulfilled' ? riskRes.value.evaluation : undefined,
+		labels: labelsRes.status === 'fulfilled' ? labelsRes.value.labels : [],
 	};
 }
 

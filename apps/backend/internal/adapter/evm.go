@@ -21,7 +21,7 @@ func NewEVMClient(rpcURL string) *EVMClient {
 	return &EVMClient{
 		rpcURL: rpcURL,
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: 5 * time.Second,
 		},
 	}
 }
@@ -46,6 +46,9 @@ type RPCError struct {
 }
 
 func (c *EVMClient) callRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
+	rpcCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+
 	reqBody := RPCRequest{
 		JSONRPC: "2.0",
 		Method:  method,
@@ -58,7 +61,7 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.rpcURL, bytes.NewBuffer(data))
+	req, err := http.NewRequestWithContext(rpcCtx, "POST", c.rpcURL, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}

@@ -56,23 +56,34 @@ function Index() {
 		setAddresses(addrs);
 		setSelectedTokens(tokens);
 		setLoading(true);
-		try {
+
+		const lookupPromise = (async () => {
 			if (addrs.length === 1) {
-				const data = await lookupAddress(addrs[0]);
-				setSummary(data.summary ?? null);
-				setRisk(data.risk ?? null);
-				setLabels(data.labels || []);
+				try {
+					const data = await lookupAddress(addrs[0]);
+					setSummary(data.summary ?? null);
+					setRisk(data.risk ?? null);
+					setLabels(data.labels || []);
+				} catch (err) {
+					console.error('Lookup address failed:', err);
+				}
 			} else {
 				setSummary(null);
 				setRisk(null);
 			}
-			const gData = await fetchMultiTraceGraph(addrs, 2, 'BOTH', tokens);
-			setGraphData(gData);
-		} catch (err) {
-			console.error(err);
-		} finally {
-			setLoading(false);
-		}
+		})();
+
+		const tracePromise = (async () => {
+			try {
+				const gData = await fetchMultiTraceGraph(addrs, 2, 'BOTH', tokens);
+				setGraphData(gData);
+			} catch (err) {
+				console.error('Fetch graph trace failed:', err);
+			}
+		})();
+
+		await Promise.allSettled([lookupPromise, tracePromise]);
+		setLoading(false);
 	};
 
 	const handleExpandNode = async (nodeAddr: string, direction: 'INFLOW' | 'OUTFLOW' | 'BOTH') => {

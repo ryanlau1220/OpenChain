@@ -9,6 +9,7 @@ COPY infra/trueblocks/main.go .
 RUN CGO_ENABLED=0 GOOS=linux go build -o trueblocks main.go
 
 FROM alpine:latest
+RUN apk add --no-cache curl
 
 WORKDIR /app
 COPY --from=builder /app/trueblocks .
