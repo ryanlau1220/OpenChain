@@ -6,6 +6,20 @@ import "openchain/v1/common.proto";
 
 option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
 
+enum TrustTier {
+  TRUST_TIER_UNSPECIFIED = 0;
+  TRUST_TIER_1_AUTHORITATIVE = 1;
+  TRUST_TIER_2_COMMUNITY_VERIFIED = 2;
+  TRUST_TIER_3_LOCAL_WORKSPACE = 3;
+}
+
+message Attestation {
+  string attestation_type = 1;
+  string reference_url = 2;
+  string proof_hash = 3;
+  int64 timestamp = 4;
+}
+
 message AddressLabel {
   string id = 1;
   string address = 2;
@@ -17,6 +31,8 @@ message AddressLabel {
   string source = 8;
   string created_by = 9;
   int64 created_at = 10;
+  TrustTier trust_tier = 11;
+  repeated Attestation attestations = 12;
 }
 
 message AddLabelRequest {
@@ -27,7 +43,10 @@ message AddLabelRequest {
   double confidence = 5;
   string evidence_url = 6;
   string source = 7;
+  TrustTier trust_tier = 8;
+  repeated Attestation attestations = 9;
 }
+
 
 message AddLabelResponse {
   AddressLabel label = 1;
