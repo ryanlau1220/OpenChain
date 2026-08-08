@@ -48,12 +48,21 @@ message TraceGraphRequest {
   repeated string tokens = 8;
 }
 
+message SyncStateMsg {
+  int64 indexed_up_to_block = 1;
+  int64 latest_chain_block = 2;
+  bool is_synced = 3;
+  string scrape_status = 4;
+  string warning_message = 5;
+}
+
 message TraceGraphResponse {
   string seed_address = 1;
   repeated GraphNode nodes = 2;
   repeated GraphEdge edges = 3;
   uint32 total_nodes = 4;
   uint32 total_edges = 5;
+  SyncStateMsg sync_state = 6;
 }
 
 message ExpandNodeRequest {
@@ -69,7 +78,21 @@ message ExpandNodeResponse {
   repeated GraphEdge new_edges = 2;
 }
 
+message StreamGraphUpdatesRequest {
+  string case_id = 1;
+}
+
+message StreamGraphUpdatesResponse {
+  string case_id = 1;
+  string event_type = 2;
+  repeated GraphNode nodes = 3;
+  repeated GraphEdge edges = 4;
+  SyncStateMsg sync_state = 5;
+}
+
 service TracingService {
   rpc TraceGraph(TraceGraphRequest) returns (TraceGraphResponse);
   rpc ExpandNode(ExpandNodeRequest) returns (ExpandNodeResponse);
+  rpc StreamGraphUpdates(StreamGraphUpdatesRequest) returns (stream StreamGraphUpdatesResponse);
 }
+
