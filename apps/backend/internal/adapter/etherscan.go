@@ -24,9 +24,9 @@ type EVMChainAdapter struct {
 func NewEVMChainAdapter(network string, apiBaseURL string, apiKey string, evmClient *EVMClient) *EVMChainAdapter {
 	if apiBaseURL == "" {
 		if strings.Contains(strings.ToUpper(network), "SEPOLIA") {
-			apiBaseURL = "https://api-sepolia.etherscan.io/api"
+			apiBaseURL = "https://eth-sepolia.blockscout.com/api"
 		} else {
-			apiBaseURL = "https://api.etherscan.io/api"
+			apiBaseURL = "https://eth.blockscout.com/api"
 		}
 	}
 	return &EVMChainAdapter{
