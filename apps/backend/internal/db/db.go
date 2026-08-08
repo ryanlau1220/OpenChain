@@ -113,6 +113,57 @@ func (d *DB) InitSchema(ctx context.Context) error {
 			END IF;
 		END $$;
 
+		CREATE TABLE IF NOT EXISTS public.cases (
+			id VARCHAR(64) PRIMARY KEY,
+			title VARCHAR(255) NOT NULL,
+			description TEXT,
+			status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+			tags TEXT[],
+			created_by VARCHAR(128) NOT NULL DEFAULT 'System',
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS public.case_nodes (
+			id SERIAL PRIMARY KEY,
+			case_id VARCHAR(64) NOT NULL REFERENCES public.cases(id) ON DELETE CASCADE,
+			address VARCHAR(64) NOT NULL,
+			label VARCHAR(128),
+			notes TEXT,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS public.case_edges (
+			id SERIAL PRIMARY KEY,
+			case_id VARCHAR(64) NOT NULL REFERENCES public.cases(id) ON DELETE CASCADE,
+			source_address VARCHAR(64) NOT NULL,
+			target_address VARCHAR(64) NOT NULL,
+			tx_hash VARCHAR(66),
+			notes TEXT,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS public.canvas_shares (
+			share_id VARCHAR(64) PRIMARY KEY,
+			snapshot_json JSONB NOT NULL,
+			expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS public.custom_labels (
+			id VARCHAR(64) PRIMARY KEY,
+			address VARCHAR(64) NOT NULL,
+			network VARCHAR(32) NOT NULL DEFAULT 'ETHEREUM_SEPOLIA',
+			category VARCHAR(64) NOT NULL,
+			label VARCHAR(128) NOT NULL,
+			confidence DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+			evidence_url TEXT,
+			source VARCHAR(64) NOT NULL DEFAULT 'USER',
+			created_by VARCHAR(128) NOT NULL DEFAULT 'System',
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_custom_labels_address ON public.custom_labels(LOWER(address));
 	`
 
 	if _, err := tx.ExecContext(ctx, initSQL); err != nil {
@@ -123,7 +174,7 @@ func (d *DB) InitSchema(ctx context.Context) error {
 		return fmt.Errorf("failed to commit schema tx: %w", err)
 	}
 
-	slog.Info("Apache AGE schema successfully initialized", "graph", d.GraphName)
+	slog.Info("Apache AGE & relational schema successfully initialized", "graph", d.GraphName)
 	return nil
 }
 
@@ -135,7 +186,6 @@ func (d *DB) ConnectAge() (*age.Age, error) {
 	}
 	return age.ConnectAge(graph, d.DSN)
 }
-
 
 // Close closes the database connection pool
 func (d *DB) Close() error {
