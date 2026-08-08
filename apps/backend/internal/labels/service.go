@@ -2,12 +2,18 @@ package labels
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+//go:embed seed_labels.json
+var embeddedSeedLabels []byte
 
 type LabelItem struct {
 	ID          string    `json:"id"`
@@ -36,47 +42,17 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) seedWellKnownLabels() {
-	// Seed known Sepolia / Testnet contracts & addresses
-	wellKnown := []LabelItem{
-		{
-			ID:          uuid.New().String(),
-			Address:     "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-			Network:     "ETHEREUM_SEPOLIA",
-			Category:    "DeFi",
-			Label:       "Uniswap V2 Router",
-			Confidence:  1.0,
-			EvidenceURL: "https://sepolia.etherscan.io/address/0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-			Source:      "Etherscan",
-			CreatedBy:   "SYSTEM",
-			CreatedAt:   time.Now(),
-		},
-		{
-			ID:          uuid.New().String(),
-			Address:     "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
-			Network:     "ETHEREUM_SEPOLIA",
-			Category:    "DeFi",
-			Label:       "UNI Token Contract",
-			Confidence:  1.0,
-			EvidenceURL: "https://sepolia.etherscan.io/address/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
-			Source:      "Etherscan",
-			CreatedBy:   "SYSTEM",
-			CreatedAt:   time.Now(),
-		},
-		{
-			ID:          uuid.New().String(),
-			Address:     "0x0000000000000000000000000000000000000000",
-			Network:     "ETHEREUM_SEPOLIA",
-			Category:    "Burn",
-			Label:       "Null / Burn Address",
-			Confidence:  1.0,
-			EvidenceURL: "https://en.wikipedia.org/wiki/Null_address",
-			Source:      "Protocol Standard",
-			CreatedBy:   "SYSTEM",
-			CreatedAt:   time.Now(),
-		},
+	var wellKnown []LabelItem
+	if err := json.Unmarshal(embeddedSeedLabels, &wellKnown); err != nil {
+		slog.Warn("failed to parse embedded seed_labels.json", "error", err)
+		return
 	}
 
+	now := time.Now()
 	for _, l := range wellKnown {
+		if l.CreatedAt.IsZero() {
+			l.CreatedAt = now
+		}
 		addrKey := strings.ToLower(l.Address)
 		r.labels[addrKey] = append(r.labels[addrKey], l)
 	}
