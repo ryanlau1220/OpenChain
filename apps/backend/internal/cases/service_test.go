@@ -51,4 +51,13 @@ func TestCaseService(t *testing.T) {
 	if mimeCSV != "text/csv" || len(contentCSV) == 0 || filenameCSV == "" {
 		t.Errorf("invalid CSV export output: %s, %s", filenameCSV, mimeCSV)
 	}
+
+	// Test Export PDF
+	filenamePDF, contentPDF, mimePDF, err := service.ExportReport(ctx, newCase.ID, "PDF")
+	if err != nil {
+		t.Fatalf("failed to export PDF report: %v", err)
+	}
+	if mimePDF != "application/pdf" || len(contentPDF) == 0 || filenamePDF == "" {
+		t.Errorf("invalid PDF export output: %s, %s", filenamePDF, mimePDF)
+	}
 }

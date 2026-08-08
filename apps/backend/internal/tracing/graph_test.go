@@ -36,6 +36,13 @@ func TestTracingEngine(t *testing.T) {
 	if !seedNode.IsSeed {
 		t.Errorf("expected IsSeed to be true for first node")
 	}
+
+	// Verify zero synthetic mock nodes are present
+	for _, n := range result.Nodes {
+		if n.ID == "0x567f042da35a404d300000000000000000000001" || n.Label == "Inflow EOA" || n.Label == "Binance Hot Wallet" {
+			t.Errorf("found purged synthetic node in graph output: %s (%s)", n.ID, n.Label)
+		}
+	}
 }
 
 func TestMultiAddressTracing(t *testing.T) {
