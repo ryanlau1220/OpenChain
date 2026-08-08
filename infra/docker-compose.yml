@@ -29,34 +29,3 @@ services:
       RPC_URL: ${ETH_SEPOLIA_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com}
 
 
-  backend:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile.backend
-    container_name: openchain-backend
-    restart: unless-stopped
-    ports:
-      - "8081:8081"
-    environment:
-      PORT: "8081"
-      DATABASE_URL: ${DATABASE_URL:-postgres://openchain:openchain_secret@postgres:5432/openchain?sslmode=disable}
-      TRUEBLOCKS_API_URL: ${TRUEBLOCKS_API_URL:-http://trueblocks:8080}
-      ETH_SEPOLIA_RPC_URL: ${ETH_SEPOLIA_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com}
-      BASE_SEPOLIA_RPC_URL: ${BASE_SEPOLIA_RPC_URL:-https://sepolia.base.org}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  web:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile.web
-    container_name: openchain-web
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      VITE_API_URL: "http://localhost:8081"
-    depends_on:
-      - backend
-

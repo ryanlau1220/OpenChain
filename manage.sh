@@ -35,10 +35,11 @@ case "$1" in
 
         trap cleanup_dev INT TERM
 
-        echo -e "${YELLOW}Checking PostgreSQL + Apache AGE container readiness...${RESET}"
+        echo -e "${YELLOW}Checking infrastructure containers (PostgreSQL + Apache AGE, TrueBlocks)...${RESET}"
         if command -v docker >/dev/null 2>&1 && [ -f infra/docker-compose.yml ]; then
-            docker compose -f infra/docker-compose.yml up -d postgres 2>/dev/null || true
+            docker compose -f infra/docker-compose.yml up -d 2>/dev/null || true
         fi
+
 
         echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081} with Air Live Reload)...${RESET}"
         if command -v air >/dev/null 2>&1; then
@@ -60,10 +61,11 @@ case "$1" in
 
 
     docker)
-        echo -e "${YELLOW}Building and starting Docker Compose containers...${RESET}"
-        docker compose -f infra/docker-compose.yml up -d
-        echo -e "${GREEN}✓ [OK] Docker containers started successfully.${RESET}"
+        echo -e "${YELLOW}Building and starting infrastructure Docker Compose containers...${RESET}"
+        docker compose -f infra/docker-compose.yml up -d --remove-orphans
+        echo -e "${GREEN}✓ [OK] Infrastructure containers started successfully.${RESET}"
         ;;
+
 
     docker:down)
         echo -e "${YELLOW}Stopping Docker Compose stack...${RESET}"
