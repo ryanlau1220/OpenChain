@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
+	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/risk"
 )
@@ -36,27 +37,33 @@ type GraphEdge struct {
 }
 
 type GraphResult struct {
-	SeedAddresses []string    `json:"seed_addresses"`
-	SeedAddress   string      `json:"seed_address,omitempty"`
-	Nodes         []GraphNode `json:"nodes"`
-	Edges         []GraphEdge `json:"edges"`
-	TotalNodes    uint32      `json:"total_nodes"`
-	TotalEdges    uint32      `json:"total_edges"`
+	SeedAddresses []string           `json:"seed_addresses"`
+	SeedAddress   string             `json:"seed_address,omitempty"`
+	Nodes         []GraphNode        `json:"nodes"`
+	Edges         []GraphEdge        `json:"edges"`
+	TotalNodes    uint32             `json:"total_nodes"`
+	TotalEdges    uint32             `json:"total_edges"`
+	SyncState     *adapter.SyncState `json:"sync_state,omitempty"`
 }
 
 type Engine struct {
-	evmClient     *adapter.EVMClient
-	labelRegistry *labels.Registry
-	riskEvaluator *risk.Evaluator
+	evmClient        *adapter.EVMClient
+	trueBlocksClient *adapter.TrueBlocksAdapter
+	db               *db.DB
+	labelRegistry    *labels.Registry
+	riskEvaluator    *risk.Evaluator
 }
 
-func NewEngine(evm *adapter.EVMClient, lr *labels.Registry, re *risk.Evaluator) *Engine {
+func NewEngine(evm *adapter.EVMClient, tb *adapter.TrueBlocksAdapter, database *db.DB, lr *labels.Registry, re *risk.Evaluator) *Engine {
 	return &Engine{
-		evmClient:     evm,
-		labelRegistry: lr,
-		riskEvaluator: re,
+		evmClient:        evm,
+		trueBlocksClient: tb,
+		db:               database,
+		labelRegistry:    lr,
+		riskEvaluator:    re,
 	}
 }
+
 
 func (e *Engine) TraceMultiHopGraph(ctx context.Context, seedAddress string, network string, maxHops uint32, direction string) (*GraphResult, error) {
 	return e.TraceMultiAddressGraph(ctx, []string{seedAddress}, network, maxHops, direction, nil)
@@ -68,6 +75,7 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 	inCountMap := make(map[string]uint32)
 	outCountMap := make(map[string]uint32)
 
+	var syncState *adapter.SyncState
 	var cleanedSeeds []string
 	for _, addr := range seedAddresses {
 		clean := strings.ToLower(strings.TrimSpace(addr))
@@ -107,8 +115,82 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 			TotalVolumeWei: bal.String(),
 		}
 
-		// Fetch logs / transfers via EVM RPC with dynamic block window
-		logs, _ := e.evmClient.GetERC20Transfers(ctx, clean, "")
+		if e.trueBlocksClient != nil {
+			tbTxs, state, _ := e.trueBlocksClient.GetAddressTransactions(ctx, clean)
+			syncState = state
+
+
+		for idx, tx := range tbTxs {
+			from := strings.ToLower(tx.From)
+			to := strings.ToLower(tx.To)
+			if from == "" || to == "" {
+				continue
+			}
+
+			outCountMap[from]++
+			inCountMap[to]++
+
+			for _, a := range []string{from, to} {
+				if _, exists := nodeMap[a]; !exists {
+					nodeLabel := shortAddress(a)
+					nodeEntity := "EOA"
+
+					regLabels := e.labelRegistry.GetLabels(ctx, a)
+					if len(regLabels) > 0 {
+						nodeLabel = regLabels[0].Label
+						if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
+							nodeEntity = "EXCHANGE"
+						} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
+							nodeEntity = "SCAMMER"
+						}
+					}
+
+					nodeMap[a] = GraphNode{
+						ID:             a,
+						Label:          nodeLabel,
+						EntityType:     nodeEntity,
+						RiskScore:      0.0,
+						Category:       "LOW",
+						IsSeed:         a == clean,
+						TotalVolumeWei: "0",
+					}
+
+					if e.db != nil {
+						_ = e.db.UpsertNode(ctx, db.Node{
+							Address: a,
+							Label:   db.VertexWallet,
+						})
+					}
+				}
+			}
+
+			edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
+			edgeMap[edgeID] = GraphEdge{
+				ID:             edgeID,
+				Source:         from,
+				Target:         to,
+				ValueWei:       tx.ValueWei,
+				ValueFormatted: fmt.Sprintf("%s Wei", tx.ValueWei),
+				TxCount:        1,
+				AssetSymbol:    "ETH",
+			}
+
+			if e.db != nil {
+				_ = e.db.UpsertEdge(ctx, db.Edge{
+					Hash:        tx.Hash,
+					FromAddress: from,
+					ToAddress:   to,
+					Label:       db.EdgeTransfer,
+					ValueWei:    tx.ValueWei,
+					BlockNumber: tx.BlockNumber,
+				})
+			}
+		}
+	}
+
+	// Fetch logs / transfers via EVM RPC with dynamic block window
+	logs, _ := e.evmClient.GetERC20Transfers(ctx, clean, "")
+
 
 		for idx, l := range logs {
 			if len(l.Topics) < 3 {
@@ -264,8 +346,10 @@ func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []str
 		Edges:         edges,
 		TotalNodes:    uint32(len(nodes)),
 		TotalEdges:    uint32(len(edges)),
+		SyncState:     syncState,
 	}, nil
 }
+
 
 func shortAddress(addr string) string {
 	if len(addr) <= 10 {
