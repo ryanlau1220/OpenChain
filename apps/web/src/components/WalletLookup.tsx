@@ -1,4 +1,5 @@
-import { Clock, ExternalLink, ShieldAlert, Tag, Wallet } from 'lucide-react';
+import { Clock, ExternalLink, Shield, ShieldAlert, ShieldCheck, Tag, Wallet } from 'lucide-react';
+
 import type React from 'react';
 import {
 	type AddressLabel,
@@ -86,14 +87,69 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					{summary.address}
 				</p>
 
-				{/* Labels as prism pills */}
+				{/* Labels as OLI Trust Tier pills */}
 				{safeLabels.length > 0 && (
-					<div className="flex flex-wrap gap-1 pt-0.5">
-						{safeLabels.map((l) => (
-							<span key={l.id} className="prism-pill">
-								{l.category}: {l.label}
-							</span>
-						))}
+					<div className="space-y-1 pt-1">
+						<span className="text-[9px] uppercase font-bold text-[var(--ink-3)] block">
+							OLI Attested Labels
+						</span>
+						<div className="flex flex-col gap-1">
+							{safeLabels.map((l) => {
+								const tier = l.trustTier ?? 1;
+								return (
+									<div
+										key={l.id}
+										className="p-1.5 rounded-lg flex items-center justify-between text-[10px]"
+										style={{
+											background:
+												tier === 1
+													? 'rgba(239,68,68,0.06)'
+													: tier === 2
+														? 'rgba(16,185,129,0.06)'
+														: 'rgba(99,102,241,0.06)',
+											border:
+												tier === 1
+													? '1px solid rgba(239,68,68,0.2)'
+													: tier === 2
+														? '1px solid rgba(16,185,129,0.2)'
+														: '1px solid rgba(99,102,241,0.2)',
+										}}
+									>
+										<div className="flex items-center gap-1.5">
+											{tier === 1 ? (
+												<ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+											) : tier === 2 ? (
+												<ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+											) : (
+												<Shield className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+											)}
+											<div>
+												<span className="font-semibold block text-[var(--ink)]">
+													{l.category}: {l.label}
+												</span>
+												<span className="text-[9px] text-[var(--ink-3)]">
+													{tier === 1
+														? 'Tier 1 Authoritative'
+														: tier === 2
+															? 'Tier 2 Community Verified'
+															: 'Tier 3 Workspace'}
+												</span>
+											</div>
+										</div>
+										{l.evidenceUrl && (
+											<a
+												href={l.evidenceUrl}
+												target="_blank"
+												rel="noreferrer"
+												className="text-indigo-600 hover:underline flex items-center gap-0.5 text-[9px]"
+											>
+												Proof <ExternalLink className="w-2.5 h-2.5" />
+											</a>
+										)}
+									</div>
+								);
+							})}
+						</div>
 					</div>
 				)}
 			</div>
