@@ -154,7 +154,13 @@ func (c *EVMClient) IsContract(ctx context.Context, address string) (bool, error
 		return false, err
 	}
 
-	return hexStr != "0x" && hexStr != "0x0" && len(hexStr) > 2, nil
+	clean := strings.ToLower(strings.TrimPrefix(hexStr, "0x"))
+	// EIP-7702 EOA Delegated Accounts start with 0xef0100 prefix; treat them as EOAs
+	if clean == "" || clean == "0" || strings.HasPrefix(clean, "ef0100") {
+		return false, nil
+	}
+
+	return len(clean) > 0, nil
 }
 
 type LogItem struct {
