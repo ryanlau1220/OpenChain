@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
 import { ShareModal } from '../components/ShareModal';
@@ -109,7 +109,7 @@ function Index() {
 		}
 	};
 
-	const handleNodeSelect = async (node: GraphNode | null) => {
+	const handleNodeSelect = useCallback(async (node: GraphNode | null) => {
 		setSelectedNode(node);
 		if (node) {
 			try {
@@ -121,7 +121,7 @@ function Index() {
 				console.error(err);
 			}
 		}
-	};
+	}, []);
 
 	const handleShareCanvas = async () => {
 		if (!graphData) return;

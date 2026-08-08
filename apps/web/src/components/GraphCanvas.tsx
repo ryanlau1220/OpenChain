@@ -56,6 +56,11 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		'breadthfirst',
 	);
 
+	const onNodeSelectRef = useRef(onNodeSelect);
+	useEffect(() => {
+		onNodeSelectRef.current = onNodeSelect;
+	}, [onNodeSelect]);
+
 	useEffect(() => {
 		if (!containerRef.current || !graphData) return;
 
@@ -123,7 +128,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				(e) => Boolean(e.data.id) && !currentElementIds.has(e.data.id as string),
 			);
 
-			if (newElements.length === 0 && cy.elements().length > 0) {
+			if (newElements.length === 0) {
 				return;
 			}
 
@@ -236,7 +241,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			const nData = evt.target.data('raw');
 			setSelectedNode(nData);
 			setSelectedEdge(null);
-			onNodeSelect(nData);
+			onNodeSelectRef.current(nData);
 		});
 		cy.on('tap', 'edge', (evt) => {
 			setSelectedEdge(evt.target.data('raw'));
@@ -245,7 +250,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			if (evt.target === cy) {
 				setSelectedNode(null);
 				setSelectedEdge(null);
-				onNodeSelect(null);
+				onNodeSelectRef.current(null);
 			}
 		});
 
@@ -254,7 +259,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			cy.destroy();
 			cyRef.current = null;
 		};
-	}, [graphData, layoutName, onNodeSelect]);
+	}, [graphData, layoutName]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
