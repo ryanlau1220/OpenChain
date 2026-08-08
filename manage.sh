@@ -37,9 +37,22 @@ case "$1" in
 
         echo -e "${YELLOW}Checking infrastructure containers (PostgreSQL + Apache AGE, TrueBlocks)...${RESET}"
         if command -v docker >/dev/null 2>&1 && [ -f infra/docker-compose.yml ]; then
-            docker compose -f infra/docker-compose.yml up -d 2>/dev/null || true
+            docker compose -f infra/docker-compose.yml up -d
         fi
 
+        if command -v docker >/dev/null 2>&1; then
+            echo -e "${YELLOW}Waiting for PostgreSQL + Apache AGE container to become ready...${RESET}"
+            until [ "$(docker inspect --format='{{.State.Health.Status}}' openchain-postgres 2>/dev/null)" = "healthy" ]; do
+                sleep 1
+            done
+            echo -e "${GREEN}✓ [OK] PostgreSQL + Apache AGE Service is READY!${RESET}"
+
+            echo -e "${YELLOW}Waiting for TrueBlocks indexing service to become ready on port 8080...${RESET}"
+            until curl -s -f http://localhost:8080/status?fmt=json >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo -e "${GREEN}✓ [OK] TrueBlocks Indexing Engine is READY on port 8080!${RESET}"
+        fi
 
         echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081} with Air Live Reload)...${RESET}"
         if command -v air >/dev/null 2>&1; then
@@ -57,6 +70,7 @@ case "$1" in
         echo -e "${MAGENTA}Launching OpenChain TanStack Start Web App (Port 3000)...${RESET}"
         (pnpm --filter @openchain/web dev 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
         wait
+
         ;;
 
 

@@ -27,5 +27,11 @@ services:
       - "8080:8080"
     environment:
       RPC_URL: ${ETH_SEPOLIA_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/status?fmt=json || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 
 
