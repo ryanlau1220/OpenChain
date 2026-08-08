@@ -1,4 +1,31 @@
 services:
+  postgres:
+    image: apache/age:latest
+    container_name: openchain-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openchain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openchain_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-openchain}
+    volumes:
+      - ./postgres/init-age.sql:/docker-entrypoint-initdb.d/01-init-age.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openchain} -d ${POSTGRES_DB:-openchain}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  trueblocks:
+    image: trueblocks/unchained:latest
+    container_name: openchain-trueblocks
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      RPC_URL: ${ETH_SEPOLIA_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com}
+
   backend:
     build:
       context: ..
@@ -9,8 +36,13 @@ services:
       - "8081:8081"
     environment:
       PORT: "8081"
+      DATABASE_URL: ${DATABASE_URL:-postgres://openchain:openchain_secret@postgres:5432/openchain?sslmode=disable}
+      TRUEBLOCKS_API_URL: ${TRUEBLOCKS_API_URL:-http://trueblocks:8080}
       ETH_SEPOLIA_RPC_URL: ${ETH_SEPOLIA_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com}
       BASE_SEPOLIA_RPC_URL: ${BASE_SEPOLIA_RPC_URL:-https://sepolia.base.org}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     build:
@@ -24,3 +56,4 @@ services:
       VITE_API_URL: "http://localhost:8081"
     depends_on:
       - backend
+
