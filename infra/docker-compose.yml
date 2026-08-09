@@ -15,4 +15,28 @@ services:
       timeout: 5s
       retries: 5
 
+  trueblocks:
+    image: openchain-trueblocks
+    build:
+      context: ./trueblocks
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      TRUEBLOCKS_RPC_URL: ${ETHEREUM_MAINNET_RPC_URL:?ETHEREUM_MAINNET_RPC_URL is required}
+      TRUEBLOCKS_INIT_MODE: ${TRUEBLOCKS_INIT_MODE:-filters}
+    volumes:
+      - trueblocks-data:/var/lib/trueblocks
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/status?healthcheck=true >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
+volumes:
+  trueblocks-data:
+    name: openchain-trueblocks-data

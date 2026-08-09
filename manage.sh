@@ -40,21 +40,6 @@ case "$1" in
 
         trap cleanup_dev INT TERM
 
-        echo -e "${YELLOW}Checking PostgreSQL + Apache AGE infrastructure...${RESET}"
-        if command -v docker >/dev/null 2>&1 && [ -f infra/docker-compose.yml ]; then
-            docker compose -f infra/docker-compose.yml up -d
-        fi
-
-        if command -v docker >/dev/null 2>&1; then
-            echo -e "${YELLOW}Waiting for PostgreSQL + Apache AGE database...${RESET}"
-            count=0
-            until docker exec openchain-postgres pg_isready -U openchain -d openchain >/dev/null 2>&1 || [ $count -ge 10 ]; do
-                sleep 0.5
-                count=$((count+1))
-            done
-            echo -e "${GREEN}✓ [OK] PostgreSQL + Apache AGE Service is READY!${RESET}"
-        fi
-
         echo -e "${CYAN}Launching OpenChain Go Backend (Port ${PORT:-8081} with Air Live Reload)...${RESET}"
         if command -v air >/dev/null 2>&1; then
             (cd apps/backend && air -c .air.toml 2>&1 | stdbuf -oL sed "s/^/$(printf "${CYAN}[backend]${RESET}") /") &
@@ -77,14 +62,14 @@ case "$1" in
 
     docker)
         echo -e "${YELLOW}Building and starting infrastructure Docker Compose containers...${RESET}"
-        docker compose -f infra/docker-compose.yml up -d --remove-orphans
+        docker compose --env-file .env -f infra/docker-compose.yml up -d --build --remove-orphans
         echo -e "${GREEN}✓ [OK] Infrastructure containers started successfully.${RESET}"
         ;;
 
 
     docker:down)
         echo -e "${YELLOW}Stopping Docker Compose stack...${RESET}"
-        docker compose -f infra/docker-compose.yml down
+        docker compose --env-file .env -f infra/docker-compose.yml down
         echo -e "${GREEN}✓ [OK] Docker containers stopped.${RESET}"
         ;;
 

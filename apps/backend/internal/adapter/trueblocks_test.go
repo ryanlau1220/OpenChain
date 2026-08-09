@@ -37,6 +37,9 @@ func TestTrueBlocksListsBoundedTransactions(t *testing.T) {
 }
 
 func TestTrueBlocksIntegration(t *testing.T) {
+	if os.Getenv("TRUEBLOCKS_INTEGRATION_TEST") != "1" {
+		t.Skip("set TRUEBLOCKS_INTEGRATION_TEST=1 to test a real TrueBlocks instance")
+	}
 	endpoint := os.Getenv("TRUEBLOCKS_API_URL")
 	if endpoint == "" {
 		t.Skip("set TRUEBLOCKS_API_URL to test a real internal TrueBlocks instance")

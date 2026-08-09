@@ -1,0 +1,35 @@
+diff --git a/chifra/pkg/tslib/establish.go b/chifra/pkg/tslib/establish.go
+index 73b0bd1..3aaf7d5 100644
+--- a/chifra/pkg/tslib/establish.go
++++ b/chifra/pkg/tslib/establish.go
+@@ -94,22 +94,29 @@ func downloadTimestamps(chain, database, outputFn, cid string) (error, bool) {
+ 	userHitCtrlC := false
+ 	ctx, cancel := context.WithCancel(context.Background())
+ 	cleanOnQuit := func() {
+ 		userHitCtrlC = true
+ 		logger.Warn(sigintTrap.TrapMessage)
+ 	}
+ 
++	done := make(chan struct{})
++	defer close(done)
+ 	go func() {
+ 		for {
++			select {
++			case <-done:
++				return
++			default:
++			}
+ 			if file.FileSize(outputFn) >= header.ContentLength {
+ 				break
+ 			}
+ 			pct := int(float64(file.FileSize(outputFn)) / float64(header.ContentLength) * 100)
+ 			msg := colors.Yellow + fmt.Sprintf("Downloading timestamps. Please wait... %d%%", pct) + colors.Off
+ 			if userHitCtrlC {
+ 				msg = colors.Yellow + fmt.Sprintf("Finishing work. please wait... %d%%                                 ", pct) + colors.Off
+ 				cancel()
+ 			}
+ 			logger.Progress(true, msg)
+-			time.Sleep(500 * time.Microsecond)
++			time.Sleep(500 * time.Millisecond)
+ 		}
+ 	}()
