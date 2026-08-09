@@ -5,7 +5,7 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
-import { AddressSummary, Network, TokenBalance } from "./common_pb.js";
+import { AddressSummary, Network, SourceStatus, TokenBalance } from "./common_pb.js";
 
 /**
  * @generated from message openchain.v1.TransactionItem
@@ -263,6 +263,11 @@ export class LookupAddressResponse extends Message<LookupAddressResponse> {
    */
   recentTransactions: TransactionItem[] = [];
 
+  /**
+   * @generated from field: openchain.v1.SourceStatus source_status = 4;
+   */
+  sourceStatus?: SourceStatus;
+
   constructor(data?: PartialMessage<LookupAddressResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -274,6 +279,7 @@ export class LookupAddressResponse extends Message<LookupAddressResponse> {
     { no: 1, name: "summary", kind: "message", T: AddressSummary },
     { no: 2, name: "tokens", kind: "message", T: TokenBalance, repeated: true },
     { no: 3, name: "recent_transactions", kind: "message", T: TransactionItem, repeated: true },
+    { no: 4, name: "source_status", kind: "message", T: SourceStatus },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupAddressResponse {
@@ -290,6 +296,92 @@ export class LookupAddressResponse extends Message<LookupAddressResponse> {
 
   static equals(a: LookupAddressResponse | PlainMessage<LookupAddressResponse> | undefined, b: LookupAddressResponse | PlainMessage<LookupAddressResponse> | undefined): boolean {
     return proto3.util.equals(LookupAddressResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message openchain.v1.LookupTransactionRequest
+ */
+export class LookupTransactionRequest extends Message<LookupTransactionRequest> {
+  /**
+   * @generated from field: string hash = 1;
+   */
+  hash = "";
+
+  /**
+   * @generated from field: openchain.v1.Network network = 2;
+   */
+  network = Network.UNSPECIFIED;
+
+  constructor(data?: PartialMessage<LookupTransactionRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.LookupTransactionRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupTransactionRequest {
+    return new LookupTransactionRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): LookupTransactionRequest {
+    return new LookupTransactionRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): LookupTransactionRequest {
+    return new LookupTransactionRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: LookupTransactionRequest | PlainMessage<LookupTransactionRequest> | undefined, b: LookupTransactionRequest | PlainMessage<LookupTransactionRequest> | undefined): boolean {
+    return proto3.util.equals(LookupTransactionRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message openchain.v1.LookupTransactionResponse
+ */
+export class LookupTransactionResponse extends Message<LookupTransactionResponse> {
+  /**
+   * @generated from field: openchain.v1.TransactionItem transaction = 1;
+   */
+  transaction?: TransactionItem;
+
+  /**
+   * @generated from field: openchain.v1.SourceStatus source_status = 2;
+   */
+  sourceStatus?: SourceStatus;
+
+  constructor(data?: PartialMessage<LookupTransactionResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.LookupTransactionResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "transaction", kind: "message", T: TransactionItem },
+    { no: 2, name: "source_status", kind: "message", T: SourceStatus },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupTransactionResponse {
+    return new LookupTransactionResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): LookupTransactionResponse {
+    return new LookupTransactionResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): LookupTransactionResponse {
+    return new LookupTransactionResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: LookupTransactionResponse | PlainMessage<LookupTransactionResponse> | undefined, b: LookupTransactionResponse | PlainMessage<LookupTransactionResponse> | undefined): boolean {
+    return proto3.util.equals(LookupTransactionResponse, a, b);
   }
 }
 

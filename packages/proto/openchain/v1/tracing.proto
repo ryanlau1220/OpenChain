@@ -26,11 +26,17 @@ message GraphEdge {
   string asset_symbol = 7; // ETH or ERC20 symbol
   int64 first_tx_timestamp = 8;
   int64 last_tx_timestamp = 9;
+  uint32 event_index = 10;
+  uint64 block_number = 11;
+  string transaction_hash = 12;
 }
 
 message TraceGraphRequest {
   string seed_address = 1;
   Network network = 2;
+  TraceDirection direction = 3;
+  uint32 limit = 4;
+  string cursor = 5;
 }
 
 message TraceGraphResponse {
@@ -39,19 +45,34 @@ message TraceGraphResponse {
   repeated GraphEdge edges = 3;
   uint32 total_nodes = 4;
   uint32 total_edges = 5;
+  string next_cursor = 6;
+  bool has_more = 7;
+  SourceStatus source_status = 8;
 }
 
 message ExpandNodeRequest {
   string node_address = 1;
   Network network = 2;
+  TraceDirection direction = 3;
+  uint32 limit = 4;
+  string cursor = 5;
 }
 
 message ExpandNodeResponse {
   repeated GraphNode new_nodes = 1;
   repeated GraphEdge new_edges = 2;
+  string next_cursor = 3;
+  bool has_more = 4;
+  SourceStatus source_status = 5;
 }
 
 service TracingService {
   rpc TraceGraph(TraceGraphRequest) returns (TraceGraphResponse);
   rpc ExpandNode(ExpandNodeRequest) returns (ExpandNodeResponse);
+}
+enum TraceDirection {
+  TRACE_DIRECTION_UNSPECIFIED = 0;
+  TRACE_DIRECTION_BOTH = 1;
+  TRACE_DIRECTION_INBOUND = 2;
+  TRACE_DIRECTION_OUTBOUND = 3;
 }

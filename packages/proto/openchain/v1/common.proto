@@ -6,10 +6,16 @@ option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openc
 
 enum Network {
   NETWORK_UNSPECIFIED = 0;
-  NETWORK_ETHEREUM_SEPOLIA = 1;
-  NETWORK_BASE_SEPOLIA = 2;
-  NETWORK_HOLESKY = 3;
-  NETWORK_ETHEREUM_MAINNET = 4;
+  NETWORK_ETHEREUM_MAINNET = 1;
+}
+
+message SourceStatus {
+  string source = 1;
+  int64 retrieved_at = 2;
+  int64 indexed_up_to_block = 3;
+  int64 latest_chain_block = 4;
+  bool is_complete = 5;
+  string warning = 6;
 }
 
 enum EntityType {

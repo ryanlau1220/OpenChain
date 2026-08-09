@@ -16,32 +16,14 @@ export enum Network {
   UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: NETWORK_ETHEREUM_SEPOLIA = 1;
+   * @generated from enum value: NETWORK_ETHEREUM_MAINNET = 1;
    */
-  ETHEREUM_SEPOLIA = 1,
-
-  /**
-   * @generated from enum value: NETWORK_BASE_SEPOLIA = 2;
-   */
-  BASE_SEPOLIA = 2,
-
-  /**
-   * @generated from enum value: NETWORK_HOLESKY = 3;
-   */
-  HOLESKY = 3,
-
-  /**
-   * @generated from enum value: NETWORK_ETHEREUM_MAINNET = 4;
-   */
-  ETHEREUM_MAINNET = 4,
+  ETHEREUM_MAINNET = 1,
 }
 // Retrieve enum metadata with: proto3.getEnumType(Network)
 proto3.util.setEnumType(Network, "openchain.v1.Network", [
   { no: 0, name: "NETWORK_UNSPECIFIED" },
-  { no: 1, name: "NETWORK_ETHEREUM_SEPOLIA" },
-  { no: 2, name: "NETWORK_BASE_SEPOLIA" },
-  { no: 3, name: "NETWORK_HOLESKY" },
-  { no: 4, name: "NETWORK_ETHEREUM_MAINNET" },
+  { no: 1, name: "NETWORK_ETHEREUM_MAINNET" },
 ]);
 
 /**
@@ -93,6 +75,73 @@ proto3.util.setEnumType(EntityType, "openchain.v1.EntityType", [
   { no: 5, name: "ENTITY_TYPE_BRIDGE" },
   { no: 6, name: "ENTITY_TYPE_DEFI_POOL" },
 ]);
+
+/**
+ * @generated from message openchain.v1.SourceStatus
+ */
+export class SourceStatus extends Message<SourceStatus> {
+  /**
+   * @generated from field: string source = 1;
+   */
+  source = "";
+
+  /**
+   * @generated from field: int64 retrieved_at = 2;
+   */
+  retrievedAt = protoInt64.zero;
+
+  /**
+   * @generated from field: int64 indexed_up_to_block = 3;
+   */
+  indexedUpToBlock = protoInt64.zero;
+
+  /**
+   * @generated from field: int64 latest_chain_block = 4;
+   */
+  latestChainBlock = protoInt64.zero;
+
+  /**
+   * @generated from field: bool is_complete = 5;
+   */
+  isComplete = false;
+
+  /**
+   * @generated from field: string warning = 6;
+   */
+  warning = "";
+
+  constructor(data?: PartialMessage<SourceStatus>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.SourceStatus";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "indexed_up_to_block", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 4, name: "latest_chain_block", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 5, name: "is_complete", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "warning", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SourceStatus {
+    return new SourceStatus().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SourceStatus {
+    return new SourceStatus().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SourceStatus {
+    return new SourceStatus().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SourceStatus | PlainMessage<SourceStatus> | undefined, b: SourceStatus | PlainMessage<SourceStatus> | undefined): boolean {
+    return proto3.util.equals(SourceStatus, a, b);
+  }
+}
 
 /**
  * @generated from message openchain.v1.AddressSummary

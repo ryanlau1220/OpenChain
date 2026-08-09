@@ -30,6 +30,11 @@ fi
 
 case "$1" in
     dev)
+        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${TRUEBLOCKS_API_URL:-}" ]; then
+            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL and TRUEBLOCKS_API_URL are required for Milestone 1.${RESET}"
+            exit 1
+        fi
+
         # Free ports 8081 and 3000 from lingering background processes
         fuser -k 8081/tcp 3000/tcp 2>/dev/null || true
 

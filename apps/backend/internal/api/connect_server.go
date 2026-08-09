@@ -33,12 +33,12 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.tracingEngine.TraceGraph(ctx, address)
+	result, err := h.server.tracingEngine.TraceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus)}), nil
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
@@ -46,12 +46,12 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.tracingEngine.TraceGraph(ctx, address)
+	result, err := h.server.tracingEngine.TraceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges}), nil
+	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus)}), nil
 }
 
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {
@@ -61,7 +61,7 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
-		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, ValueWei: edge.ValueWei, ValueFormatted: edge.ValueFormatted, TxCount: edge.TxCount, AssetSymbol: edge.AssetSymbol})
+		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, ValueWei: edge.ValueWei, ValueFormatted: edge.ValueFormatted, TxCount: edge.TxCount, AssetSymbol: edge.AssetSymbol, EventIndex: edge.EventIndex, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp})
 	}
 	return nodes, edges
 }
@@ -99,7 +99,41 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 			}
 		}
 	}
-	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: pb.Network_NETWORK_ETHEREUM_SEPOLIA, EntityType: entityType, Label: label, BalanceWei: balance.String(), BalanceFormatted: adapter.FormatWeiToETH(balance), TxCount: txCount}}), nil
+	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, EntityType: entityType, Label: label, BalanceWei: balance.String(), BalanceFormatted: adapter.FormatWeiToETH(balance), TxCount: txCount}, SourceStatus: toSourceStatus(h.server.tracingEngine.SourceStatus(ctx))}), nil
+}
+
+func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *connect.Request[pb.LookupTransactionRequest]) (*connect.Response[pb.LookupTransactionResponse], error) {
+	hash, err := transactionHash(req.Msg.GetHash())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	transaction, source, err := h.server.tracingEngine.LookupTransaction(ctx, hash)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	return connect.NewResponse(&pb.LookupTransactionResponse{Transaction: &pb.TransactionItem{Hash: transaction.Hash, BlockNumber: uint64(transaction.BlockNumber), Timestamp: transaction.Timestamp.Unix(), FromAddress: transaction.From, ToAddress: transaction.To, ValueWei: transaction.ValueWei, ValueFormatted: adapter.FormatWeiToETH(bigInt(transaction.ValueWei)), StatusSuccess: true}, SourceStatus: toSourceStatus(source)}), nil
+}
+
+func bigInt(value string) *big.Int {
+	number, ok := new(big.Int).SetString(value, 10)
+	if !ok {
+		return big.NewInt(0)
+	}
+	return number
+}
+
+func traceDirection(direction pb.TraceDirection) tracing.Direction {
+	if direction == pb.TraceDirection_TRACE_DIRECTION_INBOUND {
+		return tracing.DirectionInbound
+	}
+	if direction == pb.TraceDirection_TRACE_DIRECTION_OUTBOUND {
+		return tracing.DirectionOutbound
+	}
+	return tracing.DirectionBoth
+}
+
+func toSourceStatus(status adapter.SourceStatus) *pb.SourceStatus {
+	return &pb.SourceStatus{Source: status.Source, RetrievedAt: status.RetrievedAt.Unix(), IndexedUpToBlock: status.IndexedUpToBlock, LatestChainBlock: status.LatestChainBlock, IsComplete: status.IsComplete, Warning: status.Warning}
 }
 
 type connectLabelHandler struct{ server *Server }

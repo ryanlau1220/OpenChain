@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
 import { WalletLookup } from '../components/WalletLookup';
@@ -7,10 +7,8 @@ import { type AddressLabel, type AddressSummary, type GraphNode, TraceGraphRespo
 
 export const Route = createFileRoute('/')({ component: Index });
 
-const DEFAULT_SEPOLIA_ADDR = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
-
 function Index() {
-	const [address, setAddress] = useState(DEFAULT_SEPOLIA_ADDR);
+	const [address, setAddress] = useState('');
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
@@ -27,8 +25,6 @@ function Index() {
 			setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
 		} catch (error) { console.error(error); } finally { setLoading(false); }
 	}, []);
-
-	useEffect(() => { void load(address); }, []);
 
 	const handleSelect = useCallback(async (node: GraphNode | null) => {
 		setSelectedNode(node);
@@ -53,9 +49,13 @@ function Index() {
 	}, [graphData]);
 
 	return <div className="min-h-screen flex flex-col" style={{ background: 'var(--snow)' }}>
-		<Header currentAddress={address} onSearch={(value) => { setAddress(value); void load(value); }} network="Sepolia Testnet" />
+		<Header currentAddress={address} onSearch={(value) => { setAddress(value); void load(value); }} network="Ethereum Mainnet" />
 		<div className="flex-1 flex overflow-hidden">
-			<div className="flex-1 relative"><GraphCanvas graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} /></div>
+			<div className="flex-1 relative">
+				<GraphCanvas graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} />
+				{!graphData && !loading && <div className="absolute inset-0 grid place-items-center pointer-events-none text-sm" style={{ color: 'var(--ink-3)' }}>Search an Ethereum mainnet address to start an investigation.</div>}
+				{graphData?.sourceStatus?.warning && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>{graphData.sourceStatus.warning}</div>}
+			</div>
 			<div className="w-80 overflow-y-auto p-4" style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}>
 				<h3 className="text-[10px] uppercase font-bold tracking-widest mb-4" style={{ color: 'var(--ink-3)' }}>Address Inspector</h3>
 				<WalletLookup summary={summary} labels={labels} loading={loading} targetSeedAddress={address} onTraceAddress={(value) => { setAddress(value); void load(value); }} />

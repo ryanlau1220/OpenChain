@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { LookupAddressRequest, LookupAddressResponse } from "./lookup_pb.js";
+import { LookupAddressRequest, LookupAddressResponse, LookupTransactionRequest, LookupTransactionResponse } from "./lookup_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -19,6 +19,15 @@ export const LookupService = {
       name: "LookupAddress",
       I: LookupAddressRequest,
       O: LookupAddressResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc openchain.v1.LookupService.LookupTransaction
+     */
+    lookupTransaction: {
+      name: "LookupTransaction",
+      I: LookupTransactionRequest,
+      O: LookupTransactionResponse,
       kind: MethodKind.Unary,
     },
   }

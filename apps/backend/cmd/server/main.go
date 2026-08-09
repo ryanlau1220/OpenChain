@@ -20,8 +20,15 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("Starting OpenChain backend on port %s", cfg.Port)
-	evmClient := adapter.NewEVMClient(cfg.EthSepoliaRPCURL)
+	evmClient := adapter.NewEVMClient(cfg.EthereumMainnetRPCURL)
+	trueBlocks, err := adapter.NewTrueBlocksClient(cfg.TrueBlocksAPIURL)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	database, err := db.NewDB(db.DefaultConfig(cfg.DatabaseURL))
 	if err != nil {
@@ -37,7 +44,7 @@ func main() {
 	}
 
 	registry := labels.NewRegistry()
-	engine := tracing.NewEngine(evmClient, registry)
+	engine := tracing.NewEngine(evmClient, trueBlocks, database, registry)
 	server := api.NewServer(evmClient, registry, engine, cfg.WebOrigin)
 	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 

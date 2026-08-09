@@ -122,7 +122,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 							)}
 						</button>
 						<a
-							href={`https://sepolia.etherscan.io/address/${summary.address}`}
+							href={`https://etherscan.io/address/${summary.address}`}
 							target="_blank"
 							rel="noreferrer"
 							className="flex items-center gap-1 text-[10px] transition hover:text-[var(--accent)]"
@@ -221,7 +221,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						icon: <Wallet className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
 					},
 					{
-						label: 'Tx Count',
+						label: 'Outgoing nonce',
 						value: String(summary.txCount ?? '—'),
 						icon: <Clock className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
 					},

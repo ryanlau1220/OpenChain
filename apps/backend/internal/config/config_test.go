@@ -8,24 +8,27 @@ import (
 func TestLoadConfigDefaults(t *testing.T) {
 	// Clear env vars to test defaults
 	_ = os.Unsetenv("PORT")
-	_ = os.Unsetenv("ETH_SEPOLIA_RPC_URL")
+	_ = os.Unsetenv("ETHEREUM_MAINNET_RPC_URL")
+	_ = os.Unsetenv("TRUEBLOCKS_API_URL")
 
 	cfg := LoadConfig()
 	if cfg.Port != "8081" {
 		t.Errorf("expected default Port 8081, got %s", cfg.Port)
 	}
 
-	if cfg.EthSepoliaRPCURL != "https://ethereum-sepolia-rpc.publicnode.com" {
-		t.Errorf("expected default EthSepoliaRPCURL, got %s", cfg.EthSepoliaRPCURL)
+	if cfg.Validate() == nil {
+		t.Error("expected missing mainnet settings to be rejected")
 	}
 }
 
 func TestLoadConfigCustomEnv(t *testing.T) {
 	_ = os.Setenv("PORT", "9090")
-	_ = os.Setenv("ETH_SEPOLIA_RPC_URL", "https://custom-rpc.example.com")
+	_ = os.Setenv("ETHEREUM_MAINNET_RPC_URL", "https://custom-rpc.example.com")
+	_ = os.Setenv("TRUEBLOCKS_API_URL", "http://trueblocks.internal:8080")
 	defer func() {
 		_ = os.Unsetenv("PORT")
-		_ = os.Unsetenv("ETH_SEPOLIA_RPC_URL")
+		_ = os.Unsetenv("ETHEREUM_MAINNET_RPC_URL")
+		_ = os.Unsetenv("TRUEBLOCKS_API_URL")
 	}()
 
 	cfg := LoadConfig()
@@ -33,7 +36,10 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 		t.Errorf("expected custom Port 9090, got %s", cfg.Port)
 	}
 
-	if cfg.EthSepoliaRPCURL != "https://custom-rpc.example.com" {
-		t.Errorf("expected custom RPC URL, got %s", cfg.EthSepoliaRPCURL)
+	if cfg.EthereumMainnetRPCURL != "https://custom-rpc.example.com" {
+		t.Errorf("expected custom RPC URL, got %s", cfg.EthereumMainnetRPCURL)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected valid config, got %v", err)
 	}
 }

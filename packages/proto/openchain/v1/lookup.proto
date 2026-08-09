@@ -43,8 +43,20 @@ message LookupAddressResponse {
   AddressSummary summary = 1;
   repeated TokenBalance tokens = 2;
   repeated TransactionItem recent_transactions = 3;
+  SourceStatus source_status = 4;
+}
+
+message LookupTransactionRequest {
+  string hash = 1;
+  Network network = 2;
+}
+
+message LookupTransactionResponse {
+  TransactionItem transaction = 1;
+  SourceStatus source_status = 2;
 }
 
 service LookupService {
   rpc LookupAddress(LookupAddressRequest) returns (LookupAddressResponse);
+  rpc LookupTransaction(LookupTransactionRequest) returns (LookupTransactionResponse);
 }

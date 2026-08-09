@@ -5,7 +5,39 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
-import { EntityType, Network } from "./common_pb.js";
+import { EntityType, Network, SourceStatus } from "./common_pb.js";
+
+/**
+ * @generated from enum openchain.v1.TraceDirection
+ */
+export enum TraceDirection {
+  /**
+   * @generated from enum value: TRACE_DIRECTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TRACE_DIRECTION_BOTH = 1;
+   */
+  BOTH = 1,
+
+  /**
+   * @generated from enum value: TRACE_DIRECTION_INBOUND = 2;
+   */
+  INBOUND = 2,
+
+  /**
+   * @generated from enum value: TRACE_DIRECTION_OUTBOUND = 3;
+   */
+  OUTBOUND = 3,
+}
+// Retrieve enum metadata with: proto3.getEnumType(TraceDirection)
+proto3.util.setEnumType(TraceDirection, "openchain.v1.TraceDirection", [
+  { no: 0, name: "TRACE_DIRECTION_UNSPECIFIED" },
+  { no: 1, name: "TRACE_DIRECTION_BOTH" },
+  { no: 2, name: "TRACE_DIRECTION_INBOUND" },
+  { no: 3, name: "TRACE_DIRECTION_OUTBOUND" },
+]);
 
 /**
  * @generated from message openchain.v1.GraphNode
@@ -133,6 +165,21 @@ export class GraphEdge extends Message<GraphEdge> {
    */
   lastTxTimestamp = protoInt64.zero;
 
+  /**
+   * @generated from field: uint32 event_index = 10;
+   */
+  eventIndex = 0;
+
+  /**
+   * @generated from field: uint64 block_number = 11;
+   */
+  blockNumber = protoInt64.zero;
+
+  /**
+   * @generated from field: string transaction_hash = 12;
+   */
+  transactionHash = "";
+
   constructor(data?: PartialMessage<GraphEdge>) {
     super();
     proto3.util.initPartial(data, this);
@@ -150,6 +197,9 @@ export class GraphEdge extends Message<GraphEdge> {
     { no: 7, name: "asset_symbol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "first_tx_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 9, name: "last_tx_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 10, name: "event_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 11, name: "block_number", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 12, name: "transaction_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GraphEdge {
@@ -183,6 +233,21 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
    */
   network = Network.UNSPECIFIED;
 
+  /**
+   * @generated from field: openchain.v1.TraceDirection direction = 3;
+   */
+  direction = TraceDirection.UNSPECIFIED;
+
+  /**
+   * @generated from field: uint32 limit = 4;
+   */
+  limit = 0;
+
+  /**
+   * @generated from field: string cursor = 5;
+   */
+  cursor = "";
+
   constructor(data?: PartialMessage<TraceGraphRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -193,6 +258,9 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "seed_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
+    { no: 3, name: "direction", kind: "enum", T: proto3.getEnumType(TraceDirection) },
+    { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphRequest {
@@ -241,6 +309,21 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
    */
   totalEdges = 0;
 
+  /**
+   * @generated from field: string next_cursor = 6;
+   */
+  nextCursor = "";
+
+  /**
+   * @generated from field: bool has_more = 7;
+   */
+  hasMore = false;
+
+  /**
+   * @generated from field: openchain.v1.SourceStatus source_status = 8;
+   */
+  sourceStatus?: SourceStatus;
+
   constructor(data?: PartialMessage<TraceGraphResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -254,6 +337,9 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
     { no: 3, name: "edges", kind: "message", T: GraphEdge, repeated: true },
     { no: 4, name: "total_nodes", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "total_edges", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 6, name: "next_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "source_status", kind: "message", T: SourceStatus },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphResponse {
@@ -287,6 +373,21 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
    */
   network = Network.UNSPECIFIED;
 
+  /**
+   * @generated from field: openchain.v1.TraceDirection direction = 3;
+   */
+  direction = TraceDirection.UNSPECIFIED;
+
+  /**
+   * @generated from field: uint32 limit = 4;
+   */
+  limit = 0;
+
+  /**
+   * @generated from field: string cursor = 5;
+   */
+  cursor = "";
+
   constructor(data?: PartialMessage<ExpandNodeRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -297,6 +398,9 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "node_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
+    { no: 3, name: "direction", kind: "enum", T: proto3.getEnumType(TraceDirection) },
+    { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeRequest {
@@ -330,6 +434,21 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
    */
   newEdges: GraphEdge[] = [];
 
+  /**
+   * @generated from field: string next_cursor = 3;
+   */
+  nextCursor = "";
+
+  /**
+   * @generated from field: bool has_more = 4;
+   */
+  hasMore = false;
+
+  /**
+   * @generated from field: openchain.v1.SourceStatus source_status = 5;
+   */
+  sourceStatus?: SourceStatus;
+
   constructor(data?: PartialMessage<ExpandNodeResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -340,6 +459,9 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "new_nodes", kind: "message", T: GraphNode, repeated: true },
     { no: 2, name: "new_edges", kind: "message", T: GraphEdge, repeated: true },
+    { no: 3, name: "next_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "source_status", kind: "message", T: SourceStatus },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeResponse {
