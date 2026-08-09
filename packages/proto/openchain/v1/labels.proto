@@ -35,23 +35,6 @@ message AddressLabel {
   repeated Attestation attestations = 12;
 }
 
-message AddLabelRequest {
-  string address = 1;
-  Network network = 2;
-  string category = 3;
-  string label = 4;
-  double confidence = 5;
-  string evidence_url = 6;
-  string source = 7;
-  TrustTier trust_tier = 8;
-  repeated Attestation attestations = 9;
-}
-
-
-message AddLabelResponse {
-  AddressLabel label = 1;
-}
-
 message GetLabelsRequest {
   string address = 1;
   Network network = 2;
@@ -72,7 +55,6 @@ message SearchLabelsResponse {
 }
 
 service LabelService {
-  rpc AddLabel(AddLabelRequest) returns (AddLabelResponse);
   rpc GetLabels(GetLabelsRequest) returns (GetLabelsResponse);
   rpc SearchLabels(SearchLabelsRequest) returns (SearchLabelsResponse);
 }

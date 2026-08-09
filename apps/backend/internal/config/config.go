@@ -5,11 +5,10 @@ import (
 )
 
 type Config struct {
-	Port              string
-	DatabaseURL       string
-	TrueBlocksAPIURL  string
-	EthSepoliaRPCURL  string
-	BaseSepoliaRPCURL string
+	Port             string
+	DatabaseURL      string
+	EthSepoliaRPCURL string
+	WebOrigin        string
 }
 
 func LoadConfig() *Config {
@@ -23,27 +22,20 @@ func LoadConfig() *Config {
 		dbURL = "postgres://openchain:openchain_secret@localhost:5432/openchain?sslmode=disable"
 	}
 
-	tbURL := os.Getenv("TRUEBLOCKS_API_URL")
-	if tbURL == "" {
-		tbURL = "http://localhost:8085"
-	}
-
 	ethRPC := os.Getenv("ETH_SEPOLIA_RPC_URL")
 	if ethRPC == "" {
 		ethRPC = "https://ethereum-sepolia-rpc.publicnode.com"
 	}
 
-	baseRPC := os.Getenv("BASE_SEPOLIA_RPC_URL")
-	if baseRPC == "" {
-		baseRPC = "https://sepolia.base.org"
+	webOrigin := os.Getenv("WEB_ORIGIN")
+	if webOrigin == "" {
+		webOrigin = "http://localhost:3000"
 	}
 
 	return &Config{
-		Port:              port,
-		DatabaseURL:       dbURL,
-		TrueBlocksAPIURL:  tbURL,
-		EthSepoliaRPCURL:  ethRPC,
-		BaseSepoliaRPCURL: baseRPC,
+		Port:             port,
+		DatabaseURL:      dbURL,
+		EthSepoliaRPCURL: ethRPC,
+		WebOrigin:        webOrigin,
 	}
 }
-

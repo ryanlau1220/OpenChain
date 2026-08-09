@@ -6,19 +6,10 @@ import "openchain/v1/common.proto";
 
 option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
 
-enum TraceDirection {
-  TRACE_DIRECTION_UNSPECIFIED = 0;
-  TRACE_DIRECTION_OUTBOUND = 1;
-  TRACE_DIRECTION_INBOUND = 2;
-  TRACE_DIRECTION_BOTH = 3;
-}
-
 message GraphNode {
   string id = 1; // address
   string label = 2;
   EntityType entity_type = 3;
-  double risk_score = 4;
-  string category = 5;
   bool is_seed = 6;
   string total_volume_wei = 7;
   uint32 in_tx_count = 8;
@@ -40,20 +31,6 @@ message GraphEdge {
 message TraceGraphRequest {
   string seed_address = 1;
   Network network = 2;
-  uint32 max_hops = 3;
-  TraceDirection direction = 4;
-  string min_value_wei = 5;
-  string token_contract = 6;
-  repeated string seed_addresses = 7;
-  repeated string tokens = 8;
-}
-
-message SyncStateMsg {
-  int64 indexed_up_to_block = 1;
-  int64 latest_chain_block = 2;
-  bool is_synced = 3;
-  string scrape_status = 4;
-  string warning_message = 5;
 }
 
 message TraceGraphResponse {
@@ -62,15 +39,11 @@ message TraceGraphResponse {
   repeated GraphEdge edges = 3;
   uint32 total_nodes = 4;
   uint32 total_edges = 5;
-  SyncStateMsg sync_state = 6;
 }
 
 message ExpandNodeRequest {
   string node_address = 1;
   Network network = 2;
-  TraceDirection direction = 3;
-  uint32 limit = 4;
-  uint32 max_hops = 5;
 }
 
 message ExpandNodeResponse {
@@ -78,21 +51,7 @@ message ExpandNodeResponse {
   repeated GraphEdge new_edges = 2;
 }
 
-message StreamGraphUpdatesRequest {
-  string case_id = 1;
-}
-
-message StreamGraphUpdatesResponse {
-  string case_id = 1;
-  string event_type = 2;
-  repeated GraphNode nodes = 3;
-  repeated GraphEdge edges = 4;
-  SyncStateMsg sync_state = 5;
-}
-
 service TracingService {
   rpc TraceGraph(TraceGraphRequest) returns (TraceGraphResponse);
   rpc ExpandNode(ExpandNodeRequest) returns (ExpandNodeResponse);
-  rpc StreamGraphUpdates(StreamGraphUpdatesRequest) returns (stream StreamGraphUpdatesResponse);
 }
-

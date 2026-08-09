@@ -37,7 +37,6 @@ message TokenTransferItem {
 message LookupAddressRequest {
   string address = 1;
   Network network = 2;
-  uint32 limit_txs = 3;
 }
 
 message LookupAddressResponse {
@@ -46,16 +45,6 @@ message LookupAddressResponse {
   repeated TransactionItem recent_transactions = 3;
 }
 
-message LookupTxRequest {
-  string hash = 1;
-  Network network = 2;
-}
-
-message LookupTxResponse {
-  TransactionItem transaction = 1;
-}
-
 service LookupService {
   rpc LookupAddress(LookupAddressRequest) returns (LookupAddressResponse);
-  rpc LookupTransaction(LookupTxRequest) returns (LookupTxResponse);
 }

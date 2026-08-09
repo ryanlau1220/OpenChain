@@ -34,8 +34,6 @@ message AddressSummary {
   int64 last_seen_timestamp = 9;
   string total_received_wei = 10;
   string total_sent_wei = 11;
-  double risk_score = 12;
-  repeated string risk_tags = 13;
 }
 
 message TokenBalance {

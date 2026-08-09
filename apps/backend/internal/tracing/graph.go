@@ -4,369 +4,154 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
-	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
-	"github.com/openchain/openchain/apps/backend/internal/risk"
 )
 
+const transactionLimit = 15
+
 type GraphNode struct {
-	ID             string  `json:"id"`
-	Label          string  `json:"label"`
-	EntityType     string  `json:"entity_type"` // EOA, CONTRACT, EXCHANGE, MIXER, SCAMMER
-	RiskScore      float64 `json:"risk_score"`
-	Category       string  `json:"category"`
-	IsSeed         bool    `json:"is_seed"`
-	TotalVolumeWei string  `json:"total_volume_wei"`
-	InTxCount      uint32  `json:"in_tx_count"`
-	OutTxCount     uint32  `json:"out_tx_count"`
+	ID             string
+	Label          string
+	EntityType     string
+	IsSeed         bool
+	TotalVolumeWei string
+	InTxCount      uint32
+	OutTxCount     uint32
 }
 
 type GraphEdge struct {
-	ID               string `json:"id"`
-	Source           string `json:"source"`
-	Target           string `json:"target"`
-	ValueWei         string `json:"value_wei"`
-	ValueFormatted   string `json:"value_formatted"`
-	TxCount          uint32 `json:"tx_count"`
-	AssetSymbol      string `json:"asset_symbol"`
-	FirstTxTimestamp int64  `json:"first_tx_timestamp"`
-	LastTxTimestamp  int64  `json:"last_tx_timestamp"`
+	ID             string
+	Source         string
+	Target         string
+	ValueWei       string
+	ValueFormatted string
+	TxCount        uint32
+	AssetSymbol    string
 }
 
 type GraphResult struct {
-	SeedAddresses []string           `json:"seed_addresses"`
-	SeedAddress   string             `json:"seed_address,omitempty"`
-	Nodes         []GraphNode        `json:"nodes"`
-	Edges         []GraphEdge        `json:"edges"`
-	TotalNodes    uint32             `json:"total_nodes"`
-	TotalEdges    uint32             `json:"total_edges"`
-	SyncState     *adapter.SyncState `json:"sync_state,omitempty"`
+	SeedAddress string
+	Nodes       []GraphNode
+	Edges       []GraphEdge
+	TotalNodes  uint32
+	TotalEdges  uint32
 }
 
+// Engine builds a one-hop graph from the configured EVM data source. It does not
+// persist user-supplied graph data or invent data when the upstream source fails.
 type Engine struct {
-	evmClient        *adapter.EVMClient
-	trueBlocksClient *adapter.TrueBlocksAdapter
-	chainAdapter     adapter.ChainAdapter
-	db               *db.DB
-	labelRegistry    *labels.Registry
-	riskEvaluator    *risk.Evaluator
+	evmClient     *adapter.EVMClient
+	chainAdapter  adapter.ChainAdapter
+	labelRegistry *labels.Registry
 }
 
-func NewEngine(evm *adapter.EVMClient, tb *adapter.TrueBlocksAdapter, database *db.DB, lr *labels.Registry, re *risk.Evaluator) *Engine {
-	var ca adapter.ChainAdapter
+func NewEngine(evm *adapter.EVMClient, lr *labels.Registry) *Engine {
+	var chain adapter.ChainAdapter
 	if evm != nil {
-		ca = adapter.NewEVMChainAdapter("ETHEREUM_SEPOLIA", "", "", evm)
+		chain = adapter.NewEVMChainAdapter("ETHEREUM_SEPOLIA", "", "", evm)
 	}
-	return &Engine{
-		evmClient:        evm,
-		trueBlocksClient: tb,
-		chainAdapter:     ca,
-		db:               database,
-		labelRegistry:    lr,
-		riskEvaluator:    re,
+	return &Engine{evmClient: evm, chainAdapter: chain, labelRegistry: lr}
+}
+
+func (e *Engine) ChainAdapter() adapter.ChainAdapter { return e.chainAdapter }
+
+func (e *Engine) TraceGraph(ctx context.Context, address string) (*GraphResult, error) {
+	seed := strings.ToLower(strings.TrimSpace(address))
+	nodeMap := map[string]GraphNode{}
+	inCounts := map[string]uint32{}
+	outCounts := map[string]uint32{}
+
+	seedNode := e.node(ctx, seed, true)
+	if e.evmClient != nil {
+		if balance, err := e.evmClient.GetBalance(ctx, seed); err == nil {
+			seedNode.TotalVolumeWei = balance.String()
+		}
 	}
-}
+	nodeMap[seed] = seedNode
 
-func (e *Engine) ChainAdapter() adapter.ChainAdapter {
-	return e.chainAdapter
-}
-
-func (e *Engine) TraceMultiHopGraph(ctx context.Context, seedAddress string, network string, maxHops uint32, direction string) (*GraphResult, error) {
-	return e.TraceMultiAddressGraph(ctx, []string{seedAddress}, network, maxHops, direction, nil)
-}
-
-func (e *Engine) TraceMultiAddressGraph(ctx context.Context, seedAddresses []string, network string, maxHops uint32, direction string, _tokens []string) (*GraphResult, error) {
-	nodeMap := make(map[string]GraphNode)
-	edgeMap := make(map[string]GraphEdge)
-	inCountMap := make(map[string]uint32)
-	outCountMap := make(map[string]uint32)
-
-	var syncState *adapter.SyncState
-	var cleanedSeeds []string
-	for _, addr := range seedAddresses {
-		clean := strings.ToLower(strings.TrimSpace(addr))
-		if clean == "" {
-			continue
+	edges := make([]GraphEdge, 0)
+	if e.chainAdapter != nil {
+		txs, err := e.chainAdapter.GetAccountTransactions(ctx, seed, transactionLimit)
+		if err != nil {
+			return nil, fmt.Errorf("get account transactions: %w", err)
 		}
-		cleanedSeeds = append(cleanedSeeds, clean)
-
-		isContract := false
-		var txCount uint64
-		bal := new(big.Int)
-
-		if e.evmClient != nil {
-			isContract, _ = e.evmClient.IsContract(ctx, clean)
-			txCount, _ = e.evmClient.GetTxCount(ctx, clean)
-			bal, _ = e.evmClient.GetBalance(ctx, clean)
-		}
-
-		// Dynamic contract metadata inspection via adapter
-		if e.chainAdapter != nil {
-			meta, err := e.chainAdapter.GetContractMetadata(ctx, clean)
-			if err == nil && meta != nil && meta.ContractName != "" {
-				isContract = true
+		for _, tx := range txs {
+			from, to := strings.ToLower(tx.From), strings.ToLower(tx.To)
+			if from == "" || to == "" {
+				continue
 			}
-		}
-
-		riskEval := e.riskEvaluator.EvaluateAddress(ctx, clean, network, isContract, txCount)
-
-		entityType := "EOA"
-		if isContract {
-			entityType = "CONTRACT"
-		}
-
-		seedLabel := "Target Wallet"
-		labelsList := e.labelRegistry.GetLabels(ctx, clean)
-		if len(labelsList) > 0 {
-			seedLabel = labelsList[0].Label
-			if strings.Contains(strings.ToLower(seedLabel), "binance") || strings.Contains(strings.ToLower(seedLabel), "exchange") {
-				entityType = "EXCHANGE"
-			} else if strings.Contains(strings.ToLower(seedLabel), "scam") {
-				entityType = "SCAMMER"
+			if _, ok := nodeMap[from]; !ok {
+				nodeMap[from] = e.node(ctx, from, from == seed)
 			}
-		}
-
-		nodeMap[clean] = GraphNode{
-			ID:             clean,
-			Label:          seedLabel,
-			EntityType:     entityType,
-			RiskScore:      riskEval.TotalScore,
-			Category:       riskEval.RiskLevel,
-			IsSeed:         true,
-			TotalVolumeWei: bal.String(),
-		}
-
-		// Fetch account transactions via ChainAdapter (1-2 layer transfers)
-		if e.chainAdapter != nil {
-			txItems, err := e.chainAdapter.GetAccountTransactions(ctx, clean, 15)
-			if err == nil {
-				for idx, tx := range txItems {
-					from := strings.ToLower(tx.From)
-					to := strings.ToLower(tx.To)
-					if from == "" || to == "" {
-						continue
-					}
-
-					// Direction filter
-					dirUpper := strings.ToUpper(direction)
-					if (strings.Contains(dirUpper, "INBOUND") || dirUpper == "INFLOW") && to != clean {
-						continue
-					}
-					if (strings.Contains(dirUpper, "OUTBOUND") || dirUpper == "OUTFLOW") && from != clean {
-						continue
-					}
-
-					outCountMap[from]++
-					inCountMap[to]++
-
-					for _, a := range []string{from, to} {
-						if _, exists := nodeMap[a]; !exists {
-							nodeLabel := shortAddress(a)
-							nodeEntity := "EOA"
-
-							regLabels := e.labelRegistry.GetLabels(ctx, a)
-							if len(regLabels) > 0 {
-								nodeLabel = regLabels[0].Label
-								if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
-									nodeEntity = "EXCHANGE"
-								} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
-									nodeEntity = "SCAMMER"
-								}
-							}
-
-							nodeMap[a] = GraphNode{
-								ID:             a,
-								Label:          nodeLabel,
-								EntityType:     nodeEntity,
-								RiskScore:      0.0,
-								Category:       "LOW",
-								IsSeed:         a == clean,
-								TotalVolumeWei: "0",
-							}
-
-							if e.db != nil {
-								_ = e.db.UpsertNode(ctx, db.Node{
-									Address: a,
-									Label:   db.VertexWallet,
-								})
-							}
-						}
-					}
-
-					edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
-					edgeMap[edgeID] = GraphEdge{
-						ID:             edgeID,
-						Source:         from,
-						Target:         to,
-						ValueWei:       tx.ValueWei,
-						ValueFormatted: fmt.Sprintf("%s %s", adapter.FormatWeiToETH(func() *big.Int { v, _ := new(big.Int).SetString(tx.ValueWei, 10); return v }()), tx.AssetSymbol),
-						TxCount:        1,
-						AssetSymbol:    tx.AssetSymbol,
-					}
-				}
+			if _, ok := nodeMap[to]; !ok {
+				nodeMap[to] = e.node(ctx, to, to == seed)
 			}
-		}
-
-		if e.trueBlocksClient != nil {
-			tbTxs, state, _ := e.trueBlocksClient.GetAddressTransactions(ctx, clean)
-			syncState = state
-
-			for idx, tx := range tbTxs {
-				from := strings.ToLower(tx.From)
-				to := strings.ToLower(tx.To)
-				if from == "" || to == "" {
-					continue
-				}
-
-				outCountMap[from]++
-				inCountMap[to]++
-
-				for _, a := range []string{from, to} {
-					if _, exists := nodeMap[a]; !exists {
-						nodeLabel := shortAddress(a)
-						nodeEntity := "EOA"
-
-						regLabels := e.labelRegistry.GetLabels(ctx, a)
-						if len(regLabels) > 0 {
-							nodeLabel = regLabels[0].Label
-						}
-
-						nodeMap[a] = GraphNode{
-							ID:             a,
-							Label:          nodeLabel,
-							EntityType:     nodeEntity,
-							RiskScore:      0.0,
-							Category:       "LOW",
-							IsSeed:         a == clean,
-							TotalVolumeWei: "0",
-						}
-					}
-				}
-
-				edgeID := fmt.Sprintf("tb-%s-%s-%d", from, to, idx)
-				edgeMap[edgeID] = GraphEdge{
-					ID:             edgeID,
-					Source:         from,
-					Target:         to,
-					ValueWei:       tx.ValueWei,
-					ValueFormatted: fmt.Sprintf("%s Wei", tx.ValueWei),
-					TxCount:        1,
-					AssetSymbol:    "ETH",
-				}
-			}
-		}
-		// Fetch logs / transfers via EVM RPC with dynamic block window
-		if e.evmClient != nil {
-			logs, _ := e.evmClient.GetERC20Transfers(ctx, clean, "")
-			for idx, l := range logs {
-				if len(l.Topics) < 3 {
-					continue
-				}
-
-				from := strings.ToLower("0x" + strings.TrimPrefix(l.Topics[1], "0x000000000000000000000000"))
-				to := strings.ToLower("0x" + strings.TrimPrefix(l.Topics[2], "0x000000000000000000000000"))
-
-				// Direction filter
-				if direction == "INFLOW" && to != clean {
-					continue
-				}
-				if direction == "OUTFLOW" && from != clean {
-					continue
-				}
-
-				outCountMap[from]++
-				inCountMap[to]++
-
-				for _, a := range []string{from, to} {
-					if _, exists := nodeMap[a]; !exists {
-						nodeLabel := shortAddress(a)
-						nodeEntity := "EOA"
-
-						regLabels := e.labelRegistry.GetLabels(ctx, a)
-						if len(regLabels) > 0 {
-							nodeLabel = regLabels[0].Label
-							if strings.Contains(strings.ToLower(nodeLabel), "binance") || strings.Contains(strings.ToLower(nodeLabel), "exchange") {
-								nodeEntity = "EXCHANGE"
-							} else if strings.Contains(strings.ToLower(nodeLabel), "scam") {
-								nodeEntity = "SCAMMER"
-							}
-						}
-
-						nodeMap[a] = GraphNode{
-							ID:             a,
-							Label:          nodeLabel,
-							EntityType:     nodeEntity,
-							RiskScore:      0.0,
-							Category:       "LOW",
-							IsSeed:         false,
-							TotalVolumeWei: "0",
-						}
-					}
-				}
-
-				edgeID := fmt.Sprintf("%s-%s-%d", from, to, idx)
-				rawVal := new(big.Int)
-				rawVal.SetString(strings.TrimPrefix(l.Data, "0x"), 16)
-
-				edgeMap[edgeID] = GraphEdge{
-					ID:             edgeID,
-					Source:         from,
-					Target:         to,
-					ValueWei:       rawVal.String(),
-					ValueFormatted: fmt.Sprintf("%s Tokens", rawVal.String()),
-					TxCount:        1,
-					AssetSymbol:    "USDT",
-				}
-			}
+			outCounts[from]++
+			inCounts[to]++
+			edges = append(edges, GraphEdge{
+				ID: tx.Hash, Source: from, Target: to, ValueWei: tx.ValueWei,
+				ValueFormatted: formatValue(tx.ValueWei, tx.AssetSymbol), TxCount: 1, AssetSymbol: tx.AssetSymbol,
+			})
 		}
 	}
 
 	nodes := make([]GraphNode, 0, len(nodeMap))
-	// Add seed nodes first
-	for _, seed := range cleanedSeeds {
-		if n, exists := nodeMap[seed]; exists {
-			n.InTxCount = inCountMap[seed]
-			n.OutTxCount = outCountMap[seed]
-			nodes = append(nodes, n)
+	for id, node := range nodeMap {
+		node.InTxCount, node.OutTxCount = inCounts[id], outCounts[id]
+		nodes = append(nodes, node)
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if nodes[i].IsSeed != nodes[j].IsSeed {
+			return nodes[i].IsSeed
 		}
-	}
-	// Add remaining nodes
-	for id, n := range nodeMap {
-		if !n.IsSeed {
-			n.InTxCount = inCountMap[id]
-			n.OutTxCount = outCountMap[id]
-			nodes = append(nodes, n)
-		}
-	}
+		return nodes[i].ID < nodes[j].ID
+	})
+	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
 
-	edges := make([]GraphEdge, 0, len(edgeMap))
-	for _, eg := range edgeMap {
-		edges = append(edges, eg)
-	}
-
-	seedFirst := ""
-	if len(cleanedSeeds) > 0 {
-		seedFirst = cleanedSeeds[0]
-	}
-
-	return &GraphResult{
-		SeedAddresses: cleanedSeeds,
-		SeedAddress:   seedFirst,
-		Nodes:         nodes,
-		Edges:         edges,
-		TotalNodes:    uint32(len(nodes)),
-		TotalEdges:    uint32(len(edges)),
-		SyncState:     syncState,
-	}, nil
+	return &GraphResult{SeedAddress: seed, Nodes: nodes, Edges: edges, TotalNodes: uint32(len(nodes)), TotalEdges: uint32(len(edges))}, nil
 }
 
-
-func shortAddress(addr string) string {
-	if len(addr) <= 10 {
-		return addr
+func (e *Engine) node(ctx context.Context, address string, isSeed bool) GraphNode {
+	label, entityType := shortAddress(address), "EOA"
+	if e.labelRegistry != nil {
+		if items := e.labelRegistry.GetLabels(ctx, address); len(items) > 0 {
+			label = items[0].Label
+			if strings.EqualFold(items[0].Category, "exchange") {
+				entityType = "EXCHANGE"
+			}
+		}
 	}
-	return addr[:6] + "..." + addr[len(addr)-4:]
+	if e.evmClient != nil {
+		if isContract, err := e.evmClient.IsContract(ctx, address); err == nil && isContract {
+			entityType = "CONTRACT"
+		}
+	}
+	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: isSeed, TotalVolumeWei: "0"}
+}
+
+func formatValue(value, symbol string) string {
+	if value == "" {
+		return "0"
+	}
+	if symbol == "ETH" {
+		wei, ok := new(big.Int).SetString(value, 10)
+		if ok {
+			return adapter.FormatWeiToETH(wei)
+		}
+	}
+	if symbol == "" {
+		return value
+	}
+	return value + " " + symbol
+}
+
+func shortAddress(address string) string {
+	if len(address) <= 10 {
+		return address
+	}
+	return address[:6] + "..." + address[len(address)-4:]
 }

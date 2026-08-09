@@ -33,8 +33,6 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// LabelServiceAddLabelProcedure is the fully-qualified name of the LabelService's AddLabel RPC.
-	LabelServiceAddLabelProcedure = "/openchain.v1.LabelService/AddLabel"
 	// LabelServiceGetLabelsProcedure is the fully-qualified name of the LabelService's GetLabels RPC.
 	LabelServiceGetLabelsProcedure = "/openchain.v1.LabelService/GetLabels"
 	// LabelServiceSearchLabelsProcedure is the fully-qualified name of the LabelService's SearchLabels
@@ -45,14 +43,12 @@ const (
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
 	labelServiceServiceDescriptor            = v1.File_openchain_v1_labels_proto.Services().ByName("LabelService")
-	labelServiceAddLabelMethodDescriptor     = labelServiceServiceDescriptor.Methods().ByName("AddLabel")
 	labelServiceGetLabelsMethodDescriptor    = labelServiceServiceDescriptor.Methods().ByName("GetLabels")
 	labelServiceSearchLabelsMethodDescriptor = labelServiceServiceDescriptor.Methods().ByName("SearchLabels")
 )
 
 // LabelServiceClient is a client for the openchain.v1.LabelService service.
 type LabelServiceClient interface {
-	AddLabel(context.Context, *connect.Request[v1.AddLabelRequest]) (*connect.Response[v1.AddLabelResponse], error)
 	GetLabels(context.Context, *connect.Request[v1.GetLabelsRequest]) (*connect.Response[v1.GetLabelsResponse], error)
 	SearchLabels(context.Context, *connect.Request[v1.SearchLabelsRequest]) (*connect.Response[v1.SearchLabelsResponse], error)
 }
@@ -67,12 +63,6 @@ type LabelServiceClient interface {
 func NewLabelServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) LabelServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &labelServiceClient{
-		addLabel: connect.NewClient[v1.AddLabelRequest, v1.AddLabelResponse](
-			httpClient,
-			baseURL+LabelServiceAddLabelProcedure,
-			connect.WithSchema(labelServiceAddLabelMethodDescriptor),
-			connect.WithClientOptions(opts...),
-		),
 		getLabels: connect.NewClient[v1.GetLabelsRequest, v1.GetLabelsResponse](
 			httpClient,
 			baseURL+LabelServiceGetLabelsProcedure,
@@ -90,14 +80,8 @@ func NewLabelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // labelServiceClient implements LabelServiceClient.
 type labelServiceClient struct {
-	addLabel     *connect.Client[v1.AddLabelRequest, v1.AddLabelResponse]
 	getLabels    *connect.Client[v1.GetLabelsRequest, v1.GetLabelsResponse]
 	searchLabels *connect.Client[v1.SearchLabelsRequest, v1.SearchLabelsResponse]
-}
-
-// AddLabel calls openchain.v1.LabelService.AddLabel.
-func (c *labelServiceClient) AddLabel(ctx context.Context, req *connect.Request[v1.AddLabelRequest]) (*connect.Response[v1.AddLabelResponse], error) {
-	return c.addLabel.CallUnary(ctx, req)
 }
 
 // GetLabels calls openchain.v1.LabelService.GetLabels.
@@ -112,7 +96,6 @@ func (c *labelServiceClient) SearchLabels(ctx context.Context, req *connect.Requ
 
 // LabelServiceHandler is an implementation of the openchain.v1.LabelService service.
 type LabelServiceHandler interface {
-	AddLabel(context.Context, *connect.Request[v1.AddLabelRequest]) (*connect.Response[v1.AddLabelResponse], error)
 	GetLabels(context.Context, *connect.Request[v1.GetLabelsRequest]) (*connect.Response[v1.GetLabelsResponse], error)
 	SearchLabels(context.Context, *connect.Request[v1.SearchLabelsRequest]) (*connect.Response[v1.SearchLabelsResponse], error)
 }
@@ -123,12 +106,6 @@ type LabelServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewLabelServiceHandler(svc LabelServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	labelServiceAddLabelHandler := connect.NewUnaryHandler(
-		LabelServiceAddLabelProcedure,
-		svc.AddLabel,
-		connect.WithSchema(labelServiceAddLabelMethodDescriptor),
-		connect.WithHandlerOptions(opts...),
-	)
 	labelServiceGetLabelsHandler := connect.NewUnaryHandler(
 		LabelServiceGetLabelsProcedure,
 		svc.GetLabels,
@@ -143,8 +120,6 @@ func NewLabelServiceHandler(svc LabelServiceHandler, opts ...connect.HandlerOpti
 	)
 	return "/openchain.v1.LabelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case LabelServiceAddLabelProcedure:
-			labelServiceAddLabelHandler.ServeHTTP(w, r)
 		case LabelServiceGetLabelsProcedure:
 			labelServiceGetLabelsHandler.ServeHTTP(w, r)
 		case LabelServiceSearchLabelsProcedure:
@@ -157,10 +132,6 @@ func NewLabelServiceHandler(svc LabelServiceHandler, opts ...connect.HandlerOpti
 
 // UnimplementedLabelServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedLabelServiceHandler struct{}
-
-func (UnimplementedLabelServiceHandler) AddLabel(context.Context, *connect.Request[v1.AddLabelRequest]) (*connect.Response[v1.AddLabelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openchain.v1.LabelService.AddLabel is not implemented"))
-}
 
 func (UnimplementedLabelServiceHandler) GetLabels(context.Context, *connect.Request[v1.GetLabelsRequest]) (*connect.Response[v1.GetLabelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openchain.v1.LabelService.GetLabels is not implemented"))

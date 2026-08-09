@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 )
 
 //go:embed seed_labels.json
@@ -56,20 +55,6 @@ func (r *Registry) seedWellKnownLabels() {
 		addrKey := strings.ToLower(l.Address)
 		r.labels[addrKey] = append(r.labels[addrKey], l)
 	}
-}
-
-func (r *Registry) AddLabel(ctx context.Context, l LabelItem) (LabelItem, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if l.ID == "" {
-		l.ID = uuid.New().String()
-	}
-	l.CreatedAt = time.Now()
-	addrKey := strings.ToLower(l.Address)
-
-	r.labels[addrKey] = append(r.labels[addrKey], l)
-	return l, nil
 }
 
 func (r *Registry) GetLabels(ctx context.Context, address string) []LabelItem {

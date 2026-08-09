@@ -215,11 +215,6 @@ export class LookupAddressRequest extends Message<LookupAddressRequest> {
    */
   network = Network.UNSPECIFIED;
 
-  /**
-   * @generated from field: uint32 limit_txs = 3;
-   */
-  limitTxs = 0;
-
   constructor(data?: PartialMessage<LookupAddressRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -230,7 +225,6 @@ export class LookupAddressRequest extends Message<LookupAddressRequest> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
-    { no: 3, name: "limit_txs", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupAddressRequest {
@@ -296,86 +290,6 @@ export class LookupAddressResponse extends Message<LookupAddressResponse> {
 
   static equals(a: LookupAddressResponse | PlainMessage<LookupAddressResponse> | undefined, b: LookupAddressResponse | PlainMessage<LookupAddressResponse> | undefined): boolean {
     return proto3.util.equals(LookupAddressResponse, a, b);
-  }
-}
-
-/**
- * @generated from message openchain.v1.LookupTxRequest
- */
-export class LookupTxRequest extends Message<LookupTxRequest> {
-  /**
-   * @generated from field: string hash = 1;
-   */
-  hash = "";
-
-  /**
-   * @generated from field: openchain.v1.Network network = 2;
-   */
-  network = Network.UNSPECIFIED;
-
-  constructor(data?: PartialMessage<LookupTxRequest>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "openchain.v1.LookupTxRequest";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupTxRequest {
-    return new LookupTxRequest().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): LookupTxRequest {
-    return new LookupTxRequest().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): LookupTxRequest {
-    return new LookupTxRequest().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: LookupTxRequest | PlainMessage<LookupTxRequest> | undefined, b: LookupTxRequest | PlainMessage<LookupTxRequest> | undefined): boolean {
-    return proto3.util.equals(LookupTxRequest, a, b);
-  }
-}
-
-/**
- * @generated from message openchain.v1.LookupTxResponse
- */
-export class LookupTxResponse extends Message<LookupTxResponse> {
-  /**
-   * @generated from field: openchain.v1.TransactionItem transaction = 1;
-   */
-  transaction?: TransactionItem;
-
-  constructor(data?: PartialMessage<LookupTxResponse>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "openchain.v1.LookupTxResponse";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "transaction", kind: "message", T: TransactionItem },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupTxResponse {
-    return new LookupTxResponse().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): LookupTxResponse {
-    return new LookupTxResponse().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): LookupTxResponse {
-    return new LookupTxResponse().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: LookupTxResponse | PlainMessage<LookupTxResponse> | undefined, b: LookupTxResponse | PlainMessage<LookupTxResponse> | undefined): boolean {
-    return proto3.util.equals(LookupTxResponse, a, b);
   }
 }
 

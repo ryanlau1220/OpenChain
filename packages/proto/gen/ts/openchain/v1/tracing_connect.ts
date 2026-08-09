@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ExpandNodeRequest, ExpandNodeResponse, StreamGraphUpdatesRequest, StreamGraphUpdatesResponse, TraceGraphRequest, TraceGraphResponse } from "./tracing_pb.js";
+import { ExpandNodeRequest, ExpandNodeResponse, TraceGraphRequest, TraceGraphResponse } from "./tracing_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -29,15 +29,6 @@ export const TracingService = {
       I: ExpandNodeRequest,
       O: ExpandNodeResponse,
       kind: MethodKind.Unary,
-    },
-    /**
-     * @generated from rpc openchain.v1.TracingService.StreamGraphUpdates
-     */
-    streamGraphUpdates: {
-      name: "StreamGraphUpdates",
-      I: StreamGraphUpdatesRequest,
-      O: StreamGraphUpdatesResponse,
-      kind: MethodKind.ServerStreaming,
     },
   }
 } as const;

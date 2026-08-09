@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AddLabelRequest, AddLabelResponse, GetLabelsRequest, GetLabelsResponse, SearchLabelsRequest, SearchLabelsResponse } from "./labels_pb.js";
+import { GetLabelsRequest, GetLabelsResponse, SearchLabelsRequest, SearchLabelsResponse } from "./labels_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -12,15 +12,6 @@ import { MethodKind } from "@bufbuild/protobuf";
 export const LabelService = {
   typeName: "openchain.v1.LabelService",
   methods: {
-    /**
-     * @generated from rpc openchain.v1.LabelService.AddLabel
-     */
-    addLabel: {
-      name: "AddLabel",
-      I: AddLabelRequest,
-      O: AddLabelResponse,
-      kind: MethodKind.Unary,
-    },
     /**
      * @generated from rpc openchain.v1.LabelService.GetLabels
      */

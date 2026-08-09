@@ -153,16 +153,6 @@ export class AddressSummary extends Message<AddressSummary> {
    */
   totalSentWei = "";
 
-  /**
-   * @generated from field: double risk_score = 12;
-   */
-  riskScore = 0;
-
-  /**
-   * @generated from field: repeated string risk_tags = 13;
-   */
-  riskTags: string[] = [];
-
   constructor(data?: PartialMessage<AddressSummary>) {
     super();
     proto3.util.initPartial(data, this);
@@ -182,8 +172,6 @@ export class AddressSummary extends Message<AddressSummary> {
     { no: 9, name: "last_seen_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 10, name: "total_received_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 11, name: "total_sent_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 12, name: "risk_score", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
-    { no: 13, name: "risk_tags", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AddressSummary {

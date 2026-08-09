@@ -1,15 +1,12 @@
 import cytoscape from 'cytoscape';
 import {
-	AlertTriangle,
 	ArrowLeftRight,
-	Download,
 	Layers,
 	Maximize2,
 	MinusCircle,
 	PlusCircle,
 	Redo2,
 	RotateCcw,
-	Share2,
 	Undo2,
 	ZoomIn,
 	ZoomOut,
@@ -30,8 +27,6 @@ interface GraphCanvasProps {
 	onNodeSelect: (node: GraphNode | null) => void;
 	onExpandNode?: (address: string) => void;
 	onCollapseNode?: (address: string) => void;
-	onShareCanvas?: () => void;
-	onExportCase?: () => void;
 	onUndo?: () => void;
 	onRedo?: () => void;
 	canUndo?: boolean;
@@ -41,7 +36,6 @@ interface GraphCanvasProps {
 // PRISM node palette (light mode)
 const NODE_COLORS = {
 	seed: { bg: '#887DFF', border: '#A7F9FF', text: '#fff' },
-	risk: { bg: '#FF4D4F', border: '#FFB3B3', text: '#fff' },
 	exchange: { bg: '#F59E0B', border: '#FDE68A', text: '#fff' },
 	contract: { bg: '#8B5CF6', border: '#DDD6FE', text: '#fff' },
 	default: { bg: '#4B5068', border: '#C8CADC', text: '#fff' },
@@ -94,8 +88,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	onNodeSelect,
 	onExpandNode,
 	onCollapseNode,
-	onShareCanvas,
-	onExportCase,
 	onUndo,
 	onRedo,
 	canUndo = false,
@@ -133,9 +125,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			if (n.isSeed) {
 				palette = NODE_COLORS.seed;
 				badge = 'Target';
-			} else if (n.category === 'SCAMMER' || n.riskScore >= 50) {
-				palette = NODE_COLORS.risk;
-				badge = 'High Risk';
 			} else if (n.entityType === EntityType.EXCHANGE) {
 				palette = NODE_COLORS.exchange;
 				badge = 'Exchange';
@@ -366,21 +355,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 	return (
 		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
-			{/* Index Sync Warning Banner (Lucide AlertTriangle icon - NO emojis) */}
-			{graphData?.syncState?.warningMessage && (
-				<div
-					className="px-4 py-2 flex items-center gap-2 text-xs shrink-0"
-					style={{
-						background: '#FEF3C7',
-						borderBottom: '1px solid #FCD34D',
-						color: '#92400E',
-					}}
-				>
-					<AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-					<span className="font-medium">{graphData.syncState.warningMessage}</span>
-				</div>
-			)}
-
 			{/* Toolbar */}
 			<div
 				className="h-11 px-4 flex items-center justify-between text-xs shrink-0"
@@ -497,27 +471,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						<option value="grid">Grid</option>
 					</select>
 
-					<button
-						type="button"
-						onClick={onShareCanvas}
-						className="btn-primary text-[11px] flex items-center gap-1.5"
-						style={{ padding: '0.3rem 0.75rem' }}
-					>
-						<Share2 className="w-3.5 h-3.5" />
-						Share
-					</button>
-
-					{onExportCase && (
-						<button
-							type="button"
-							onClick={onExportCase}
-							className="btn-outline text-[11px] flex items-center gap-1.5"
-							style={{ padding: '0.3rem 0.75rem' }}
-						>
-							<Download className="w-3.5 h-3.5" />
-							Export
-						</button>
-					)}
 				</div>
 			</div>
 

@@ -36,22 +36,17 @@ const (
 	// LookupServiceLookupAddressProcedure is the fully-qualified name of the LookupService's
 	// LookupAddress RPC.
 	LookupServiceLookupAddressProcedure = "/openchain.v1.LookupService/LookupAddress"
-	// LookupServiceLookupTransactionProcedure is the fully-qualified name of the LookupService's
-	// LookupTransaction RPC.
-	LookupServiceLookupTransactionProcedure = "/openchain.v1.LookupService/LookupTransaction"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	lookupServiceServiceDescriptor                 = v1.File_openchain_v1_lookup_proto.Services().ByName("LookupService")
-	lookupServiceLookupAddressMethodDescriptor     = lookupServiceServiceDescriptor.Methods().ByName("LookupAddress")
-	lookupServiceLookupTransactionMethodDescriptor = lookupServiceServiceDescriptor.Methods().ByName("LookupTransaction")
+	lookupServiceServiceDescriptor             = v1.File_openchain_v1_lookup_proto.Services().ByName("LookupService")
+	lookupServiceLookupAddressMethodDescriptor = lookupServiceServiceDescriptor.Methods().ByName("LookupAddress")
 )
 
 // LookupServiceClient is a client for the openchain.v1.LookupService service.
 type LookupServiceClient interface {
 	LookupAddress(context.Context, *connect.Request[v1.LookupAddressRequest]) (*connect.Response[v1.LookupAddressResponse], error)
-	LookupTransaction(context.Context, *connect.Request[v1.LookupTxRequest]) (*connect.Response[v1.LookupTxResponse], error)
 }
 
 // NewLookupServiceClient constructs a client for the openchain.v1.LookupService service. By
@@ -70,19 +65,12 @@ func NewLookupServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(lookupServiceLookupAddressMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		lookupTransaction: connect.NewClient[v1.LookupTxRequest, v1.LookupTxResponse](
-			httpClient,
-			baseURL+LookupServiceLookupTransactionProcedure,
-			connect.WithSchema(lookupServiceLookupTransactionMethodDescriptor),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // lookupServiceClient implements LookupServiceClient.
 type lookupServiceClient struct {
-	lookupAddress     *connect.Client[v1.LookupAddressRequest, v1.LookupAddressResponse]
-	lookupTransaction *connect.Client[v1.LookupTxRequest, v1.LookupTxResponse]
+	lookupAddress *connect.Client[v1.LookupAddressRequest, v1.LookupAddressResponse]
 }
 
 // LookupAddress calls openchain.v1.LookupService.LookupAddress.
@@ -90,15 +78,9 @@ func (c *lookupServiceClient) LookupAddress(ctx context.Context, req *connect.Re
 	return c.lookupAddress.CallUnary(ctx, req)
 }
 
-// LookupTransaction calls openchain.v1.LookupService.LookupTransaction.
-func (c *lookupServiceClient) LookupTransaction(ctx context.Context, req *connect.Request[v1.LookupTxRequest]) (*connect.Response[v1.LookupTxResponse], error) {
-	return c.lookupTransaction.CallUnary(ctx, req)
-}
-
 // LookupServiceHandler is an implementation of the openchain.v1.LookupService service.
 type LookupServiceHandler interface {
 	LookupAddress(context.Context, *connect.Request[v1.LookupAddressRequest]) (*connect.Response[v1.LookupAddressResponse], error)
-	LookupTransaction(context.Context, *connect.Request[v1.LookupTxRequest]) (*connect.Response[v1.LookupTxResponse], error)
 }
 
 // NewLookupServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -113,18 +95,10 @@ func NewLookupServiceHandler(svc LookupServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(lookupServiceLookupAddressMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	lookupServiceLookupTransactionHandler := connect.NewUnaryHandler(
-		LookupServiceLookupTransactionProcedure,
-		svc.LookupTransaction,
-		connect.WithSchema(lookupServiceLookupTransactionMethodDescriptor),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/openchain.v1.LookupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LookupServiceLookupAddressProcedure:
 			lookupServiceLookupAddressHandler.ServeHTTP(w, r)
-		case LookupServiceLookupTransactionProcedure:
-			lookupServiceLookupTransactionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -136,8 +110,4 @@ type UnimplementedLookupServiceHandler struct{}
 
 func (UnimplementedLookupServiceHandler) LookupAddress(context.Context, *connect.Request[v1.LookupAddressRequest]) (*connect.Response[v1.LookupAddressResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openchain.v1.LookupService.LookupAddress is not implemented"))
-}
-
-func (UnimplementedLookupServiceHandler) LookupTransaction(context.Context, *connect.Request[v1.LookupTxRequest]) (*connect.Response[v1.LookupTxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openchain.v1.LookupService.LookupTransaction is not implemented"))
 }

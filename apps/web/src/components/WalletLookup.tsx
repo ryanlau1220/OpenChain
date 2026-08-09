@@ -4,8 +4,6 @@ import {
 	Copy,
 	ExternalLink,
 	Shield,
-	ShieldAlert,
-	ShieldCheck,
 	Tag,
 	Target,
 	Wallet,
@@ -15,14 +13,11 @@ import { useState } from 'react';
 import {
 	type AddressLabel,
 	type AddressSummary,
-	type RiskEvaluation,
-	type RiskFlag,
 	entityLabel,
 } from '../services/api';
 
 interface WalletLookupProps {
 	summary: AddressSummary | null;
-	risk: RiskEvaluation | null;
 	labels: AddressLabel[];
 	loading: boolean;
 	onTraceAddress: (addr: string) => void;
@@ -31,7 +26,6 @@ interface WalletLookupProps {
 
 export const WalletLookup: React.FC<WalletLookupProps> = ({
 	summary,
-	risk,
 	labels,
 	loading,
 	onTraceAddress: _onTraceAddress,
@@ -77,9 +71,6 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	}
 
 	const safeLabels = Array.isArray(labels) ? labels : [];
-	const safeFlags = Array.isArray(risk?.flags) ? risk.flags : [];
-	const riskScore = risk?.totalScore ?? 0;
-	const isHighRisk = riskScore >= 50;
 
 	const isSeedAddress =
 		Boolean(summary.address) &&
@@ -189,13 +180,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 										}}
 									>
 										<div className="flex items-center gap-1.5">
-											{tier === 1 ? (
-												<ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-											) : tier === 2 ? (
-												<ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-											) : (
-												<Shield className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-											)}
+							<Shield className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
 											<div>
 												<span className="font-semibold block text-[var(--ink)]">
 													{l.category}: {l.label}
@@ -245,16 +230,6 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						value: entityLabel(summary.entityType),
 						icon: <Tag className="w-3.5 h-3.5" style={{ color: 'var(--prism-4)' }} />,
 					},
-					{
-						label: 'Risk Score',
-						value: `${riskScore}`,
-						icon: (
-							<ShieldAlert
-								className="w-3.5 h-3.5"
-								style={{ color: isHighRisk ? 'var(--danger)' : 'var(--success)' }}
-							/>
-						),
-					},
 				].map(({ label, value, icon }) => (
 					<div
 						key={label}
@@ -270,14 +245,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						</div>
 						<p
 							className="font-semibold font-mono text-xs"
-							style={{
-								color:
-									label === 'Risk Score'
-										? isHighRisk
-											? 'var(--danger)'
-											: 'var(--success)'
-										: 'var(--ink)',
-							}}
+							style={{ color: 'var(--ink)' }}
 						>
 							{value}
 						</p>
@@ -285,44 +253,6 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 				))}
 			</div>
 
-			{/* Risk flags */}
-			{safeFlags.length > 0 && (
-				<div
-					className="p-3 rounded-xl space-y-2"
-					style={{
-						background: 'rgba(255,77,79,0.04)',
-						border: '1px solid rgba(255,77,79,0.16)',
-					}}
-				>
-					<span
-						className="text-[10px] font-bold uppercase tracking-wider block"
-						style={{ color: 'var(--danger)' }}
-					>
-						Risk Factors ({safeFlags.length})
-					</span>
-					<div className="space-y-1.5">
-						{safeFlags.map((flag: RiskFlag) => (
-							<div
-								key={flag.ruleId}
-								className="p-2 rounded-lg text-[10px] space-y-0.5"
-								style={{
-									background: 'rgba(255,77,79,0.06)',
-									border: '1px solid rgba(255,77,79,0.12)',
-								}}
-							>
-								<div
-									className="flex items-center justify-between font-medium"
-									style={{ color: 'var(--ink)' }}
-								>
-									<span>{flag.ruleName}</span>
-									<span style={{ color: 'var(--danger)' }}>+{flag.scoreImpact}</span>
-								</div>
-								<p style={{ color: 'var(--ink-3)' }}>{flag.description}</p>
-							</div>
-						))}
-					</div>
-				</div>
-			)}
 		</div>
 	);
 };

@@ -216,33 +216,6 @@ func (c *EVMClient) GetERC20Transfers(ctx context.Context, address string, fromB
 		logs = append(logs, outLogs...)
 	}
 
-	// Fallback to broader block range starting from 0x0 if recent block range yields no logs
-	if len(logs) == 0 && fromBlockHex != "0x0" && fromBlockHex != "0x1" {
-		filterInboundWide := map[string]interface{}{
-			"fromBlock": "0x0",
-			"toBlock":   "latest",
-			"topics":    []interface{}{TransferEventTopic, nil, padAddress},
-		}
-		filterOutboundWide := map[string]interface{}{
-			"fromBlock": "0x0",
-			"toBlock":   "latest",
-			"topics":    []interface{}{TransferEventTopic, padAddress, nil},
-		}
-		inLogsWideRaw, _ := c.callRPC(ctx, "eth_getLogs", []interface{}{filterInboundWide})
-		outLogsWideRaw, _ := c.callRPC(ctx, "eth_getLogs", []interface{}{filterOutboundWide})
-
-		if len(inLogsWideRaw) > 0 {
-			var inWide []LogItem
-			_ = json.Unmarshal(inLogsWideRaw, &inWide)
-			logs = append(logs, inWide...)
-		}
-		if len(outLogsWideRaw) > 0 {
-			var outWide []LogItem
-			_ = json.Unmarshal(outLogsWideRaw, &outWide)
-			logs = append(logs, outWide...)
-		}
-	}
-
 	return logs, nil
 }
 
