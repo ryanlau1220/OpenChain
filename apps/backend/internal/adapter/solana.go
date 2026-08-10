@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 const (
 	SolanaRPCSource     = "solana-rpc"
+	HeliusHistorySource = "helius-enhanced-transactions"
 	solanaRequestGap    = time.Second / 5
 	solanaSignaturePage = 50
 )
@@ -23,13 +25,28 @@ const (
 type SolanaAdapter struct {
 	network     string
 	rpcURL      string
+	historyURL  string
+	historyKey  string
 	httpClient  *http.Client
 	requestMu   sync.Mutex
 	lastRequest time.Time
 }
 
 func NewSolanaAdapter(network, rpcURL string) *SolanaAdapter {
-	return &SolanaAdapter{network: network, rpcURL: rpcURL, httpClient: &http.Client{Timeout: 15 * time.Second}}
+	historyURL, historyKey := heliusHistoryConfig(rpcURL)
+	return &SolanaAdapter{network: network, rpcURL: rpcURL, historyURL: historyURL, historyKey: historyKey, httpClient: &http.Client{Timeout: 15 * time.Second}}
+}
+
+func heliusHistoryConfig(rpcURL string) (string, string) {
+	parsed, err := url.Parse(rpcURL)
+	if err != nil || !strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".helius-rpc.com") {
+		return "", ""
+	}
+	key := parsed.Query().Get("api-key")
+	if key == "" {
+		return "", ""
+	}
+	return "https://api-mainnet.helius-rpc.com", key
 }
 
 func (a *SolanaAdapter) Network() string { return a.network }
@@ -90,11 +107,29 @@ type solanaCursor struct {
 	PendingOffset    int    `json:"pending_offset,omitempty"`
 }
 
-type solanaSignature struct {
-	Signature string `json:"signature"`
-	Slot      int64  `json:"slot"`
-	BlockTime *int64 `json:"blockTime"`
-	Err       any    `json:"err"`
+type heliusTransaction struct {
+	Signature       string `json:"signature"`
+	Slot            int64  `json:"slot"`
+	Timestamp       int64  `json:"timestamp"`
+	NativeTransfers []struct {
+		FromUserAccount string          `json:"fromUserAccount"`
+		ToUserAccount   string          `json:"toUserAccount"`
+		Amount          json.RawMessage `json:"amount"`
+	} `json:"nativeTransfers"`
+	TokenTransfers []struct {
+		FromUserAccount string          `json:"fromUserAccount"`
+		ToUserAccount   string          `json:"toUserAccount"`
+		Mint            string          `json:"mint"`
+		TokenAmount     json.RawMessage `json:"tokenAmount"`
+	} `json:"tokenTransfers"`
+	AccountData []struct {
+		TokenBalanceChanges []struct {
+			Mint           string `json:"mint"`
+			RawTokenAmount struct {
+				Decimals uint32 `json:"decimals"`
+			} `json:"rawTokenAmount"`
+		} `json:"tokenBalanceChanges"`
+	} `json:"accountData"`
 }
 
 func (a *SolanaAdapter) ListTransfers(ctx context.Context, address string, limit uint32, cursor string) (*TransferPage, error) {
@@ -107,7 +142,11 @@ func (a *SolanaAdapter) ListTransfers(ctx context.Context, address string, limit
 	}
 	transfers := make([]TransferItem, 0, limit)
 	if state.PendingSignature != "" {
-		items, err := a.transfersForSignature(ctx, state.PendingSignature, address)
+		transaction, err := a.historyTransaction(ctx, state.PendingSignature)
+		if err != nil {
+			return nil, err
+		}
+		items, err := transfersForHeliusTransaction(transaction, address)
 		if err != nil {
 			return nil, err
 		}
@@ -122,34 +161,30 @@ func (a *SolanaAdapter) ListTransfers(ctx context.Context, address string, limit
 		}
 		state.Before, state.PendingSignature, state.PendingOffset = state.PendingSignature, "", 0
 	}
-	params := map[string]any{"limit": solanaSignaturePage, "commitment": "confirmed"}
-	if state.Before != "" {
-		params["before"] = state.Before
-	}
-	var signatures []solanaSignature
-	if err := a.call(ctx, "getSignaturesForAddress", []any{address, params}, &signatures); err != nil {
+	transactions, err := a.history(ctx, address, state.Before, solanaSignaturePage)
+	if err != nil {
 		return nil, err
 	}
-	for _, signature := range signatures {
-		state.Before = signature.Signature
-		if signature.Err != nil {
-			continue
+	for _, transaction := range transactions {
+		if transaction.Signature == "" {
+			return nil, fmt.Errorf("parse Solana history transaction")
 		}
-		items, err := a.transfersForSignature(ctx, signature.Signature, address)
+		state.Before = transaction.Signature
+		items, err := transfersForHeliusTransaction(&transaction, address)
 		if err != nil {
 			return nil, err
 		}
 		before := len(transfers)
 		transfers, consumed := appendLimited(transfers, items, limit)
 		if consumed < len(items) {
-			state.PendingSignature, state.PendingOffset = signature.Signature, consumed
+			state.PendingSignature, state.PendingOffset = transaction.Signature, consumed
 			return a.transferPage(transfers, state), nil
 		}
 		if len(transfers) > before && uint32(len(transfers)) >= limit {
 			return a.transferPage(transfers, state), nil
 		}
 	}
-	if len(signatures) == solanaSignaturePage && state.Before != "" {
+	if len(transactions) == solanaSignaturePage && state.Before != "" {
 		return a.transferPage(transfers, state), nil
 	}
 	return &TransferPage{Transfers: transfers, SourceStatus: a.SourceStatus()}, nil
@@ -190,42 +225,130 @@ type solanaTransaction struct {
 	} `json:"transaction"`
 }
 
-func (a *SolanaAdapter) transfersForSignature(ctx context.Context, signature, address string) ([]TransferItem, error) {
-	var transaction *solanaTransaction
-	if err := a.call(ctx, "getTransaction", []any{signature, map[string]any{"commitment": "confirmed", "encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}}, &transaction); err != nil {
+func (a *SolanaAdapter) history(ctx context.Context, address, before string, limit int) ([]heliusTransaction, error) {
+	if a.historyURL == "" || a.historyKey == "" {
+		return nil, fmt.Errorf("Solana indexed history requires a Helius RPC URL with an api-key")
+	}
+	endpoint, err := url.Parse(a.historyURL + "/v0/addresses/" + url.PathEscape(address) + "/transactions")
+	if err != nil {
+		return nil, fmt.Errorf("create Solana history request")
+	}
+	query := endpoint.Query()
+	query.Set("api-key", a.historyKey)
+	query.Set("limit", fmt.Sprintf("%d", limit))
+	query.Set("token-accounts", "balanceChanged")
+	if before != "" {
+		query.Set("before-signature", before)
+	}
+	endpoint.RawQuery = query.Encode()
+	var transactions []heliusTransaction
+	if err := a.historyRequest(ctx, http.MethodGet, endpoint.String(), nil, &transactions); err != nil {
 		return nil, err
 	}
-	if transaction == nil {
+	return transactions, nil
+}
+
+func (a *SolanaAdapter) historyTransaction(ctx context.Context, signature string) (*heliusTransaction, error) {
+	if a.historyURL == "" || a.historyKey == "" {
+		return nil, fmt.Errorf("Solana indexed history requires a Helius RPC URL with an api-key")
+	}
+	endpoint, err := url.Parse(a.historyURL + "/v0/transactions")
+	if err != nil {
+		return nil, fmt.Errorf("create Solana history request")
+	}
+	query := endpoint.Query()
+	query.Set("api-key", a.historyKey)
+	endpoint.RawQuery = query.Encode()
+	var transactions []heliusTransaction
+	if err := a.historyRequest(ctx, http.MethodPost, endpoint.String(), map[string][]string{"transactions": []string{signature}}, &transactions); err != nil {
+		return nil, err
+	}
+	if len(transactions) == 0 {
+		return nil, fmt.Errorf("Solana transaction is unavailable")
+	}
+	return &transactions[0], nil
+}
+
+func (a *SolanaAdapter) historyRequest(ctx context.Context, method, endpoint string, payload any, output any) error {
+	var body io.Reader
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(encoded)
+	}
+	if err := a.waitForRequest(ctx); err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+	if err != nil {
+		return fmt.Errorf("create Solana history request")
+	}
+	if payload != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	response, err := a.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("Solana history request failed")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return fmt.Errorf("Solana history returned %s", response.Status)
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(output); err != nil {
+		return fmt.Errorf("decode Solana history response: %w", err)
+	}
+	return nil
+}
+
+func transfersForHeliusTransaction(transaction *heliusTransaction, address string) ([]TransferItem, error) {
+	if transaction == nil || transaction.Signature == "" {
 		return nil, nil
 	}
-	timestamp := time.Now().UTC()
-	if transaction.BlockTime != nil {
-		timestamp = time.Unix(*transaction.BlockTime, 0).UTC()
+	decimalsByMint := map[string]uint32{}
+	for _, account := range transaction.AccountData {
+		for _, change := range account.TokenBalanceChanges {
+			if change.Mint != "" {
+				decimalsByMint[change.Mint] = change.RawTokenAmount.Decimals
+			}
+		}
 	}
-	transfers := make([]TransferItem, 0)
-	for index, instruction := range transaction.Transaction.Message.Instructions {
-		if instruction.Program != "system" || instruction.Parsed == nil || instruction.Parsed.Type != "transfer" {
-			continue
+	timestamp := time.Unix(transaction.Timestamp, 0).UTC()
+	transfers := make([]TransferItem, 0, len(transaction.NativeTransfers)+len(transaction.TokenTransfers))
+	for index, transfer := range transaction.NativeTransfers {
+		amount, err := rawInteger(transfer.Amount)
+		if err != nil || transfer.FromUserAccount == "" || transfer.ToUserAccount == "" {
+			return nil, fmt.Errorf("parse Solana native transfer")
 		}
-		var info struct {
-			Source      string      `json:"source"`
-			Destination string      `json:"destination"`
-			Lamports    json.Number `json:"lamports"`
+		if transfer.FromUserAccount == address || transfer.ToUserAccount == address {
+			transfers = append(transfers, TransferItem{Hash: transaction.Signature, EventID: fmt.Sprintf("native:%d", index), TransferKind: "NATIVE", From: transfer.FromUserAccount, To: transfer.ToUserAccount, AmountBaseUnits: amount, Asset: Asset{Kind: "NATIVE", Symbol: "SOL", Decimals: 9}, BlockNumber: transaction.Slot, Timestamp: timestamp})
 		}
-		decoder := json.NewDecoder(bytes.NewReader(instruction.Parsed.Info))
-		decoder.UseNumber()
-		if err := decoder.Decode(&info); err != nil {
-			return nil, fmt.Errorf("decode Solana transfer: %w", err)
+	}
+	for index, transfer := range transaction.TokenTransfers {
+		amount, err := rawInteger(transfer.TokenAmount)
+		if err != nil || transfer.FromUserAccount == "" || transfer.ToUserAccount == "" || transfer.Mint == "" {
+			return nil, fmt.Errorf("parse Solana SPL transfer")
 		}
-		if info.Source != address && info.Destination != address {
-			continue
+		if transfer.FromUserAccount == address || transfer.ToUserAccount == address {
+			transfers = append(transfers, TransferItem{Hash: transaction.Signature, EventID: fmt.Sprintf("spl:%d", index), TransferKind: "SPL", From: transfer.FromUserAccount, To: transfer.ToUserAccount, AmountBaseUnits: amount, Asset: Asset{Kind: "SPL", ContractAddress: transfer.Mint, Decimals: decimalsByMint[transfer.Mint]}, BlockNumber: transaction.Slot, Timestamp: timestamp})
 		}
-		if _, ok := new(big.Int).SetString(info.Lamports.String(), 10); !ok || info.Source == "" || info.Destination == "" {
-			return nil, fmt.Errorf("parse Solana transfer")
-		}
-		transfers = append(transfers, TransferItem{Hash: signature, EventID: fmt.Sprintf("instruction:%d", index), TransferKind: "NATIVE", From: info.Source, To: info.Destination, AmountBaseUnits: info.Lamports.String(), Asset: a.NativeAsset(), BlockNumber: transaction.Slot, Timestamp: timestamp})
 	}
 	return transfers, nil
+}
+
+func rawInteger(raw json.RawMessage) (string, error) {
+	value := strings.TrimSpace(string(raw))
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return "", err
+		}
+	}
+	if _, ok := new(big.Int).SetString(value, 10); !ok {
+		return "", fmt.Errorf("invalid integer")
+	}
+	return value, nil
 }
 
 func (a *SolanaAdapter) LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error) {
@@ -255,22 +378,13 @@ func (a *SolanaAdapter) GetContractMetadata(ctx context.Context, address string)
 }
 
 func (a *SolanaAdapter) SourceStatus() SourceStatus {
-	return SourceStatus{Source: SolanaRPCSource, RetrievedAt: time.Now().UTC(), IsComplete: false, Warning: "Showing confirmed native SOL transfers only; SPL token and program movements are not included."}
+	return SourceStatus{Source: HeliusHistorySource, RetrievedAt: time.Now().UTC(), IsComplete: true}
 }
 
 func (a *SolanaAdapter) call(ctx context.Context, method string, params []any, output any) error {
-	a.requestMu.Lock()
-	defer a.requestMu.Unlock()
-	if delay := time.Until(a.lastRequest.Add(solanaRequestGap)); delay > 0 {
-		timer := time.NewTimer(delay)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-		}
+	if err := a.waitForRequest(ctx); err != nil {
+		return err
 	}
-	a.lastRequest = time.Now()
 	body, err := json.Marshal(struct {
 		JSONRPC string `json:"jsonrpc"`
 		ID      int    `json:"id"`
@@ -311,6 +425,22 @@ func (a *SolanaAdapter) call(ctx context.Context, method string, params []any, o
 	if err := json.Unmarshal(envelope.Result, output); err != nil {
 		return fmt.Errorf("decode Solana RPC result: %w", err)
 	}
+	return nil
+}
+
+func (a *SolanaAdapter) waitForRequest(ctx context.Context) error {
+	a.requestMu.Lock()
+	defer a.requestMu.Unlock()
+	if delay := time.Until(a.lastRequest.Add(solanaRequestGap)); delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	a.lastRequest = time.Now()
 	return nil
 }
 

@@ -78,9 +78,15 @@ type ChainAdapter interface {
 
 func FormatAmount(value *big.Int, asset Asset) string {
 	if value == nil {
+		if asset.Symbol == "" {
+			return "0"
+		}
 		return "0 " + asset.Symbol
 	}
 	base := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(asset.Decimals)), nil)
 	amount := new(big.Rat).SetFrac(value, base)
+	if asset.Symbol == "" {
+		return amount.FloatString(4)
+	}
 	return fmt.Sprintf("%s %s", amount.FloatString(4), asset.Symbol)
 }

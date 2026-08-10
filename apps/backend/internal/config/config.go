@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -79,13 +80,16 @@ func (c *Config) Validate() error {
 	}
 	for _, rpc := range []struct {
 		name, value string
-	}{{"ETHEREUM_MAINNET_RPC_URL", c.EthereumMainnetRPCURL}, {"BASE_MAINNET_RPC_URL", c.BaseMainnetRPCURL}, {"SOLANA_MAINNET_RPC_URL", c.SolanaMainnetRPCURL}} {
+	}{{"ETHEREUM_MAINNET_RPC_URL", c.EthereumMainnetRPCURL}, {"BASE_MAINNET_RPC_URL", c.BaseMainnetRPCURL}} {
 		if rpc.value == "" {
 			return fmt.Errorf("%s is required", rpc.name)
 		}
 		if endpoint, err := url.Parse(rpc.value); err != nil || endpoint.Scheme != "https" || endpoint.Host == "" {
 			return fmt.Errorf("%s must be an https URL", rpc.name)
 		}
+	}
+	if err := validateHeliusURL(c.SolanaMainnetRPCURL); err != nil {
+		return err
 	}
 	if c.EtherscanAPIKey == "" {
 		return fmt.Errorf("ETHERSCAN_API_KEY is required")
@@ -95,6 +99,14 @@ func (c *Config) Validate() error {
 	}
 	if c.TronGridAPIKey == "" {
 		return fmt.Errorf("TRONGRID_API_KEY is required")
+	}
+	return nil
+}
+
+func validateHeliusURL(value string) error {
+	endpoint, err := url.Parse(value)
+	if err != nil || endpoint.Scheme != "https" || !strings.HasSuffix(strings.ToLower(endpoint.Hostname()), ".helius-rpc.com") || endpoint.Query().Get("api-key") == "" {
+		return fmt.Errorf("SOLANA_MAINNET_RPC_URL must be a Helius https URL with an api-key")
 	}
 	return nil
 }

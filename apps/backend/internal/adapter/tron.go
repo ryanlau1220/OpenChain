@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -102,6 +103,12 @@ type tronTransactionPage struct {
 	} `json:"meta"`
 }
 
+type tronCursor struct {
+	Transactions string `json:"transactions,omitempty"`
+	TRC20        string `json:"trc20,omitempty"`
+	Internal     string `json:"internal,omitempty"`
+}
+
 type tronTransaction struct {
 	ID          string `json:"txID"`
 	BlockNumber int64  `json:"blockNumber"`
@@ -120,37 +127,75 @@ func (a *TronAdapter) ListTransfers(ctx context.Context, address string, limit u
 	if limit == 0 {
 		limit = 25
 	}
+	state, err := decodeTronCursor(cursor)
+	if err != nil {
+		return nil, err
+	}
+	perSourceLimit := limit / 3
+	if perSourceLimit == 0 {
+		perSourceLimit = 1
+	}
+	native, nextTransactions, err := a.nativeTransfers(ctx, address, perSourceLimit, state.Transactions)
+	if err != nil {
+		return nil, err
+	}
+	tokens, nextTRC20, tokenErr := a.trc20Transfers(ctx, address, perSourceLimit, state.TRC20)
+	internal, nextInternal, internalErr := a.internalTransfers(ctx, address, perSourceLimit, state.Internal)
+	transfers := append(append(native, tokens...), internal...)
+	sortTransfers(transfers)
+	next, err := encodeTronCursor(tronCursor{Transactions: nextTransactions, TRC20: nextTRC20, Internal: nextInternal})
+	if err != nil {
+		return nil, err
+	}
+	status := a.SourceStatus()
+	if tokenErr != nil || internalErr != nil {
+		status.IsComplete = false
+		if tokenErr != nil {
+			status.Warning = "TronGrid TRC-20 history is temporarily unavailable; showing the available transfer evidence."
+		} else {
+			status.Warning = "TronGrid internal-transfer history is temporarily unavailable; showing the available transfer evidence."
+		}
+	}
+	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: next != "", SourceStatus: status}, nil
+}
+
+func tronHistoryQuery(limit uint32, cursor string) url.Values {
 	query := url.Values{"only_confirmed": {"true"}, "limit": {fmt.Sprintf("%d", limit)}}
 	if cursor != "" {
 		query.Set("fingerprint", cursor)
 	}
+	return query
+}
+
+func (a *TronAdapter) nativeTransfers(ctx context.Context, address string, limit uint32, cursor string) ([]TransferItem, string, error) {
 	var page tronTransactionPage
-	if err := a.get(ctx, "/v1/accounts/"+url.PathEscape(address)+"/transactions", query, &page); err != nil {
-		return nil, err
+	if err := a.get(ctx, "/v1/accounts/"+url.PathEscape(address)+"/transactions", tronHistoryQuery(limit, cursor), &page); err != nil {
+		return nil, "", err
 	}
 	transfers := make([]TransferItem, 0, len(page.Data))
 	for _, transaction := range page.Data {
 		for index, contract := range transaction.RawData.Contracts {
-			if contract.Type != "TransferContract" {
+			if contract.Type != "TransferContract" && contract.Type != "TransferAssetContract" {
 				continue
 			}
-			transfer, err := a.transferFromContract(transaction, index, contract.Parameter.Value)
+			transfer, err := a.transferFromContract(transaction, index, contract.Type, contract.Parameter.Value)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			if transfer.From == address || transfer.To == address {
 				transfers = append(transfers, transfer)
 			}
 		}
 	}
-	return &TransferPage{Transfers: transfers, NextCursor: page.Meta.Fingerprint, HasMore: page.Meta.Fingerprint != "", SourceStatus: a.SourceStatus()}, nil
+	return transfers, page.Meta.Fingerprint, nil
 }
 
-func (a *TronAdapter) transferFromContract(transaction tronTransaction, index int, raw json.RawMessage) (TransferItem, error) {
+func (a *TronAdapter) transferFromContract(transaction tronTransaction, index int, contractType string, raw json.RawMessage) (TransferItem, error) {
 	var value struct {
 		OwnerAddress string      `json:"owner_address"`
 		ToAddress    string      `json:"to_address"`
 		Amount       json.Number `json:"amount"`
+		AssetName    string      `json:"asset_name"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
@@ -168,7 +213,119 @@ func (a *TronAdapter) transferFromContract(transaction tronTransaction, index in
 	if _, ok := new(big.Int).SetString(value.Amount.String(), 10); !ok {
 		return TransferItem{}, fmt.Errorf("parse TRON transfer")
 	}
-	return TransferItem{Hash: strings.ToLower(transaction.ID), EventID: fmt.Sprintf("contract:%d", index), TransferKind: "NATIVE", From: from, To: to, AmountBaseUnits: value.Amount.String(), Asset: a.NativeAsset(), BlockNumber: transaction.BlockNumber, Timestamp: time.UnixMilli(transaction.RawData.Timestamp).UTC()}, nil
+	asset, kind := a.NativeAsset(), "NATIVE"
+	if contractType == "TransferAssetContract" {
+		if value.AssetName == "" {
+			return TransferItem{}, fmt.Errorf("parse TRC-10 asset")
+		}
+		asset, kind = Asset{Kind: "TRC10", ContractAddress: value.AssetName, Symbol: "TRC10", Decimals: 0}, "TRC10"
+	}
+	return TransferItem{Hash: strings.ToLower(transaction.ID), EventID: fmt.Sprintf("contract:%d", index), TransferKind: kind, From: from, To: to, AmountBaseUnits: value.Amount.String(), Asset: asset, BlockNumber: transaction.BlockNumber, Timestamp: time.UnixMilli(transaction.RawData.Timestamp).UTC()}, nil
+}
+
+type tronTRC20Page struct {
+	Data []struct {
+		TransactionID  string `json:"transaction_id"`
+		BlockTimestamp int64  `json:"block_timestamp"`
+		From           string `json:"from"`
+		To             string `json:"to"`
+		Value          string `json:"value"`
+		TokenInfo      struct {
+			Address  string      `json:"address"`
+			Symbol   string      `json:"symbol"`
+			Decimals json.Number `json:"decimals"`
+		} `json:"token_info"`
+	} `json:"data"`
+	Meta struct {
+		Fingerprint string `json:"fingerprint"`
+	} `json:"meta"`
+}
+
+func (a *TronAdapter) trc20Transfers(ctx context.Context, address string, limit uint32, cursor string) ([]TransferItem, string, error) {
+	var page tronTRC20Page
+	if err := a.get(ctx, "/v1/accounts/"+url.PathEscape(address)+"/transactions/trc20", tronHistoryQuery(limit, cursor), &page); err != nil {
+		return nil, "", err
+	}
+	transfers := make([]TransferItem, 0, len(page.Data))
+	for index, item := range page.Data {
+		if item.TransactionID == "" || item.From == "" || item.To == "" || item.TokenInfo.Address == "" || item.TokenInfo.Symbol == "" {
+			return nil, "", fmt.Errorf("parse TRC-20 transfer")
+		}
+		if _, ok := new(big.Int).SetString(item.Value, 10); !ok {
+			return nil, "", fmt.Errorf("parse TRC-20 amount")
+		}
+		decimals, ok := new(big.Int).SetString(item.TokenInfo.Decimals.String(), 10)
+		if !ok || !decimals.IsUint64() || decimals.Uint64() > 255 {
+			return nil, "", fmt.Errorf("parse TRC-20 decimals")
+		}
+		from, err := a.canonicalAddress(item.From)
+		if err != nil {
+			return nil, "", err
+		}
+		to, err := a.canonicalAddress(item.To)
+		if err != nil {
+			return nil, "", err
+		}
+		transfers = append(transfers, TransferItem{Hash: strings.ToLower(item.TransactionID), EventID: fmt.Sprintf("trc20:%d", index), TransferKind: "TRC20", From: from, To: to, AmountBaseUnits: item.Value, Asset: Asset{Kind: "TRC20", ContractAddress: item.TokenInfo.Address, Symbol: item.TokenInfo.Symbol, Decimals: uint32(decimals.Uint64())}, Timestamp: time.UnixMilli(item.BlockTimestamp).UTC()})
+	}
+	return transfers, page.Meta.Fingerprint, nil
+}
+
+type tronInternalPage struct {
+	Data []struct {
+		TransactionID  string `json:"transaction_id"`
+		BlockNumber    int64  `json:"block_number"`
+		BlockTimestamp int64  `json:"block_timestamp"`
+		CallerAddress  string `json:"caller_address"`
+		ToAddress      string `json:"transferTo_address"`
+		Rejected       bool   `json:"rejected"`
+		CallValues     []struct {
+			CallValue json.Number `json:"callValue"`
+			TokenID   string      `json:"tokenId"`
+		} `json:"callValueInfo"`
+	} `json:"data"`
+	Meta struct {
+		Fingerprint string `json:"fingerprint"`
+	} `json:"meta"`
+}
+
+func (a *TronAdapter) internalTransfers(ctx context.Context, address string, limit uint32, cursor string) ([]TransferItem, string, error) {
+	var page tronInternalPage
+	if err := a.get(ctx, "/v1/accounts/"+url.PathEscape(address)+"/internal-transactions", tronHistoryQuery(limit, cursor), &page); err != nil {
+		return nil, "", err
+	}
+	transfers := make([]TransferItem, 0, len(page.Data))
+	for index, item := range page.Data {
+		if item.Rejected || item.TransactionID == "" || item.CallerAddress == "" || item.ToAddress == "" {
+			continue
+		}
+		from, err := a.canonicalAddress(item.CallerAddress)
+		if err != nil {
+			return nil, "", err
+		}
+		to, err := a.canonicalAddress(item.ToAddress)
+		if err != nil {
+			return nil, "", err
+		}
+		for valueIndex, value := range item.CallValues {
+			if _, ok := new(big.Int).SetString(value.CallValue.String(), 10); !ok {
+				return nil, "", fmt.Errorf("parse TRON internal transfer")
+			}
+			asset, kind := a.NativeAsset(), "INTERNAL"
+			if value.TokenID != "" {
+				asset, kind = Asset{Kind: "TRC10", ContractAddress: value.TokenID, Symbol: "TRC10", Decimals: 0}, "INTERNAL_TRC10"
+			}
+			transfers = append(transfers, TransferItem{Hash: strings.ToLower(item.TransactionID), EventID: fmt.Sprintf("internal:%d:%d", index, valueIndex), TransferKind: kind, From: from, To: to, AmountBaseUnits: value.CallValue.String(), Asset: asset, BlockNumber: item.BlockNumber, Timestamp: time.UnixMilli(item.BlockTimestamp).UTC()})
+		}
+	}
+	return transfers, page.Meta.Fingerprint, nil
+}
+
+func (a *TronAdapter) canonicalAddress(value string) (string, error) {
+	if strings.HasPrefix(strings.TrimPrefix(value, "0x"), "41") {
+		return tronAddressFromHex(value)
+	}
+	return a.NormalizeAddress(value)
 }
 
 func (a *TronAdapter) LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error) {
@@ -180,7 +337,7 @@ func (a *TronAdapter) LookupTransaction(ctx context.Context, hash string) (*Tran
 		if contract.Type != "TransferContract" {
 			continue
 		}
-		transfer, err := a.transferFromContract(transaction, index, contract.Parameter.Value)
+		transfer, err := a.transferFromContract(transaction, index, contract.Type, contract.Parameter.Value)
 		if err != nil {
 			return nil, SourceStatus{}, err
 		}
@@ -201,7 +358,33 @@ func (a *TronAdapter) GetContractMetadata(ctx context.Context, address string) (
 }
 
 func (a *TronAdapter) SourceStatus() SourceStatus {
-	return SourceStatus{Source: TronGridSource, RetrievedAt: time.Now().UTC(), IsComplete: false, Warning: "Showing confirmed native TRX transfers only; TRC-10, TRC-20, and internal transfers are not included."}
+	return SourceStatus{Source: TronGridSource, RetrievedAt: time.Now().UTC(), IsComplete: true}
+}
+
+func decodeTronCursor(cursor string) (tronCursor, error) {
+	if cursor == "" {
+		return tronCursor{}, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return tronCursor{}, fmt.Errorf("invalid cursor")
+	}
+	var result tronCursor
+	if err := json.Unmarshal(decoded, &result); err != nil {
+		return tronCursor{}, fmt.Errorf("invalid cursor")
+	}
+	return result, nil
+}
+
+func encodeTronCursor(cursor tronCursor) (string, error) {
+	if cursor.Transactions == "" && cursor.TRC20 == "" && cursor.Internal == "" {
+		return "", nil
+	}
+	encoded, err := json.Marshal(cursor)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(encoded), nil
 }
 
 func (a *TronAdapter) get(ctx context.Context, path string, query url.Values, output any) error {

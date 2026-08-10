@@ -12,7 +12,7 @@ export function TransferInspector({
 		['Raw units', edge.amountBaseUnits],
 		['Asset', asset?.symbol || 'Unknown'],
 		['Asset type', asset?.kind || 'Unknown'],
-		['Contract', asset?.contractAddress || 'Native ETH'],
+		['Contract', asset?.contractAddress || 'Native asset'],
 		['Decimals', String(asset?.decimals ?? 0)],
 		['Event ID', edge.eventId],
 		['Block', String(edge.blockNumber)],
