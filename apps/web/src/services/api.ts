@@ -48,8 +48,8 @@ export function entityLabel(t?: EntityType): string {
 
 // ── Tracing ─────────────────────────────────────────────────────────────────────
 
-export async function fetchTraceGraph(seedAddress: string): Promise<TraceGraphResponse> {
-	return tracingClient.traceGraph({ seedAddress, network: 1, limit: 25 });
+export async function fetchTraceGraph(seedAddress: string, retry = false): Promise<TraceGraphResponse> {
+	return tracingClient.traceGraph({ seedAddress, network: 1, limit: 25, retry });
 }
 
 export async function lookupAddress(address: string) {
@@ -66,6 +66,6 @@ export async function lookupAddress(address: string) {
 	};
 }
 
-export async function expandNode(address: string, cursor = '') {
-	return tracingClient.expandNode({ nodeAddress: address, network: 1, limit: 25, cursor });
+export async function expandNode(address: string, cursor = '', retry = false) {
+	return tracingClient.expandNode({ nodeAddress: address, network: 1, limit: 25, cursor, retry });
 }

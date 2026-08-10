@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
 import { WalletLookup } from '../components/WalletLookup';
@@ -18,34 +18,47 @@ function Index() {
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 	const [branchPages, setBranchPages] = useState<Record<string, BranchPage>>({});
 	const [expandingAddress, setExpandingAddress] = useState<string | null>(null);
+	const [pendingExpansion, setPendingExpansion] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState('');
 	const investigationRef = useRef(0);
 
-	const load = useCallback(async (target: string) => {
-		const investigation = ++investigationRef.current;
-		setLoading(true);
+	const load = useCallback(async (target: string, preserveCurrentGraph = false) => {
+		const investigation = preserveCurrentGraph ? investigationRef.current : ++investigationRef.current;
+		if (!preserveCurrentGraph) setLoading(true);
 		setErrorMessage('');
-		setGraphData(null);
-		setSelectedNode(null);
-		setSummary(null);
-		setLabels([]);
-		setBranchPages({});
-		setExpandingAddress(null);
+		if (!preserveCurrentGraph) {
+			setGraphData(null);
+			setSelectedNode(null);
+			setSummary(null);
+			setLabels([]);
+			setBranchPages({});
+			setExpandingAddress(null);
+			setPendingExpansion(null);
+		}
 		try {
-			const [graph, lookup] = await Promise.all([fetchTraceGraph(target), lookupAddress(target)]);
+			const graph = await fetchTraceGraph(target, !preserveCurrentGraph);
 			if (investigation !== investigationRef.current) return;
 			setGraphData(graph);
-			setSummary(lookup.summary ?? null);
-			setLabels(lookup.labels);
 			setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
 			setBranchPages({ [graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore } });
+			void lookupAddress(target).then((lookup) => {
+				if (investigation !== investigationRef.current) return;
+				setSummary(lookup.summary ?? null);
+				setLabels(lookup.labels);
+			});
 		} catch (error) {
 			console.error(error);
 			if (investigation === investigationRef.current) setErrorMessage('Unable to load this address. Check the backend and TrueBlocks status.');
 		} finally {
-			if (investigation === investigationRef.current) setLoading(false);
+			if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
 		}
 	}, []);
+
+	useEffect(() => {
+		if (!graphData?.pending) return;
+		const timer = window.setTimeout(() => void load(graphData.seedAddress, true), 2000);
+		return () => window.clearTimeout(timer);
+	}, [graphData?.pending, graphData?.seedAddress, load]);
 
 	const handleSelect = useCallback(async (node: GraphNode | null) => {
 		setSelectedNode(node);
@@ -59,15 +72,20 @@ function Index() {
 		}
 	}, []);
 
-	const handleExpand = useCallback(async (nodeAddress: string) => {
+	const handleExpand = useCallback(async (nodeAddress: string, retry = true) => {
 		const key = nodeAddress.toLowerCase();
 		const page = branchPages[key];
-		if (!graphData || expandingAddress || (page && !page.hasMore)) return;
+		if (!graphData || expandingAddress || (pendingExpansion && pendingExpansion !== key) || (page && !page.hasMore)) return;
 		const investigation = investigationRef.current;
 		setExpandingAddress(key);
 		try {
-			const expanded = await expandNode(nodeAddress, page?.cursor);
+			const expanded = await expandNode(nodeAddress, page?.cursor, retry);
 			if (investigation !== investigationRef.current) return;
+			if (expanded.pending) {
+				setPendingExpansion(key);
+				return;
+			}
+			setPendingExpansion(null);
 			setGraphData((current) => {
 				if (!current) return current;
 				const nodeIds = new Set(current.nodes.map((node) => node.id));
@@ -83,7 +101,13 @@ function Index() {
 		} finally {
 			if (investigation === investigationRef.current) setExpandingAddress(null);
 		}
-	}, [branchPages, expandingAddress, graphData]);
+	}, [branchPages, expandingAddress, graphData, pendingExpansion]);
+
+	useEffect(() => {
+		if (!pendingExpansion) return;
+		const timer = window.setTimeout(() => void handleExpand(pendingExpansion, false), 2000);
+		return () => window.clearTimeout(timer);
+	}, [handleExpand, pendingExpansion]);
 
 	const activeAddress = selectedNode?.id || graphData?.seedAddress || '';
 	const activeBranch = branchPages[activeAddress.toLowerCase()];
@@ -93,7 +117,7 @@ function Index() {
 		<Header currentAddress={address} onSearch={(value) => { setAddress(value); void load(value); }} network="Ethereum Mainnet" />
 		<div className="flex-1 flex overflow-hidden">
 			<div className="flex-1 relative">
-				<GraphCanvas key={graphData?.seedAddress ?? 'empty'} graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} canExpand={canExpand} expanding={expandingAddress === activeAddress.toLowerCase()} />
+				<GraphCanvas key={graphData?.seedAddress ?? 'empty'} graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} canExpand={canExpand} expanding={expandingAddress === activeAddress.toLowerCase() || pendingExpansion === activeAddress.toLowerCase()} />
 				{!graphData && !loading && <div className="absolute inset-0 grid place-items-center pointer-events-none text-sm" style={{ color: 'var(--ink-3)' }}>Search an Ethereum mainnet address to start an investigation.</div>}
 				{errorMessage && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>{errorMessage}</div>}
 				{graphData?.sourceStatus?.warning && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>{graphData.sourceStatus.warning}</div>}

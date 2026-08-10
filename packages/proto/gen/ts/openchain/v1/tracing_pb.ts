@@ -248,6 +248,11 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
    */
   cursor = "";
 
+  /**
+   * @generated from field: bool retry = 6;
+   */
+  retry = false;
+
   constructor(data?: PartialMessage<TraceGraphRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -261,6 +266,7 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
     { no: 3, name: "direction", kind: "enum", T: proto3.getEnumType(TraceDirection) },
     { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "retry", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphRequest {
@@ -324,6 +330,11 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
    */
   sourceStatus?: SourceStatus;
 
+  /**
+   * @generated from field: bool pending = 9;
+   */
+  pending = false;
+
   constructor(data?: PartialMessage<TraceGraphResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -340,6 +351,7 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
     { no: 6, name: "next_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 8, name: "source_status", kind: "message", T: SourceStatus },
+    { no: 9, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphResponse {
@@ -388,6 +400,11 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
    */
   cursor = "";
 
+  /**
+   * @generated from field: bool retry = 6;
+   */
+  retry = false;
+
   constructor(data?: PartialMessage<ExpandNodeRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -401,6 +418,7 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
     { no: 3, name: "direction", kind: "enum", T: proto3.getEnumType(TraceDirection) },
     { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "retry", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeRequest {
@@ -449,6 +467,11 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
    */
   sourceStatus?: SourceStatus;
 
+  /**
+   * @generated from field: bool pending = 6;
+   */
+  pending = false;
+
   constructor(data?: PartialMessage<ExpandNodeResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -462,6 +485,7 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
     { no: 3, name: "next_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 5, name: "source_status", kind: "message", T: SourceStatus },
+    { no: 6, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeResponse {

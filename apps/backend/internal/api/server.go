@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -35,11 +36,19 @@ type Server struct {
 	evm           *adapter.EVMClient
 	labels        *labels.Registry
 	tracingEngine *tracing.Engine
+	tracingQueue  *tracing.Queue
 	webOrigin     string
 }
 
-func NewServer(evm *adapter.EVMClient, registry *labels.Registry, engine *tracing.Engine, webOrigin string) *Server {
-	return &Server{evm: evm, labels: registry, tracingEngine: engine, webOrigin: strings.TrimRight(webOrigin, "/")}
+func NewServer(evm *adapter.EVMClient, registry *labels.Registry, engine *tracing.Engine, queue *tracing.Queue, webOrigin string) *Server {
+	return &Server{evm: evm, labels: registry, tracingEngine: engine, tracingQueue: queue, webOrigin: strings.TrimRight(webOrigin, "/")}
+}
+
+func (s *Server) traceGraph(ctx context.Context, address string, direction tracing.Direction, limit uint32, cursor string, retry bool) (*tracing.GraphResult, error) {
+	if s.tracingQueue != nil {
+		return s.tracingQueue.TraceGraph(ctx, address, direction, limit, cursor, retry)
+	}
+	return s.tracingEngine.ResolveGraph(ctx, address, direction, limit, cursor)
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {

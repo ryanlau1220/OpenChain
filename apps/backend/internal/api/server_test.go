@@ -17,7 +17,8 @@ const testAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
 
 func setupTestServer() (http.Handler, *Server) {
 	registry := labels.NewRegistry()
-	return NewServer(nil, registry, tracing.NewEngine(nil, nil, nil, registry), "http://localhost:3000").Handler(), NewServer(nil, registry, tracing.NewEngine(nil, nil, nil, registry), "http://localhost:3000")
+	engine := tracing.NewEngine(nil, nil, nil, registry)
+	return NewServer(nil, registry, engine, nil, "http://localhost:3000").Handler(), NewServer(nil, registry, engine, nil, "http://localhost:3000")
 }
 
 func TestHealthAPI(t *testing.T) {

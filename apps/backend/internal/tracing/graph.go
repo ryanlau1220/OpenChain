@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
@@ -41,6 +42,7 @@ type GraphResult struct {
 	TotalNodes, TotalEdges uint32
 	NextCursor             string
 	HasMore                bool
+	Pending                bool
 	SourceStatus           adapter.SourceStatus
 }
 
@@ -55,7 +57,7 @@ func NewEngine(evm *adapter.EVMClient, trueBlocks *adapter.TrueBlocksClient, dat
 	return &Engine{evmClient: evm, trueBlocks: trueBlocks, database: database, labelRegistry: labels}
 }
 
-func (e *Engine) TraceGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string) (*GraphResult, error) {
+func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string) (*GraphResult, error) {
 	if e.trueBlocks == nil {
 		return nil, fmt.Errorf("TrueBlocks is not configured")
 	}
@@ -82,6 +84,21 @@ func (e *Engine) TraceGraph(ctx context.Context, address string, direction Direc
 		}
 	}
 	return result, nil
+}
+
+func (e *Engine) PendingGraph(address, warning string) *GraphResult {
+	seed := strings.ToLower(address)
+	return &GraphResult{
+		SeedAddress: seed,
+		Nodes:       []GraphNode{{ID: seed, Label: shortAddress(seed), EntityType: "EOA", IsSeed: true, TotalVolumeWei: "0"}},
+		TotalNodes:  1,
+		Pending:     true,
+		SourceStatus: adapter.SourceStatus{
+			Source:      "trueblocks-6.5.0",
+			RetrievedAt: time.Now().UTC(),
+			Warning:     warning,
+		},
+	}
 }
 
 func (e *Engine) LookupTransaction(ctx context.Context, hash string) (*adapter.TransactionItem, adapter.SourceStatus, error) {

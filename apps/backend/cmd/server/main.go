@@ -47,8 +47,11 @@ func main() {
 
 	registry := labels.NewRegistry()
 	engine := tracing.NewEngine(evmClient, trueBlocks, database, registry)
-	server := api.NewServer(evmClient, registry, engine, cfg.WebOrigin)
-	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadTimeout: 15 * time.Second, WriteTimeout: 65 * time.Second, IdleTimeout: 60 * time.Second}
+	queue := tracing.NewQueue(engine, database)
+	workerContext, stopWorker := context.WithCancel(context.Background())
+	queue.Start(workerContext)
+	server := api.NewServer(evmClient, registry, engine, queue, cfg.WebOrigin)
+	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -64,5 +67,7 @@ func main() {
 	if err := httpServer.Shutdown(ctx); err != nil {
 		log.Printf("Server forced shutdown: %v", err)
 	}
+	stopWorker()
+	queue.Wait()
 	fmt.Println("Server stopped cleanly.")
 }

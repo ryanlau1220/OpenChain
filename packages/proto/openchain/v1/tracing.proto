@@ -37,6 +37,7 @@ message TraceGraphRequest {
   TraceDirection direction = 3;
   uint32 limit = 4;
   string cursor = 5;
+  bool retry = 6;
 }
 
 message TraceGraphResponse {
@@ -48,6 +49,7 @@ message TraceGraphResponse {
   string next_cursor = 6;
   bool has_more = 7;
   SourceStatus source_status = 8;
+  bool pending = 9;
 }
 
 message ExpandNodeRequest {
@@ -56,6 +58,7 @@ message ExpandNodeRequest {
   TraceDirection direction = 3;
   uint32 limit = 4;
   string cursor = 5;
+  bool retry = 6;
 }
 
 message ExpandNodeResponse {
@@ -64,6 +67,7 @@ message ExpandNodeResponse {
   string next_cursor = 3;
   bool has_more = 4;
   SourceStatus source_status = 5;
+  bool pending = 6;
 }
 
 service TracingService {

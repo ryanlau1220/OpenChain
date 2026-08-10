@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestTrueBlocksListsBoundedTransactions(t *testing.T) {
@@ -48,7 +49,9 @@ func TestTrueBlocksIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.ListNativeTransfers(context.Background(), "0xd8da6bf26964af9d7eed9e03e53415d37aa96045", 1, 0, 0); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := client.ListNativeTransfers(ctx, "0xd8da6bf26964af9d7eed9e03e53415d37aa96045", 1, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 }

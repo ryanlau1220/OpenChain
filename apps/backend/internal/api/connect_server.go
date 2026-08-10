@@ -33,12 +33,12 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.tracingEngine.TraceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor())
+	result, err := h.server.traceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
@@ -46,12 +46,12 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.tracingEngine.TraceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor())
+	result, err := h.server.traceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus)}), nil
+	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
 }
 
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {

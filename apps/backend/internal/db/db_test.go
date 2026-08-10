@@ -49,6 +49,83 @@ func TestSaveGraphIntegration(t *testing.T) {
 	}
 }
 
+func TestTraceJobIntegration(t *testing.T) {
+	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
+		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test durable trace jobs")
+	}
+	database, err := NewDB(DefaultConfig(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := database.InitSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	query := TraceJobQuery{Network: "test", Address: "trace-job-test-address", Direction: "both", Limit: 1}
+	defer func() {
+		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = $1 AND address = $2`, query.Network, query.Address)
+	}()
+
+	queued, err := database.EnqueueTraceJob(ctx, query, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err := database.EnqueueTraceJob(ctx, query, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued.ID != duplicate.ID || duplicate.Status != "queued" {
+		t.Fatalf("duplicate enqueue = %#v, want existing queued job %#v", duplicate, queued)
+	}
+
+	claimed, err := database.ClaimTraceJob(ctx, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed == nil || claimed.ID != queued.ID || claimed.Status != "running" {
+		t.Fatalf("claimed = %#v, want running job %#v", claimed, queued)
+	}
+	other, err := database.ClaimTraceJob(ctx, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other != nil {
+		t.Fatalf("claimed more than one trace job: %#v", other)
+	}
+
+	result := []byte(`{"seed_address":"trace-job-test-address","nodes":[],"edges":[]}`)
+	if err := database.CompleteTraceJob(ctx, claimed.ID, result); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := database.EnqueueTraceJob(ctx, query, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var completedResult map[string]any
+	if err := json.Unmarshal(completed.Result, &completedResult); err != nil || completed.Status != "succeeded" || completedResult["seed_address"] != query.Address {
+		t.Fatalf("completed job = %#v", completed)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', result_json = NULL WHERE id = $1`, completed.ID); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := database.EnqueueTraceJob(ctx, query, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.Status != "failed" {
+		t.Fatalf("polling a failed job requeued it: %#v", failed)
+	}
+	retried, err := database.EnqueueTraceJob(ctx, query, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retried.Status != "queued" {
+		t.Fatalf("explicit retry = %#v", retried)
+	}
+}
+
 func graphFundFlowCount(t *testing.T, database *DB, id string) int {
 	t.Helper()
 	ctx := context.Background()
@@ -58,6 +135,9 @@ func graphFundFlowCount(t *testing.T, database *DB, id string) int {
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path = ag_catalog, "$user", public`); err != nil {
 		t.Fatal(err)
 	}
 	encoded, err := json.Marshal(map[string]string{"id": id})
@@ -85,6 +165,9 @@ func cleanupGraph(t *testing.T, database *DB, flowID, from, to string) {
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path = ag_catalog, "$user", public`); err != nil {
 		t.Fatal(err)
 	}
 	for _, query := range []struct {
