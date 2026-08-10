@@ -40,6 +40,26 @@ proto3.util.setEnumType(TrustTier, "openchain.v1.TrustTier", [
 ]);
 
 /**
+ * @generated from enum openchain.v1.LabelVisibility
+ */
+export enum LabelVisibility {
+  /**
+   * @generated from enum value: LABEL_VISIBILITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: LABEL_VISIBILITY_PUBLIC = 1;
+   */
+  PUBLIC = 1,
+}
+// Retrieve enum metadata with: proto3.getEnumType(LabelVisibility)
+proto3.util.setEnumType(LabelVisibility, "openchain.v1.LabelVisibility", [
+  { no: 0, name: "LABEL_VISIBILITY_UNSPECIFIED" },
+  { no: 1, name: "LABEL_VISIBILITY_PUBLIC" },
+]);
+
+/**
  * @generated from message openchain.v1.Attestation
  */
 export class Attestation extends Message<Attestation> {
@@ -158,6 +178,16 @@ export class AddressLabel extends Message<AddressLabel> {
    */
   attestations: Attestation[] = [];
 
+  /**
+   * @generated from field: string source_version = 13;
+   */
+  sourceVersion = "";
+
+  /**
+   * @generated from field: openchain.v1.LabelVisibility visibility = 14;
+   */
+  visibility = LabelVisibility.UNSPECIFIED;
+
   constructor(data?: PartialMessage<AddressLabel>) {
     super();
     proto3.util.initPartial(data, this);
@@ -178,6 +208,8 @@ export class AddressLabel extends Message<AddressLabel> {
     { no: 10, name: "created_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 11, name: "trust_tier", kind: "enum", T: proto3.getEnumType(TrustTier) },
     { no: 12, name: "attestations", kind: "message", T: Attestation, repeated: true },
+    { no: 13, name: "source_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 14, name: "visibility", kind: "enum", T: proto3.getEnumType(LabelVisibility) },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AddressLabel {

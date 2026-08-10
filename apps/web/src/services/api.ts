@@ -3,7 +3,7 @@ import { createConnectTransport } from '@connectrpc/connect-web';
 import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
 import { EntityType } from '@openchain/proto/openchain/v1/common_pb';
 import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
-import type { AddressLabel } from '@openchain/proto/openchain/v1/labels_pb';
+import { LabelVisibility, type AddressLabel } from '@openchain/proto/openchain/v1/labels_pb';
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
@@ -27,7 +27,7 @@ export type {
 	AddressLabel,
 	AddressSummary,
 };
-export { EntityType, TraceGraphResponse };
+export { EntityType, LabelVisibility, TraceGraphResponse };
 
 export function entityLabel(t?: EntityType): string {
 	switch (t) {
@@ -56,7 +56,7 @@ export async function lookupAddress(address: string) {
 	const [lookupRes, labelsRes] = await Promise.allSettled([
 		lookupClient.lookupAddress({
 			address,
-			network: 1 /* NETWORK_ETHEREUM_SEPOLIA */,
+			network: 1 /* NETWORK_ETHEREUM_MAINNET */,
 		}),
 		labelClient.getLabels({ address, network: 1 }),
 	]);

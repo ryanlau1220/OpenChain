@@ -13,6 +13,11 @@ enum TrustTier {
   TRUST_TIER_3_LOCAL_WORKSPACE = 3;
 }
 
+enum LabelVisibility {
+  LABEL_VISIBILITY_UNSPECIFIED = 0;
+  LABEL_VISIBILITY_PUBLIC = 1;
+}
+
 message Attestation {
   string attestation_type = 1;
   string reference_url = 2;
@@ -33,6 +38,8 @@ message AddressLabel {
   int64 created_at = 10;
   TrustTier trust_tier = 11;
   repeated Attestation attestations = 12;
+  string source_version = 13;
+  LabelVisibility visibility = 14;
 }
 
 message GetLabelsRequest {

@@ -46,3 +46,23 @@ CREATE TABLE IF NOT EXISTS public.trace_jobs (
 
 CREATE INDEX IF NOT EXISTS trace_jobs_queued_idx ON public.trace_jobs (created_at) WHERE status = 'queued';
 CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_one_running_idx ON public.trace_jobs (status) WHERE status = 'running';
+
+CREATE TABLE IF NOT EXISTS public.curated_labels (
+  id TEXT PRIMARY KEY,
+  network TEXT NOT NULL,
+  address TEXT NOT NULL,
+  category TEXT NOT NULL,
+  label TEXT NOT NULL,
+  confidence DOUBLE PRECISION NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  evidence_url TEXT NOT NULL,
+  source TEXT NOT NULL,
+  source_version TEXT NOT NULL,
+  visibility TEXT NOT NULL CHECK (visibility = 'public'),
+  trust_tier SMALLINT NOT NULL CHECK (trust_tier BETWEEN 1 AND 3),
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS curated_labels_address_idx ON public.curated_labels (network, address);
+CREATE INDEX IF NOT EXISTS curated_labels_category_idx ON public.curated_labels (category);

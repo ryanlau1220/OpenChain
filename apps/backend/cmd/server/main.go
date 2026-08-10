@@ -45,7 +45,15 @@ func main() {
 		}
 	}
 
-	registry := labels.NewRegistry()
+	registry := labels.NewService(database)
+	if database != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err = registry.ImportSeed(ctx)
+		cancel()
+		if err != nil {
+			log.Printf("Curated label import failed: %v", err)
+		}
+	}
 	engine := tracing.NewEngine(evmClient, trueBlocks, database, registry)
 	queue := tracing.NewQueue(engine, database)
 	workerContext, stopWorker := context.WithCancel(context.Background())

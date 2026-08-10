@@ -14,6 +14,7 @@ import {
 	type AddressLabel,
 	type AddressSummary,
 	entityLabel,
+	LabelVisibility,
 } from '../services/api';
 
 interface WalletLookupProps {
@@ -151,11 +152,11 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					</button>
 				)}
 
-				{/* Labels as OLI Trust Tier pills */}
+				{/* Curated labels always carry their evidence and import version. */}
 				{safeLabels.length > 0 && (
 					<div className="space-y-1 pt-1">
 						<span className="text-[9px] uppercase font-bold text-[var(--ink-3)] block">
-							OLI Attested Labels
+							Curated labels
 						</span>
 						<div className="flex flex-col gap-1">
 							{safeLabels.map((l) => {
@@ -190,8 +191,13 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 														? 'Tier 1 Authoritative'
 														: tier === 2
 															? 'Tier 2 Community Verified'
-															: 'Tier 3 Workspace'}
+															: 'Tier 3 Workspace'} · {l.source || 'Unknown source'}
 												</span>
+												{l.sourceVersion && (
+													<span className="text-[9px] text-[var(--ink-3)] block">
+														{l.visibility === LabelVisibility.PUBLIC ? 'Public' : 'Unspecified'} · {l.sourceVersion}
+													</span>
+												)}
 											</div>
 										</div>
 										{l.evidenceUrl && (

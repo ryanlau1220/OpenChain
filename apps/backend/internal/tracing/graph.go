@@ -28,6 +28,7 @@ type GraphNode struct {
 	ID, Label, EntityType, TotalVolumeWei string
 	IsSeed                                bool
 	InTxCount, OutTxCount                 uint32
+	Labels                                []labels.LabelItem
 }
 type GraphEdge struct {
 	ID, Source, Target, ValueWei, ValueFormatted, AssetSymbol, TransactionHash string
@@ -50,10 +51,10 @@ type Engine struct {
 	evmClient     *adapter.EVMClient
 	trueBlocks    *adapter.TrueBlocksClient
 	database      *db.DB
-	labelRegistry *labels.Registry
+	labelRegistry *labels.Service
 }
 
-func NewEngine(evm *adapter.EVMClient, trueBlocks *adapter.TrueBlocksClient, database *db.DB, labels *labels.Registry) *Engine {
+func NewEngine(evm *adapter.EVMClient, trueBlocks *adapter.TrueBlocksClient, database *db.DB, labels *labels.Service) *Engine {
 	return &Engine{evmClient: evm, trueBlocks: trueBlocks, database: database, labelRegistry: labels}
 }
 
@@ -157,10 +158,12 @@ func (e *Engine) graph(ctx context.Context, seed string, transactions []adapter.
 
 func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode {
 	label, entityType := shortAddress(address), "EOA"
+	var nodeLabels []labels.LabelItem
 	if e.labelRegistry != nil {
-		if labels := e.labelRegistry.GetLabels(ctx, address); len(labels) > 0 {
-			label = labels[0].Label
-			if strings.EqualFold(labels[0].Category, "exchange") {
+		if items, err := e.labelRegistry.GetLabels(ctx, address); err == nil && len(items) > 0 {
+			label = items[0].Label
+			nodeLabels = items
+			if strings.EqualFold(items[0].Category, "exchange") {
 				entityType = "EXCHANGE"
 			}
 		}
@@ -170,7 +173,7 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 			entityType = "CONTRACT"
 		}
 	}
-	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, TotalVolumeWei: "0"}
+	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, TotalVolumeWei: "0", Labels: nodeLabels}
 }
 
 func filterTransactions(transactions []adapter.TransactionItem, address string, direction Direction) []adapter.TransactionItem {

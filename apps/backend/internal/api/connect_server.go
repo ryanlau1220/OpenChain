@@ -57,7 +57,11 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {
 	nodes := make([]*pb.GraphNode, 0, len(result.Nodes))
 	for _, node := range result.Nodes {
-		nodes = append(nodes, &pb.GraphNode{Id: node.ID, Label: node.Label, EntityType: parseEntityType(node.EntityType), IsSeed: node.IsSeed, TotalVolumeWei: node.TotalVolumeWei, InTxCount: node.InTxCount, OutTxCount: node.OutTxCount})
+		nodeLabels := make([]*pb.AddressLabel, 0, len(node.Labels))
+		for _, label := range node.Labels {
+			nodeLabels = append(nodeLabels, toLabelProto(label))
+		}
+		nodes = append(nodes, &pb.GraphNode{Id: node.ID, Label: node.Label, EntityType: parseEntityType(node.EntityType), IsSeed: node.IsSeed, TotalVolumeWei: node.TotalVolumeWei, InTxCount: node.InTxCount, OutTxCount: node.OutTxCount, Labels: nodeLabels})
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
@@ -92,7 +96,7 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 		entityType = pb.EntityType_ENTITY_TYPE_CONTRACT
 	}
 	if h.server.labels != nil {
-		if items := h.server.labels.GetLabels(ctx, address); len(items) > 0 {
+		if items, labelErr := h.server.labels.GetLabels(ctx, address); labelErr == nil && len(items) > 0 {
 			label = items[0].Label
 			if strings.EqualFold(items[0].Category, "exchange") {
 				entityType = pb.EntityType_ENTITY_TYPE_EXCHANGE
@@ -139,7 +143,7 @@ func toSourceStatus(status adapter.SourceStatus) *pb.SourceStatus {
 type connectLabelHandler struct{ server *Server }
 
 func toLabelProto(item labels.LabelItem) *pb.AddressLabel {
-	return &pb.AddressLabel{Id: item.ID, Address: item.Address, Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceUrl: item.EvidenceURL, Source: item.Source, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt.Unix()}
+	return &pb.AddressLabel{Id: item.ID, Address: item.Address, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceUrl: item.EvidenceURL, Source: item.Source, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt.Unix(), TrustTier: pb.TrustTier(item.TrustTier), SourceVersion: item.SourceVersion, Visibility: pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC}
 }
 
 func (h *connectLabelHandler) GetLabels(ctx context.Context, req *connect.Request[pb.GetLabelsRequest]) (*connect.Response[pb.GetLabelsResponse], error) {
@@ -147,7 +151,13 @@ func (h *connectLabelHandler) GetLabels(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	items := h.server.labels.GetLabels(ctx, address)
+	if h.server.labels == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("curated labels are unavailable"))
+	}
+	items, err := h.server.labels.GetLabels(ctx, address)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
 	result := make([]*pb.AddressLabel, 0, len(items))
 	for _, item := range items {
 		result = append(result, toLabelProto(item))
@@ -163,7 +173,13 @@ func (h *connectLabelHandler) SearchLabels(ctx context.Context, req *connect.Req
 	if limit <= 0 || limit > 50 {
 		limit = 50
 	}
-	items := h.server.labels.SearchLabels(ctx, req.Msg.GetQuery(), req.Msg.GetCategory(), limit)
+	if h.server.labels == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("curated labels are unavailable"))
+	}
+	items, err := h.server.labels.SearchLabels(ctx, req.Msg.GetQuery(), req.Msg.GetCategory(), limit)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
 	result := make([]*pb.AddressLabel, 0, len(items))
 	for _, item := range items {
 		result = append(result, toLabelProto(item))

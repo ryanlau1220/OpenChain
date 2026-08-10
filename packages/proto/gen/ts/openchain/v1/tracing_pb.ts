@@ -6,6 +6,7 @@
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
 import { EntityType, Network, SourceStatus } from "./common_pb.js";
+import { AddressLabel } from "./labels_pb.js";
 
 /**
  * @generated from enum openchain.v1.TraceDirection
@@ -80,6 +81,11 @@ export class GraphNode extends Message<GraphNode> {
    */
   outTxCount = 0;
 
+  /**
+   * @generated from field: repeated openchain.v1.AddressLabel labels = 10;
+   */
+  labels: AddressLabel[] = [];
+
   constructor(data?: PartialMessage<GraphNode>) {
     super();
     proto3.util.initPartial(data, this);
@@ -95,6 +101,7 @@ export class GraphNode extends Message<GraphNode> {
     { no: 7, name: "total_volume_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "in_tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 9, name: "out_tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 10, name: "labels", kind: "message", T: AddressLabel, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GraphNode {

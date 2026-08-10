@@ -34,13 +34,13 @@ func withLogging(next http.HandlerFunc) http.HandlerFunc {
 
 type Server struct {
 	evm           *adapter.EVMClient
-	labels        *labels.Registry
+	labels        *labels.Service
 	tracingEngine *tracing.Engine
 	tracingQueue  *tracing.Queue
 	webOrigin     string
 }
 
-func NewServer(evm *adapter.EVMClient, registry *labels.Registry, engine *tracing.Engine, queue *tracing.Queue, webOrigin string) *Server {
+func NewServer(evm *adapter.EVMClient, registry *labels.Service, engine *tracing.Engine, queue *tracing.Queue, webOrigin string) *Server {
 	return &Server{evm: evm, labels: registry, tracingEngine: engine, tracingQueue: queue, webOrigin: strings.TrimRight(webOrigin, "/")}
 }
 

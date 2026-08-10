@@ -66,7 +66,7 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	queue := tracing.NewQueue(tracing.NewEngine(nil, client, database, labels.NewRegistry()), database)
+	queue := tracing.NewQueue(tracing.NewEngine(nil, client, database, labels.NewService(database)), database)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)
 	defer func() {

@@ -3,6 +3,7 @@ syntax = "proto3";
 package openchain.v1;
 
 import "openchain/v1/common.proto";
+import "openchain/v1/labels.proto";
 
 option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
 
@@ -14,6 +15,7 @@ message GraphNode {
   string total_volume_wei = 7;
   uint32 in_tx_count = 8;
   uint32 out_tx_count = 9;
+  repeated AddressLabel labels = 10;
 }
 
 message GraphEdge {

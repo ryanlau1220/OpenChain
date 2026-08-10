@@ -4,87 +4,91 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"log/slog"
+	"fmt"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/openchain/openchain/apps/backend/internal/db"
 )
+
+const ethereumMainnet = "ethereum-mainnet"
 
 //go:embed seed_labels.json
 var embeddedSeedLabels []byte
 
 type LabelItem struct {
-	ID          string    `json:"id"`
-	Address     string    `json:"address"`
-	Network     string    `json:"network"`
-	Category    string    `json:"category"` // Exchange, Mixer, DeFi, Sanction, Hack, Whale
-	Label       string    `json:"label"`
-	Confidence  float64   `json:"confidence"`
-	EvidenceURL string    `json:"evidence_url"`
-	Source      string    `json:"source"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID            string    `json:"id"`
+	Address       string    `json:"address"`
+	Network       string    `json:"network"`
+	Category      string    `json:"category"`
+	Label         string    `json:"label"`
+	Confidence    float64   `json:"confidence"`
+	EvidenceURL   string    `json:"evidence_url"`
+	Source        string    `json:"source"`
+	SourceVersion string    `json:"source_version"`
+	Visibility    string    `json:"visibility"`
+	TrustTier     uint32    `json:"trust_tier"`
+	CreatedBy     string    `json:"created_by"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
-type Registry struct {
-	mu     sync.RWMutex
-	labels map[string][]LabelItem // address -> labels
-}
+type Service struct{ database *db.DB }
 
-func NewRegistry() *Registry {
-	r := &Registry{
-		labels: make(map[string][]LabelItem),
+func NewService(database *db.DB) *Service { return &Service{database: database} }
+
+func SeedLabels() ([]LabelItem, error) {
+	var items []LabelItem
+	if err := json.Unmarshal(embeddedSeedLabels, &items); err != nil {
+		return nil, fmt.Errorf("parse curated label seed: %w", err)
 	}
-	r.seedWellKnownLabels()
-	return r
-}
-
-func (r *Registry) seedWellKnownLabels() {
-	var wellKnown []LabelItem
-	if err := json.Unmarshal(embeddedSeedLabels, &wellKnown); err != nil {
-		slog.Warn("failed to parse embedded seed_labels.json", "error", err)
-		return
-	}
-
-	now := time.Now()
-	for _, l := range wellKnown {
-		if l.CreatedAt.IsZero() {
-			l.CreatedAt = now
+	for index := range items {
+		item := &items[index]
+		item.Address = strings.ToLower(item.Address)
+		if item.Network != ethereumMainnet || item.ID == "" || item.Address == "" || item.Label == "" || item.EvidenceURL == "" || item.Source == "" || item.SourceVersion == "" || item.Visibility != "public" || item.TrustTier < 1 || item.TrustTier > 3 || item.Confidence < 0 || item.Confidence > 1 {
+			return nil, fmt.Errorf("invalid curated label %q", item.ID)
 		}
-		addrKey := strings.ToLower(l.Address)
-		r.labels[addrKey] = append(r.labels[addrKey], l)
-	}
-}
-
-func (r *Registry) GetLabels(ctx context.Context, address string) []LabelItem {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	addrKey := strings.ToLower(address)
-	return r.labels[addrKey]
-}
-
-func (r *Registry) SearchLabels(ctx context.Context, query string, category string, limit int) []LabelItem {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	var result []LabelItem
-	queryLower := strings.ToLower(query)
-	catLower := strings.ToLower(category)
-
-	for _, list := range r.labels {
-		for _, l := range list {
-			matchQuery := queryLower == "" || strings.Contains(strings.ToLower(l.Address), queryLower) || strings.Contains(strings.ToLower(l.Label), queryLower)
-			matchCat := catLower == "" || strings.ToLower(l.Category) == catLower
-
-			if matchQuery && matchCat {
-				result = append(result, l)
-				if limit > 0 && len(result) >= limit {
-					return result
-				}
-			}
+		if item.CreatedAt.IsZero() {
+			return nil, fmt.Errorf("curated label %q has no created_at", item.ID)
 		}
+	}
+	return items, nil
+}
+
+func (s *Service) ImportSeed(ctx context.Context) error {
+	if s == nil || s.database == nil {
+		return fmt.Errorf("curated label database is unavailable")
+	}
+	items, err := SeedLabels()
+	if err != nil {
+		return err
+	}
+	values := make([]db.CuratedLabel, 0, len(items))
+	for _, item := range items {
+		values = append(values, db.CuratedLabel{ID: item.ID, Network: item.Network, Address: item.Address, Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceURL: item.EvidenceURL, Source: item.Source, SourceVersion: item.SourceVersion, Visibility: item.Visibility, TrustTier: item.TrustTier, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt})
+	}
+	return s.database.UpsertCuratedLabels(ctx, values)
+}
+
+func (s *Service) GetLabels(ctx context.Context, address string) ([]LabelItem, error) {
+	if s == nil || s.database == nil {
+		return nil, fmt.Errorf("curated label database is unavailable")
+	}
+	items, err := s.database.GetCuratedLabels(ctx, ethereumMainnet, address)
+	return fromDB(items), err
+}
+
+func (s *Service) SearchLabels(ctx context.Context, query, category string, limit int) ([]LabelItem, error) {
+	if s == nil || s.database == nil {
+		return nil, fmt.Errorf("curated label database is unavailable")
+	}
+	items, err := s.database.SearchCuratedLabels(ctx, ethereumMainnet, query, category, limit)
+	return fromDB(items), err
+}
+
+func fromDB(items []db.CuratedLabel) []LabelItem {
+	result := make([]LabelItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, LabelItem{ID: item.ID, Network: item.Network, Address: item.Address, Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceURL: item.EvidenceURL, Source: item.Source, SourceVersion: item.SourceVersion, Visibility: item.Visibility, TrustTier: item.TrustTier, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt})
 	}
 	return result
 }

@@ -1,57 +1,32 @@
 [
   {
-    "id": "uniswap-v2-router-sepolia",
-    "address": "0xee567fe1712faf6149d80da1e6934e354124cfe3",
-    "network": "ETHEREUM_SEPOLIA",
+    "id": "uniswap-v2-router-mainnet",
+    "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+    "network": "ethereum-mainnet",
     "category": "DeFi",
     "label": "Uniswap V2 Router",
     "confidence": 1.0,
-    "evidence_url": "https://sepolia.etherscan.io/address/0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3",
-    "source": "Etherscan",
-    "created_by": "SYSTEM"
+    "evidence_url": "https://etherscan.io/address/0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+    "source": "Etherscan verified contract record",
+    "source_version": "mainnet-curated-2026-08-10",
+    "visibility": "public",
+    "trust_tier": 1,
+    "created_by": "OpenChain curated import",
+    "created_at": "2026-08-10T00:00:00Z"
   },
   {
-    "id": "uni-token-sepolia",
-    "address": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
-    "network": "ETHEREUM_SEPOLIA",
-    "category": "DeFi",
-    "label": "UNI Token Contract",
-    "confidence": 1.0,
-    "evidence_url": "https://sepolia.etherscan.io/address/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
-    "source": "Etherscan",
-    "created_by": "SYSTEM"
-  },
-  {
-    "id": "null-burn-address",
+    "id": "ethereum-null-address-mainnet",
     "address": "0x0000000000000000000000000000000000000000",
-    "network": "ETHEREUM_SEPOLIA",
+    "network": "ethereum-mainnet",
     "category": "Burn",
-    "label": "Null / Burn Address",
+    "label": "Ethereum null address",
     "confidence": 1.0,
-    "evidence_url": "https://en.wikipedia.org/wiki/Null_address",
-    "source": "Protocol Standard",
-    "created_by": "SYSTEM"
-  },
-  {
-    "id": "ofac-0x098b716b8aaf21512996dc57eb0615e2383e2f96",
-    "address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
-    "network": "ETHEREUM_SEPOLIA",
-    "category": "Sanctions",
-    "label": "Tornado.Cash Router (OFAC Sanctioned)",
-    "confidence": 1.0,
-    "evidence_url": "https://sanctionssearch.ofac.treas.gov/",
-    "source": "OFAC_SDN",
-    "created_by": "SYSTEM"
-  },
-  {
-    "id": "ofac-0xa160cd374d02b56f4767db39294f71884a796f38",
-    "address": "0xa160cd374d02b56f4767db39294f71884a796f38",
-    "network": "ETHEREUM_SEPOLIA",
-    "category": "Sanctions",
-    "label": "Tornado.Cash 100 ETH Vault (OFAC Sanctioned)",
-    "confidence": 1.0,
-    "evidence_url": "https://sanctionssearch.ofac.treas.gov/",
-    "source": "OFAC_SDN",
-    "created_by": "SYSTEM"
+    "evidence_url": "https://ethereum.org/en/developers/docs/accounts/",
+    "source": "Ethereum account documentation",
+    "source_version": "mainnet-curated-2026-08-10",
+    "visibility": "public",
+    "trust_tier": 1,
+    "created_by": "OpenChain curated import",
+    "created_at": "2026-08-10T00:00:00Z"
   }
 ]

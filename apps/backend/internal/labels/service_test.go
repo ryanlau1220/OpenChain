@@ -1,17 +1,18 @@
 package labels
 
-import (
-	"context"
-	"testing"
-)
+import "testing"
 
-func TestLabelRegistryLoadsSeedLabels(t *testing.T) {
-	registry := NewRegistry()
-	labels := registry.GetLabels(context.Background(), "0xee567fe1712faf6149d80da1e6934e354124cfe3")
-	if len(labels) == 0 || labels[0].Label != "Uniswap V2 Router" { t.Fatalf("labels = %#v", labels) }
-}
-
-func TestLabelSearchHonorsLimit(t *testing.T) {
-	labels := NewRegistry().SearchLabels(context.Background(), "", "", 1)
-	if len(labels) != 1 { t.Fatalf("labels = %d", len(labels)) }
+func TestSeedLabelsArePublicMainnetEvidenceBacked(t *testing.T) {
+	items, err := SeedLabels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected curated labels")
+	}
+	for _, item := range items {
+		if item.Network != ethereumMainnet || item.Visibility != "public" || item.EvidenceURL == "" || item.Source == "" || item.SourceVersion == "" || item.TrustTier == 0 || item.CreatedAt.IsZero() {
+			t.Fatalf("label lacks required provenance: %#v", item)
+		}
+	}
 }

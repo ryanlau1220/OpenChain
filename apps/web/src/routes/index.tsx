@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { CaseWorkspace } from '../components/CaseWorkspace';
+import { EvidencePaths } from '../components/EvidencePaths';
 import { Header } from '../components/Header';
 import { WalletLookup } from '../components/WalletLookup';
 import { type AddressLabel, type AddressSummary, type GraphEdge, type GraphNode, TraceGraphResponse, expandNode, fetchTraceGraph, lookupAddress } from '../services/api';
@@ -143,6 +144,7 @@ function Index() {
 			<div className="w-80 overflow-y-auto p-4" style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}>
 				<h3 className="text-[10px] uppercase font-bold tracking-widest mb-4" style={{ color: 'var(--ink-3)' }}>Address Inspector</h3>
 				<WalletLookup summary={summary} labels={labels} loading={loading} targetSeedAddress={address} onTraceAddress={(value) => { setAddress(value); void load(value); }} />
+				{graphData && <EvidencePaths nodes={graphData.nodes} edges={graphData.edges} />}
 				<CaseWorkspace caseFile={caseFile} onChange={setCaseFile} activeTarget={selectedEdge ? { kind: 'transfer', id: selectedEdge.id } : selectedNode ? { kind: 'address', id: selectedNode.id } : null} />
 			</div>
 		</div>
