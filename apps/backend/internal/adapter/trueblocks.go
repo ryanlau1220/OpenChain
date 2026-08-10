@@ -56,7 +56,6 @@ type trueBlocksTransaction struct {
 	From        string      `json:"from"`
 	To          string      `json:"to"`
 	Value       json.Number `json:"value"`
-	IsError     json.Number `json:"isError"`
 }
 
 func (c *TrueBlocksClient) ListNativeTransfers(ctx context.Context, address string, limit uint32, cursor uint64, latestBlock uint64) (*TransferPage, error) {

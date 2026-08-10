@@ -2,9 +2,11 @@ package db_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -48,8 +50,15 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 	if err := database.InitSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
+	database.SQL.SetMaxOpenConns(1)
+	database.SQL.SetMaxIdleConns(1)
+	schema := "openchain_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s; CREATE TABLE %s.trace_jobs (LIKE public.trace_jobs INCLUDING ALL); SET search_path = %s, public`, schema, schema, schema)); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = 'ethereum-mainnet' AND address = $1`, from)
+		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM transfers WHERE id = $1`, "ethereum-mainnet:"+hash+":0")
 	}()
 

@@ -58,7 +58,7 @@ function Index() {
 		if (!graphData?.pending) return;
 		const timer = window.setTimeout(() => void load(graphData.seedAddress, true), 2000);
 		return () => window.clearTimeout(timer);
-	}, [graphData?.pending, graphData?.seedAddress, load]);
+	}, [graphData, load]);
 
 	const handleSelect = useCallback(async (node: GraphNode | null) => {
 		setSelectedNode(node);
