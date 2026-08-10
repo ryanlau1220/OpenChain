@@ -35,8 +35,15 @@ case "$1" in
             exit 1
         fi
 
-        # Free ports 8081 and 3000 from lingering background processes
-        fuser -k 8081/tcp 3000/tcp 2>/dev/null || true
+        export GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}"
+
+        web_port="${WEB_ORIGIN##*:}"
+        if ! [[ "${web_port}" =~ ^[0-9]+$ ]]; then
+            web_port=3000
+        fi
+
+        # Free configured ports from lingering development processes
+        fuser -k "${PORT:-8081}/tcp" "${web_port}/tcp" 2>/dev/null || true
 
         trap cleanup_dev INT TERM
 
@@ -53,8 +60,8 @@ case "$1" in
         done
 
         echo -e "${GREEN}✓ [OK] OpenChain Go Backend is 100% HEALTHY & READY on port ${PORT:-8081}!${RESET}"
-        echo -e "${MAGENTA}Launching OpenChain TanStack Start Web App (Port 3000)...${RESET}"
-        (pnpm --filter @openchain/web dev 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
+        echo -e "${MAGENTA}Launching OpenChain TanStack Start Web App (Port ${web_port})...${RESET}"
+        (cd apps/web && pnpm exec vite dev --port "${web_port}" 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
         wait
 
         ;;
