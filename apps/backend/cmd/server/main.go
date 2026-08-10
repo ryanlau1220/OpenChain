@@ -57,7 +57,7 @@ func main() {
 		evmClient := adapter.NewEVMClient(network.rpcURL)
 		var chainAdapter adapter.ChainAdapter
 		if network.id == pb.Network_NETWORK_BASE_MAINNET {
-			chainAdapter = adapter.NewBlockscoutChainAdapter(network.name, adapter.BlockscoutBaseAPIURL, evmClient)
+			chainAdapter = adapter.NewBlockscoutChainAdapter(network.name, adapter.BlockscoutBaseAPIURL, cfg.BlockscoutAPIKey, evmClient)
 		} else {
 			chainAdapter = adapter.NewEVMChainAdapter(network.name, network.chainID, adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
 		}

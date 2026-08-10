@@ -10,6 +10,9 @@ import (
 
 func TestBlockscoutListsDirectBaseTransferFacts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer test-key" {
+			t.Fatalf("authorization = %q", request.Header.Get("Authorization"))
+		}
 		switch {
 		case strings.HasSuffix(request.URL.Path, "/token-transfers"):
 			_, _ = writer.Write([]byte(`{"items":[{"transaction_hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","from":{"hash":"0x1111111111111111111111111111111111111111"},"to":{"hash":"0x4444444444444444444444444444444444444444"},"token":{"address_hash":"0x5555555555555555555555555555555555555555","symbol":"USDC","decimals":"6"},"total":{"value":"1234567"},"token_type":"ERC-20","log_index":9,"block_number":12,"timestamp":"2026-08-10T00:00:00.000000Z"}]}`))
@@ -23,7 +26,7 @@ func TestBlockscoutListsDirectBaseTransferFacts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	page, err := NewBlockscoutChainAdapter("base-mainnet", server.URL, nil).ListTransfers(context.Background(), "0x1111111111111111111111111111111111111111", 3, "")
+	page, err := NewBlockscoutChainAdapter("base-mainnet", server.URL, "test-key", nil).ListTransfers(context.Background(), "0x1111111111111111111111111111111111111111", 3, "")
 	if err != nil {
 		t.Fatal(err)
 	}

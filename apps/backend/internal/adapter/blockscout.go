@@ -16,24 +16,24 @@ import (
 )
 
 const (
-	BlockscoutBaseAPIURL = "https://base.blockscout.com/api/v2"
+	BlockscoutBaseAPIURL = "https://api.blockscout.com/8453/api/v2"
 	BlockscoutSource     = "blockscout-base"
 	blockscoutRequestGap = time.Second / 5
 )
 
-// BlockscoutChainAdapter reads Base transfer facts from Base's public Blockscout indexer.
-// It does not use the Etherscan key, whose free plan does not include Base history.
+// BlockscoutChainAdapter reads Base transfer facts from Blockscout's authenticated API.
 type BlockscoutChainAdapter struct {
 	network     string
 	apiURL      string
+	apiKey      string
 	evmClient   *EVMClient
 	httpClient  *http.Client
 	requestMu   sync.Mutex
 	lastRequest time.Time
 }
 
-func NewBlockscoutChainAdapter(network, apiURL string, evmClient *EVMClient) *BlockscoutChainAdapter {
-	return &BlockscoutChainAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}}
+func NewBlockscoutChainAdapter(network, apiURL, apiKey string, evmClient *EVMClient) *BlockscoutChainAdapter {
+	return &BlockscoutChainAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), apiKey: apiKey, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}}
 }
 
 func (a *BlockscoutChainAdapter) Network() string { return a.network }
@@ -315,6 +315,7 @@ func (a *BlockscoutChainAdapter) get(ctx context.Context, path string, query url
 	if err != nil {
 		return err
 	}
+	request.Header.Set("Authorization", "Bearer "+a.apiKey)
 	response, err := a.httpClient.Do(request)
 	if err != nil {
 		return fmt.Errorf("Blockscout request failed")

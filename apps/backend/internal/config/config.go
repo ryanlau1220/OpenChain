@@ -13,6 +13,7 @@ type Config struct {
 	EthereumMainnetRPCURL   string
 	BaseMainnetRPCURL       string
 	EtherscanAPIKey         string
+	BlockscoutAPIKey        string
 	WebOrigin               string
 	PublicRequestsPerMinute int
 	MaxQueuedTraceJobs      int
@@ -34,6 +35,7 @@ func LoadConfig() *Config {
 	ethRPC := os.Getenv("ETHEREUM_MAINNET_RPC_URL")
 	baseRPC := os.Getenv("BASE_MAINNET_RPC_URL")
 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
+	blockscoutAPIKey := os.Getenv("BLOCKSCOUT_API_KEY")
 
 	webOrigin := os.Getenv("WEB_ORIGIN")
 	if webOrigin == "" {
@@ -56,6 +58,7 @@ func LoadConfig() *Config {
 		EthereumMainnetRPCURL:   ethRPC,
 		BaseMainnetRPCURL:       baseRPC,
 		EtherscanAPIKey:         etherscanAPIKey,
+		BlockscoutAPIKey:        blockscoutAPIKey,
 		WebOrigin:               webOrigin,
 		PublicRequestsPerMinute: publicRequestsPerMinute,
 		MaxQueuedTraceJobs:      maxQueuedTraceJobs,
@@ -80,6 +83,9 @@ func (c *Config) Validate() error {
 	}
 	if c.EtherscanAPIKey == "" {
 		return fmt.Errorf("ETHERSCAN_API_KEY is required")
+	}
+	if c.BlockscoutAPIKey == "" {
+		return fmt.Errorf("BLOCKSCOUT_API_KEY is required")
 	}
 	return nil
 }
