@@ -426,7 +426,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						<option value="concentric">Concentric</option>
 						<option value="grid">Grid</option>
 					</select>
-
 				</div>
 			</div>
 

@@ -1,20 +1,11 @@
-import {
-	Check,
-	Clock,
-	Copy,
-	ExternalLink,
-	Shield,
-	Tag,
-	Target,
-	Wallet,
-} from 'lucide-react';
+import { Check, Clock, Copy, ExternalLink, Shield, Tag, Target, Wallet } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import {
 	type AddressLabel,
 	type AddressSummary,
-	entityLabel,
 	LabelVisibility,
+	entityLabel,
 } from '../services/api';
 
 interface WalletLookupProps {
@@ -181,7 +172,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 										}}
 									>
 										<div className="flex items-center gap-1.5">
-							<Shield className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+											<Shield className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
 											<div>
 												<span className="font-semibold block text-[var(--ink)]">
 													{l.category}: {l.label}
@@ -191,11 +182,13 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 														? 'Tier 1 Authoritative'
 														: tier === 2
 															? 'Tier 2 Community Verified'
-															: 'Tier 3 Workspace'} · {l.source || 'Unknown source'}
+															: 'Tier 3 Workspace'}{' '}
+													· {l.source || 'Unknown source'}
 												</span>
 												{l.sourceVersion && (
 													<span className="text-[9px] text-[var(--ink-3)] block">
-														{l.visibility === LabelVisibility.PUBLIC ? 'Public' : 'Unspecified'} · {l.sourceVersion}
+														{l.visibility === LabelVisibility.PUBLIC ? 'Public' : 'Unspecified'} ·{' '}
+														{l.sourceVersion}
 													</span>
 												)}
 											</div>
@@ -249,16 +242,12 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 							<span>{label}</span>
 							{icon}
 						</div>
-						<p
-							className="font-semibold font-mono text-xs"
-							style={{ color: 'var(--ink)' }}
-						>
+						<p className="font-semibold font-mono text-xs" style={{ color: 'var(--ink)' }}>
 							{value}
 						</p>
 					</div>
 				))}
 			</div>
-
 		</div>
 	);
 };

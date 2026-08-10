@@ -3,7 +3,7 @@ import { createConnectTransport } from '@connectrpc/connect-web';
 import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
 import { EntityType } from '@openchain/proto/openchain/v1/common_pb';
 import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
-import { LabelVisibility, type AddressLabel } from '@openchain/proto/openchain/v1/labels_pb';
+import { type AddressLabel, LabelVisibility } from '@openchain/proto/openchain/v1/labels_pb';
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
@@ -12,7 +12,8 @@ import {
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
 
-const API_BASE = import.meta.env.VITE_API_URL || (typeof window === 'undefined' ? '' : window.location.origin);
+const API_BASE =
+	import.meta.env.VITE_API_URL || (typeof window === 'undefined' ? '' : window.location.origin);
 
 const transport = createConnectTransport({ baseUrl: API_BASE });
 
@@ -21,12 +22,7 @@ export const lookupClient = createClient(LookupService, transport);
 export const labelClient = createClient(LabelService, transport);
 
 // Re-export generated proto types for consumer convenience
-export type {
-	GraphNode,
-	GraphEdge,
-	AddressLabel,
-	AddressSummary,
-};
+export type { GraphNode, GraphEdge, AddressLabel, AddressSummary };
 export { EntityType, LabelVisibility, TraceGraphResponse };
 
 export function entityLabel(t?: EntityType): string {
@@ -48,7 +44,10 @@ export function entityLabel(t?: EntityType): string {
 
 // ── Tracing ─────────────────────────────────────────────────────────────────────
 
-export async function fetchTraceGraph(seedAddress: string, retry = false): Promise<TraceGraphResponse> {
+export async function fetchTraceGraph(
+	seedAddress: string,
+	retry = false,
+): Promise<TraceGraphResponse> {
 	return tracingClient.traceGraph({ seedAddress, network: 1, limit: 25, retry });
 }
 
@@ -71,7 +70,9 @@ export async function expandNode(address: string, cursor = '', retry = false) {
 }
 
 export function requestErrorMessage(error: unknown, fallback: string): string {
-	if (error instanceof ConnectError && error.code === Code.ResourceExhausted) return error.rawMessage;
-	if (error instanceof ConnectError && error.code === Code.Unavailable) return 'Ethereum data is temporarily unavailable. Please try again.';
+	if (error instanceof ConnectError && error.code === Code.ResourceExhausted)
+		return error.rawMessage;
+	if (error instanceof ConnectError && error.code === Code.Unavailable)
+		return 'Ethereum data is temporarily unavailable. Please try again.';
 	return fallback;
 }

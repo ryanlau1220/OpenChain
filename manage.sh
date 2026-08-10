@@ -121,11 +121,26 @@ case "$1" in
         ;;
 
     test)
-        echo -e "${CYAN}Running Go backend unit, integration & E2E tests...${RESET}"
+        echo -e "${CYAN}Running Go backend unit and integration tests...${RESET}"
         (cd apps/backend && go test -v ./...)
         echo -e "${MAGENTA}Running web frontend unit tests (Vitest)...${RESET}"
-        pnpm --filter @openchain/web test
+        env -u NODE_OPTIONS pnpm --filter @openchain/web test
         echo -e "${GREEN}✓ Full-stack test suite complete.${RESET}"
+        ;;
+
+    test:e2e)
+        api_url="http://localhost:${PORT:-8081}/api/v1/health"
+        web_url="${WEB_ORIGIN:-http://localhost:3000}"
+        echo -e "${CYAN}Checking the running backend and web application...${RESET}"
+        if ! curl --fail --silent --show-error "${api_url}" | rg -q '"status":"healthy"'; then
+            echo -e "${RED}Backend health check failed. Start the stack with ./manage.sh docker and ./manage.sh dev first.${RESET}"
+            exit 1
+        fi
+        if ! curl --fail --silent --show-error "${web_url}" | rg -q '<title>OpenChain'; then
+            echo -e "${RED}Web smoke check failed. Start the stack with ./manage.sh dev first.${RESET}"
+            exit 1
+        fi
+        echo -e "${GREEN}✓ Live backend and web smoke checks passed.${RESET}"
         ;;
 
     clean)
@@ -135,7 +150,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|build|lint|check|test|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|build|lint|check|test|test:e2e|clean}"
         exit 1
         ;;
 esac
