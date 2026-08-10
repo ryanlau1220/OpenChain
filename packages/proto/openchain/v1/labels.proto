@@ -55,6 +55,7 @@ message SearchLabelsRequest {
   string query = 1;
   string category = 2;
   uint32 limit = 3;
+  Network network = 4;
 }
 
 message SearchLabelsResponse {

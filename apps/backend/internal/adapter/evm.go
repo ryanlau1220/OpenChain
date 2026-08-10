@@ -202,6 +202,20 @@ type LogItem struct {
 	LogIndex         string   `json:"logIndex"`
 }
 
+func (c *EVMClient) GetTransactionReceiptLogs(ctx context.Context, hash string) ([]LogItem, error) {
+	raw, err := c.callRPC(ctx, "eth_getTransactionReceipt", []interface{}{hash})
+	if err != nil {
+		return nil, err
+	}
+	var receipt struct {
+		Logs []LogItem `json:"logs"`
+	}
+	if string(raw) == "null" || json.Unmarshal(raw, &receipt) != nil {
+		return nil, fmt.Errorf("transaction receipt is unavailable")
+	}
+	return receipt.Logs, nil
+}
+
 // ERC20 Transfer event signature: Transfer(address,address,uint256)
 const TransferEventTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 

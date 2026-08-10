@@ -30,14 +30,14 @@ func TestSeedImportIsIdempotentAndSearchable(t *testing.T) {
 	if err := service.ImportSeed(ctx); err != nil {
 		t.Fatal(err)
 	}
-	items, err := service.GetLabels(ctx, "0x7A250D5630B4CF539739DF2C5DACB4C659F2488D")
+	items, err := service.GetLabels(ctx, "ethereum-mainnet", "0x7A250D5630B4CF539739DF2C5DACB4C659F2488D")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 || items[0].Label != "Uniswap V2 Router" || items[0].SourceVersion == "" {
 		t.Fatalf("imported labels = %#v", items)
 	}
-	search, err := service.SearchLabels(ctx, "Uniswap", "DeFi", 10)
+	search, err := service.SearchLabels(ctx, "ethereum-mainnet", "Uniswap", "DeFi", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

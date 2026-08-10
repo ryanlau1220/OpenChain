@@ -9,6 +9,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	// Clear env vars to test defaults
 	_ = os.Unsetenv("PORT")
 	_ = os.Unsetenv("ETHEREUM_MAINNET_RPC_URL")
+	_ = os.Unsetenv("BASE_MAINNET_RPC_URL")
 	_ = os.Unsetenv("ETHERSCAN_API_KEY")
 	_ = os.Unsetenv("PUBLIC_REQUESTS_PER_MINUTE")
 	_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS")
@@ -27,6 +28,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 func TestLoadConfigCustomEnv(t *testing.T) {
 	_ = os.Setenv("PORT", "9090")
 	_ = os.Setenv("ETHEREUM_MAINNET_RPC_URL", "https://custom-rpc.example.com")
+	_ = os.Setenv("BASE_MAINNET_RPC_URL", "https://base-rpc.example.com")
 	_ = os.Setenv("ETHERSCAN_API_KEY", "test-key")
 	_ = os.Setenv("PUBLIC_REQUESTS_PER_MINUTE", "12")
 	_ = os.Setenv("MAX_QUEUED_TRACE_JOBS", "7")
@@ -34,6 +36,7 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 	defer func() {
 		_ = os.Unsetenv("PORT")
 		_ = os.Unsetenv("ETHEREUM_MAINNET_RPC_URL")
+		_ = os.Unsetenv("BASE_MAINNET_RPC_URL")
 		_ = os.Unsetenv("ETHERSCAN_API_KEY")
 		_ = os.Unsetenv("PUBLIC_REQUESTS_PER_MINUTE")
 		_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS")
@@ -57,7 +60,7 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 }
 
 func TestValidateRejectsInsecureRPCURL(t *testing.T) {
-	cfg := &Config{EthereumMainnetRPCURL: "http://127.0.0.1:8545", EtherscanAPIKey: "test-key"}
+	cfg := &Config{EthereumMainnetRPCURL: "http://127.0.0.1:8545", BaseMainnetRPCURL: "https://base-rpc.example.com", EtherscanAPIKey: "test-key"}
 	if cfg.Validate() == nil {
 		t.Fatal("insecure RPC URL was accepted")
 	}

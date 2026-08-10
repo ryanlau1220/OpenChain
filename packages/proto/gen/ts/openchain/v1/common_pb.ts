@@ -19,11 +19,17 @@ export enum Network {
    * @generated from enum value: NETWORK_ETHEREUM_MAINNET = 1;
    */
   ETHEREUM_MAINNET = 1,
+
+  /**
+   * @generated from enum value: NETWORK_BASE_MAINNET = 2;
+   */
+  BASE_MAINNET = 2,
 }
 // Retrieve enum metadata with: proto3.getEnumType(Network)
 proto3.util.setEnumType(Network, "openchain.v1.Network", [
   { no: 0, name: "NETWORK_UNSPECIFIED" },
   { no: 1, name: "NETWORK_ETHEREUM_MAINNET" },
+  { no: 2, name: "NETWORK_BASE_MAINNET" },
 ]);
 
 /**
@@ -140,6 +146,65 @@ export class SourceStatus extends Message<SourceStatus> {
 
   static equals(a: SourceStatus | PlainMessage<SourceStatus> | undefined, b: SourceStatus | PlainMessage<SourceStatus> | undefined): boolean {
     return proto3.util.equals(SourceStatus, a, b);
+  }
+}
+
+/**
+ * @generated from message openchain.v1.Asset
+ */
+export class Asset extends Message<Asset> {
+  /**
+   * NATIVE or ERC20
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind = "";
+
+  /**
+   * empty for native ETH
+   *
+   * @generated from field: string contract_address = 2;
+   */
+  contractAddress = "";
+
+  /**
+   * @generated from field: string symbol = 3;
+   */
+  symbol = "";
+
+  /**
+   * @generated from field: uint32 decimals = 4;
+   */
+  decimals = 0;
+
+  constructor(data?: PartialMessage<Asset>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.Asset";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "contract_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "symbol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "decimals", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Asset {
+    return new Asset().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Asset {
+    return new Asset().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Asset {
+    return new Asset().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Asset | PlainMessage<Asset> | undefined, b: Asset | PlainMessage<Asset> | undefined): boolean {
+    return proto3.util.equals(Asset, a, b);
   }
 }
 

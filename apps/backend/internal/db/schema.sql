@@ -13,16 +13,37 @@ CREATE TABLE IF NOT EXISTS public.transfers (
   id TEXT PRIMARY KEY,
   network TEXT NOT NULL,
   transaction_hash TEXT NOT NULL,
-  event_index INTEGER NOT NULL,
+  event_id TEXT NOT NULL,
+  transfer_kind TEXT NOT NULL,
   from_address TEXT NOT NULL,
   to_address TEXT NOT NULL,
   asset_symbol TEXT NOT NULL,
+  asset_kind TEXT NOT NULL,
+  asset_contract_address TEXT NOT NULL,
+  asset_decimals INTEGER NOT NULL,
   amount_base_units TEXT NOT NULL,
   block_number BIGINT NOT NULL,
   block_timestamp TIMESTAMPTZ NOT NULL,
   source TEXT NOT NULL,
   retrieved_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS public.assets (
+  network TEXT NOT NULL,
+  contract_address TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  decimals INTEGER NOT NULL,
+  retrieved_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (network, contract_address)
+);
+
+ALTER TABLE public.transfers DROP COLUMN IF EXISTS event_index;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS event_id TEXT;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS transfer_kind TEXT;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS asset_kind TEXT;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS asset_contract_address TEXT;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS asset_decimals INTEGER;
 
 CREATE INDEX IF NOT EXISTS transfers_from_network_idx ON public.transfers (network, from_address, block_number DESC);
 CREATE INDEX IF NOT EXISTS transfers_to_network_idx ON public.transfers (network, to_address, block_number DESC);

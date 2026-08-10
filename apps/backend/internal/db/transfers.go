@@ -6,35 +6,42 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/openchain/openchain/apps/backend/internal/adapter"
 )
 
 const graphName = "openchain"
 
 type Transfer struct {
-	ID, Network, TransactionHash, FromAddress, ToAddress, AssetSymbol, AmountBaseUnits, Source string
-	EventIndex                                                                                 uint32
-	BlockNumber                                                                                int64
-	BlockTimestamp, RetrievedAt                                                                time.Time
+	ID, Network, TransactionHash, EventID, TransferKind, FromAddress, ToAddress, AmountBaseUnits, Source string
+	Asset                                                                                                adapter.Asset
+	BlockNumber                                                                                          int64
+	BlockTimestamp, RetrievedAt                                                                          time.Time
 }
 
 type Address struct {
-	Address, Label, EntityType string
+	Network, Address, Label, EntityType string
 }
 
-const insertTransferSQL = `INSERT INTO transfers (id, network, transaction_hash, event_index, from_address, to_address, asset_symbol, amount_base_units, block_number, block_timestamp, source, retrieved_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`
+const insertTransferSQL = `INSERT INTO transfers (id, network, transaction_hash, event_id, transfer_kind, from_address, to_address, asset_symbol, asset_kind, asset_contract_address, asset_decimals, amount_base_units, block_number, block_timestamp, source, retrieved_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (id) DO NOTHING`
+const upsertAssetSQL = `INSERT INTO assets (network, contract_address, kind, symbol, decimals, retrieved_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (network, contract_address) DO UPDATE SET kind = EXCLUDED.kind, symbol = EXCLUDED.symbol, decimals = EXCLUDED.decimals, retrieved_at = EXCLUDED.retrieved_at`
 
 const upsertAddressSQL = `SELECT * FROM cypher('openchain', $$
-MERGE (address:Address {address: $address})
+MERGE (address:Address {network: $network, address: $address})
 SET address.label = $label, address.entity_type = $entity_type
 RETURN address
 $$, $1) AS (result agtype)`
 
 const upsertFundFlowSQL = `SELECT * FROM cypher('openchain', $$
-MATCH (from:Address {address: $from_address}), (to:Address {address: $to_address})
+MATCH (from:Address {network: $network, address: $from_address}), (to:Address {network: $network, address: $to_address})
 MERGE (from)-[flow:FundFlow {id: $id}]->(to)
 SET flow.network = $network,
     flow.transaction_hash = $transaction_hash,
-    flow.event_index = $event_index,
+    flow.event_id = $event_id,
+    flow.transfer_kind = $transfer_kind,
+    flow.asset_kind = $asset_kind,
+    flow.asset_contract_address = $asset_contract_address,
+    flow.asset_decimals = $asset_decimals,
     flow.asset_symbol = $asset_symbol,
     flow.amount_base_units = $amount_base_units,
     flow.block_number = $block_number,
@@ -57,8 +64,16 @@ func (d *DB) SaveGraph(ctx context.Context, addresses []Address, transfers []Tra
 		return fmt.Errorf("prepare transfer insert: %w", err)
 	}
 	defer statement.Close()
+	assetStatement, err := tx.PrepareContext(ctx, upsertAssetSQL)
+	if err != nil {
+		return fmt.Errorf("prepare asset upsert: %w", err)
+	}
+	defer assetStatement.Close()
 	for _, transfer := range transfers {
-		if _, err := statement.ExecContext(ctx, transfer.ID, transfer.Network, transfer.TransactionHash, transfer.EventIndex, transfer.FromAddress, transfer.ToAddress, transfer.AssetSymbol, transfer.AmountBaseUnits, transfer.BlockNumber, transfer.BlockTimestamp, transfer.Source, transfer.RetrievedAt); err != nil {
+		if _, err := assetStatement.ExecContext(ctx, transfer.Network, transfer.Asset.ContractAddress, transfer.Asset.Kind, transfer.Asset.Symbol, transfer.Asset.Decimals, transfer.RetrievedAt); err != nil {
+			return fmt.Errorf("upsert asset: %w", err)
+		}
+		if _, err := statement.ExecContext(ctx, transfer.ID, transfer.Network, transfer.TransactionHash, transfer.EventID, transfer.TransferKind, transfer.FromAddress, transfer.ToAddress, transfer.Asset.Symbol, transfer.Asset.Kind, transfer.Asset.ContractAddress, transfer.Asset.Decimals, transfer.AmountBaseUnits, transfer.BlockNumber, transfer.BlockTimestamp, transfer.Source, transfer.RetrievedAt); err != nil {
 			return fmt.Errorf("insert transfer: %w", err)
 		}
 	}
@@ -69,15 +84,15 @@ func (d *DB) SaveGraph(ctx context.Context, addresses []Address, transfers []Tra
 		return fmt.Errorf("set Apache AGE search path: %w", err)
 	}
 	for _, address := range addresses {
-		if err := execCypher(ctx, tx, upsertAddressSQL, map[string]string{"address": address.Address, "label": address.Label, "entity_type": address.EntityType}); err != nil {
+		if err := execCypher(ctx, tx, upsertAddressSQL, map[string]string{"network": address.Network, "address": address.Address, "label": address.Label, "entity_type": address.EntityType}); err != nil {
 			return fmt.Errorf("upsert address graph node: %w", err)
 		}
 	}
 	for _, transfer := range transfers {
 		if err := execCypher(ctx, tx, upsertFundFlowSQL, map[string]any{
 			"id": transfer.ID, "network": transfer.Network, "transaction_hash": transfer.TransactionHash,
-			"event_index": transfer.EventIndex, "from_address": transfer.FromAddress, "to_address": transfer.ToAddress,
-			"asset_symbol": transfer.AssetSymbol, "amount_base_units": transfer.AmountBaseUnits,
+			"event_id": transfer.EventID, "transfer_kind": transfer.TransferKind, "from_address": transfer.FromAddress, "to_address": transfer.ToAddress,
+			"asset_symbol": transfer.Asset.Symbol, "asset_kind": transfer.Asset.Kind, "asset_contract_address": transfer.Asset.ContractAddress, "asset_decimals": transfer.Asset.Decimals, "amount_base_units": transfer.AmountBaseUnits,
 			"block_number": transfer.BlockNumber, "block_timestamp": transfer.BlockTimestamp.Unix(), "source": transfer.Source,
 		}); err != nil {
 			return fmt.Errorf("upsert fund flow graph edge: %w", err)

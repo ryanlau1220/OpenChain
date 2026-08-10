@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
@@ -33,24 +35,42 @@ func withLogging(next http.HandlerFunc) http.HandlerFunc {
 }
 
 type Server struct {
-	evm            *adapter.EVMClient
+	networks       map[pb.Network]NetworkRuntime
 	labels         *labels.Service
-	tracingEngine  *tracing.Engine
-	tracingQueue   *tracing.Queue
 	webOrigin      string
 	requestLimiter *RequestLimiter
 	trustProxy     bool
 }
 
-func NewServer(evm *adapter.EVMClient, registry *labels.Service, engine *tracing.Engine, queue *tracing.Queue, webOrigin string, publicRequestsPerMinute int, trustProxy bool) *Server {
-	return &Server{evm: evm, labels: registry, tracingEngine: engine, tracingQueue: queue, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy}
+var errUnsupportedNetwork = errors.New("unsupported network")
+
+type NetworkRuntime struct {
+	EVM    *adapter.EVMClient
+	Engine *tracing.Engine
+	Queue  *tracing.Queue
 }
 
-func (s *Server) traceGraph(ctx context.Context, address string, direction tracing.Direction, limit uint32, cursor string, retry bool) (*tracing.GraphResult, error) {
-	if s.tracingQueue != nil {
-		return s.tracingQueue.TraceGraph(ctx, address, direction, limit, cursor, retry)
+func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service, webOrigin string, publicRequestsPerMinute int, trustProxy bool) *Server {
+	return &Server{networks: networks, labels: registry, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy}
+}
+
+func (s *Server) network(network pb.Network) (NetworkRuntime, error) {
+	runtime, ok := s.networks[network]
+	if !ok || runtime.Engine == nil {
+		return NetworkRuntime{}, errUnsupportedNetwork
 	}
-	return s.tracingEngine.ResolveGraph(ctx, address, direction, limit, cursor)
+	return runtime, nil
+}
+
+func (s *Server) traceGraph(ctx context.Context, network pb.Network, address string, direction tracing.Direction, limit uint32, cursor string, retry bool) (*tracing.GraphResult, error) {
+	runtime, err := s.network(network)
+	if err != nil {
+		return nil, err
+	}
+	if runtime.Queue != nil {
+		return runtime.Queue.TraceGraph(ctx, address, direction, limit, cursor, retry)
+	}
+	return runtime.Engine.ResolveGraph(ctx, address, direction, limit, cursor)
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
@@ -82,7 +102,20 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	queue, err := s.tracingQueue.Stats(r.Context())
+	queue := tracing.Stats{}
+	networks := make([]string, 0, len(s.networks))
+	var err error
+	for network, runtime := range s.networks {
+		networks = append(networks, network.String())
+		stats, statsErr := runtime.Queue.Stats(r.Context())
+		if statsErr != nil && err == nil {
+			err = statsErr
+		}
+		queue.Enabled = queue.Enabled || stats.Enabled
+		queue.Queued += stats.Queued
+		queue.Running += stats.Running
+		queue.Failed += stats.Failed
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		slog.Error("health queue stats", "error", err)
@@ -93,12 +126,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		status = "unhealthy"
 	}
 	_ = json.NewEncoder(w).Encode(struct {
-		Status  string               `json:"status"`
-		Service string               `json:"service"`
-		Network string               `json:"network"`
-		Source  adapter.SourceStatus `json:"source"`
-		Queue   tracing.Stats        `json:"queue"`
-	}{Status: status, Service: "openchain-api", Network: "ETHEREUM_MAINNET", Source: s.tracingEngine.SourceStatus(r.Context()), Queue: queue})
+		Status   string        `json:"status"`
+		Service  string        `json:"service"`
+		Networks []string      `json:"networks"`
+		Queue    tracing.Stats `json:"queue"`
+	}{Status: status, Service: "openchain-api", Networks: networks, Queue: queue})
 }
 
 func shortAddress(address string) string {

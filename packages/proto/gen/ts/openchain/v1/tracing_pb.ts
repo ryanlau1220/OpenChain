@@ -5,7 +5,7 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
-import { EntityType, Network, SourceStatus } from "./common_pb.js";
+import { Asset, EntityType, Network, SourceStatus } from "./common_pb.js";
 import { AddressLabel } from "./labels_pb.js";
 
 /**
@@ -141,14 +141,14 @@ export class GraphEdge extends Message<GraphEdge> {
   target = "";
 
   /**
-   * @generated from field: string value_wei = 4;
+   * @generated from field: string amount_base_units = 4;
    */
-  valueWei = "";
+  amountBaseUnits = "";
 
   /**
-   * @generated from field: string value_formatted = 5;
+   * @generated from field: string amount_formatted = 5;
    */
-  valueFormatted = "";
+  amountFormatted = "";
 
   /**
    * @generated from field: uint32 tx_count = 6;
@@ -156,11 +156,9 @@ export class GraphEdge extends Message<GraphEdge> {
   txCount = 0;
 
   /**
-   * ETH or ERC20 symbol
-   *
-   * @generated from field: string asset_symbol = 7;
+   * @generated from field: openchain.v1.Asset asset = 7;
    */
-  assetSymbol = "";
+  asset?: Asset;
 
   /**
    * @generated from field: int64 first_tx_timestamp = 8;
@@ -173,9 +171,11 @@ export class GraphEdge extends Message<GraphEdge> {
   lastTxTimestamp = protoInt64.zero;
 
   /**
-   * @generated from field: uint32 event_index = 10;
+   * provider log index, trace ID, or transaction event key
+   *
+   * @generated from field: string event_id = 10;
    */
-  eventIndex = 0;
+  eventId = "";
 
   /**
    * @generated from field: uint64 block_number = 11;
@@ -186,6 +186,23 @@ export class GraphEdge extends Message<GraphEdge> {
    * @generated from field: string transaction_hash = 12;
    */
   transactionHash = "";
+
+  /**
+   * NATIVE, INTERNAL, or ERC20
+   *
+   * @generated from field: string transfer_kind = 13;
+   */
+  transferKind = "";
+
+  /**
+   * @generated from field: string source_name = 14;
+   */
+  sourceName = "";
+
+  /**
+   * @generated from field: int64 retrieved_at = 15;
+   */
+  retrievedAt = protoInt64.zero;
 
   constructor(data?: PartialMessage<GraphEdge>) {
     super();
@@ -198,15 +215,18 @@ export class GraphEdge extends Message<GraphEdge> {
     { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "target", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 4, name: "value_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 5, name: "value_formatted", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "amount_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "amount_formatted", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
-    { no: 7, name: "asset_symbol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "asset", kind: "message", T: Asset },
     { no: 8, name: "first_tx_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 9, name: "last_tx_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
-    { no: 10, name: "event_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 10, name: "event_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 11, name: "block_number", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
     { no: 12, name: "transaction_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 13, name: "transfer_kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 14, name: "source_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 15, name: "retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GraphEdge {

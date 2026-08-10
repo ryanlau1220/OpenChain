@@ -6,7 +6,20 @@ import (
 	"time"
 )
 
-// TransactionItem represents a normalized blockchain transaction/transfer across any network
+type Asset struct {
+	Kind, ContractAddress, Symbol string
+	Decimals                      uint32
+}
+
+// TransferItem is one observed transfer event, never an inferred flow.
+type TransferItem struct {
+	Hash, EventID, TransferKind, From, To, AmountBaseUnits string
+	Asset                                                  Asset
+	BlockNumber                                            int64
+	Timestamp                                              time.Time
+}
+
+// TransactionItem represents a normalized transaction lookup response.
 type TransactionItem struct {
 	Hash             string    `json:"hash"`
 	From             string    `json:"from"`
@@ -33,7 +46,7 @@ type SourceStatus struct {
 }
 
 type TransferPage struct {
-	Transactions []TransactionItem
+	Transfers    []TransferItem
 	NextCursor   string
 	HasMore      bool
 	SourceStatus SourceStatus
@@ -52,7 +65,8 @@ type ChainAdapter interface {
 	GetBalance(ctx context.Context, address string) (*big.Int, error)
 	GetTxCount(ctx context.Context, address string) (uint64, error)
 	IsContract(ctx context.Context, address string) (bool, error)
-	ListNativeTransfers(ctx context.Context, address string, limit uint32, cursor uint64) (*TransferPage, error)
+	ListTransfers(ctx context.Context, address string, limit uint32, cursor string) (*TransferPage, error)
 	LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error)
 	GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error)
+	SourceStatus() SourceStatus
 }

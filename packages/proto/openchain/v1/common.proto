@@ -7,6 +7,7 @@ option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openc
 enum Network {
   NETWORK_UNSPECIFIED = 0;
   NETWORK_ETHEREUM_MAINNET = 1;
+  NETWORK_BASE_MAINNET = 2;
 }
 
 message SourceStatus {
@@ -26,6 +27,13 @@ enum EntityType {
   ENTITY_TYPE_MIXER = 4;
   ENTITY_TYPE_BRIDGE = 5;
   ENTITY_TYPE_DEFI_POOL = 6;
+}
+
+message Asset {
+  string kind = 1; // NATIVE or ERC20
+  string contract_address = 2; // empty for native ETH
+  string symbol = 3;
+  uint32 decimals = 4;
 }
 
 message AddressSummary {

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/openchain/openchain/apps/backend/internal/adapter"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -34,12 +36,12 @@ func TestSaveGraphIntegration(t *testing.T) {
 	}
 	from := "0x1000000000000000000000000000000000000001"
 	to := "0x2000000000000000000000000000000000000002"
-	transfer := Transfer{ID: "ethereum-mainnet:test-graph:0", Network: "ethereum-mainnet", TransactionHash: "0xtest-graph", FromAddress: from, ToAddress: to, AssetSymbol: "ETH", AmountBaseUnits: "42", BlockNumber: 1, BlockTimestamp: time.Unix(1, 0), Source: "test", RetrievedAt: time.Now().UTC()}
+	transfer := Transfer{ID: "ethereum-mainnet:test-graph:tx", Network: "ethereum-mainnet", TransactionHash: "0xtest-graph", EventID: "tx", TransferKind: "NATIVE", FromAddress: from, ToAddress: to, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, AmountBaseUnits: "42", BlockNumber: 1, BlockTimestamp: time.Unix(1, 0), Source: "test", RetrievedAt: time.Now().UTC()}
 	defer func() {
-		cleanupGraph(t, database, transfer.ID, from, to)
+		cleanupGraph(t, database, transfer.ID, transfer.Network, from, to)
 		_, _ = database.SQL.Exec(`DELETE FROM transfers WHERE id = $1`, transfer.ID)
 	}()
-	if err := database.SaveGraph(ctx, []Address{{Address: from, Label: "From", EntityType: "EOA"}, {Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}); err != nil {
+	if err := database.SaveGraph(ctx, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}); err != nil {
 		t.Fatal(err)
 	}
 	var relationalCount int
@@ -48,6 +50,10 @@ func TestSaveGraphIntegration(t *testing.T) {
 	}
 	if relationalCount != 1 || graphFundFlowCount(t, database, transfer.ID) != 1 {
 		t.Fatalf("transfer was not persisted to both stores")
+	}
+	var assetCount int
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM assets WHERE network = $1 AND contract_address = $2`, transfer.Network, "").Scan(&assetCount); err != nil || assetCount != 1 {
+		t.Fatalf("asset was not persisted: count=%d err=%v", assetCount, err)
 	}
 }
 
@@ -80,6 +86,11 @@ func TestTraceJobIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	baseQuery := query
+	baseQuery.Network = "base-mainnet"
+	if _, err := database.EnqueueTraceJob(ctx, baseQuery, false, 2); err != nil {
+		t.Fatal(err)
+	}
 	duplicate, err := database.EnqueueTraceJob(ctx, query, false, 2)
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +99,7 @@ func TestTraceJobIntegration(t *testing.T) {
 		t.Fatalf("duplicate enqueue = %#v, want existing queued job %#v", duplicate, queued)
 	}
 
-	claimed, err := database.ClaimTraceJob(ctx, time.Minute)
+	claimed, err := database.ClaimTraceJob(ctx, query.Network, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,16 +109,16 @@ func TestTraceJobIntegration(t *testing.T) {
 	if err := database.RequeueTraceJob(ctx, claimed.ID); err != nil {
 		t.Fatal(err)
 	}
-	claimed, err = database.ClaimTraceJob(ctx, time.Minute)
+	claimed, err = database.ClaimTraceJob(ctx, query.Network, time.Minute)
 	if err != nil || claimed == nil || claimed.ID != queued.ID || claimed.Status != "running" {
 		t.Fatalf("reclaimed = %#v, err = %v", claimed, err)
 	}
-	other, err := database.ClaimTraceJob(ctx, time.Minute)
+	other, err := database.ClaimTraceJob(ctx, query.Network, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if other != nil {
-		t.Fatalf("claimed more than one trace job: %#v", other)
+		t.Fatalf("claimed a job from another network: %#v", other)
 	}
 
 	result := []byte(`{"seed_address":"trace-job-test-address","nodes":[],"edges":[]}`)
@@ -174,7 +185,7 @@ func graphFundFlowCount(t *testing.T, database *DB, id string) int {
 	return value
 }
 
-func cleanupGraph(t *testing.T, database *DB, flowID, from, to string) {
+func cleanupGraph(t *testing.T, database *DB, flowID, network, from, to string) {
 	t.Helper()
 	ctx := context.Background()
 	tx, err := database.SQL.BeginTx(ctx, nil)
@@ -193,8 +204,8 @@ func cleanupGraph(t *testing.T, database *DB, flowID, from, to string) {
 		params map[string]string
 	}{
 		{`SELECT * FROM cypher('openchain', $$ MATCH ()-[flow:FundFlow {id: $id}]->() DELETE flow RETURN count(flow) $$, $1) AS (result agtype)`, map[string]string{"id": flowID}},
-		{`SELECT * FROM cypher('openchain', $$ MATCH (address:Address {address: $address}) DETACH DELETE address RETURN count(address) $$, $1) AS (result agtype)`, map[string]string{"address": from}},
-		{`SELECT * FROM cypher('openchain', $$ MATCH (address:Address {address: $address}) DETACH DELETE address RETURN count(address) $$, $1) AS (result agtype)`, map[string]string{"address": to}},
+		{`SELECT * FROM cypher('openchain', $$ MATCH (address:Address {network: $network, address: $address}) DETACH DELETE address RETURN count(address) $$, $1) AS (result agtype)`, map[string]string{"network": network, "address": from}},
+		{`SELECT * FROM cypher('openchain', $$ MATCH (address:Address {network: $network, address: $address}) DETACH DELETE address RETURN count(address) $$, $1) AS (result agtype)`, map[string]string{"network": network, "address": to}},
 	} {
 		if err := execCypher(ctx, tx, query.query, query.params); err != nil {
 			t.Fatal(err)

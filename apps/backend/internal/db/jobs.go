@@ -85,31 +85,31 @@ type TraceJobStats struct {
 	Failed  int64
 }
 
-func (d *DB) TraceJobStats(ctx context.Context) (TraceJobStats, error) {
+func (d *DB) TraceJobStats(ctx context.Context, network string) (TraceJobStats, error) {
 	stats := TraceJobStats{}
-	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed') FROM trace_jobs`).Scan(&stats.Queued, &stats.Running, &stats.Failed)
+	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed') FROM trace_jobs WHERE network = $1`, network).Scan(&stats.Queued, &stats.Running, &stats.Failed)
 	return stats, err
 }
 
-func (d *DB) RecoverExpiredTraceJobs(ctx context.Context) error {
-	_, err := d.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'queued', lease_expires_at = NULL, updated_at = now() WHERE status = 'running' AND lease_expires_at < now()`)
+func (d *DB) RecoverExpiredTraceJobs(ctx context.Context, network string) error {
+	_, err := d.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'queued', lease_expires_at = NULL, updated_at = now() WHERE network = $1 AND status = 'running' AND lease_expires_at < now()`, network)
 	return err
 }
 
-func (d *DB) ClaimTraceJob(ctx context.Context, lease time.Duration) (*TraceJob, error) {
+func (d *DB) ClaimTraceJob(ctx context.Context, network string, lease time.Duration) (*TraceJob, error) {
 	const statement = `WITH next_job AS (
   SELECT id FROM trace_jobs
-  WHERE status = 'queued'
+  WHERE network = $1 AND status = 'queued'
   ORDER BY created_at
   FOR UPDATE SKIP LOCKED
   LIMIT 1
 )
 UPDATE trace_jobs
-SET status = 'running', lease_expires_at = now() + $1::interval, updated_at = now()
+SET status = 'running', lease_expires_at = now() + $2::interval, updated_at = now()
 FROM next_job
 WHERE trace_jobs.id = next_job.id
 RETURNING trace_jobs.id, trace_jobs.network, trace_jobs.address, trace_jobs.direction, trace_jobs.cursor, trace_jobs.page_size, trace_jobs.status, trace_jobs.result_json, COALESCE(trace_jobs.error_message, '')`
-	job, err := scanTraceJob(d.SQL.QueryRowContext(ctx, statement, lease.String()))
+	job, err := scanTraceJob(d.SQL.QueryRowContext(ctx, statement, network, lease.String()))
 	if errors.Is(err, sql.ErrNoRows) || isUniqueViolation(err) {
 		return nil, nil
 	}

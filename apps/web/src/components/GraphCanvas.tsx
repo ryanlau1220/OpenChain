@@ -151,7 +151,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		(graphData?.edges || []).forEach((e) => {
-			const isStable = e.assetSymbol === 'USDT' || e.assetSymbol === 'USDC';
+			const isStable = e.asset?.symbol === 'USDT' || e.asset?.symbol === 'USDC';
 			const lineColor = isStable ? '#34D399' : '#887DFF';
 			elements.push({
 				group: 'edges',

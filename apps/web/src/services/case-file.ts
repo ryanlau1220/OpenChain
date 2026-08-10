@@ -11,7 +11,7 @@ export type CaseAnnotation = {
 export type LocalCase = {
 	version: number;
 	title: string;
-	network: 'ethereum-mainnet';
+	network: 'ethereum-mainnet' | 'base-mainnet';
 	createdAt: string;
 	updatedAt: string;
 	rootAddress: string;
@@ -75,7 +75,7 @@ export function parseCaseFile(value: string): LocalCase {
 		});
 	if (
 		item.version !== CASE_FILE_VERSION ||
-		item.network !== 'ethereum-mainnet' ||
+		(item.network !== 'ethereum-mainnet' && item.network !== 'base-mainnet') ||
 		typeof item.title !== 'string' ||
 		typeof item.notes !== 'string' ||
 		typeof item.rootAddress !== 'string' ||
@@ -106,5 +106,6 @@ export function casePrintHTML(caseFile: LocalCase): string {
 			.replaceAll('<', '&lt;')
 			.replaceAll('>', '&gt;')
 			.replaceAll('"', '&quot;');
-	return `<!doctype html><title>${escapeHTML(caseFile.title)}</title><style>body{font:14px system-ui;margin:40px;color:#1a1d23}h1{margin-bottom:4px}small{color:#666}article{margin-top:24px;white-space:pre-wrap}li{margin:10px 0}</style><h1>${escapeHTML(caseFile.title)}</h1><small>Ethereum mainnet · ${escapeHTML(caseFile.rootAddress || 'No target selected')} · exported ${escapeHTML(caseFile.updatedAt)}</small><article>${escapeHTML(caseFile.notes)}</article><h2>Annotations</h2><ul>${caseFile.annotations.map((item) => `<li><strong>${escapeHTML(item.target.kind)}:</strong> ${escapeHTML(item.target.id)}<br>${escapeHTML(item.note)}</li>`).join('')}</ul>`;
+	const networkName = caseFile.network === 'base-mainnet' ? 'Base mainnet' : 'Ethereum mainnet';
+	return `<!doctype html><title>${escapeHTML(caseFile.title)}</title><style>body{font:14px system-ui;margin:40px;color:#1a1d23}h1{margin-bottom:4px}small{color:#666}article{margin-top:24px;white-space:pre-wrap}li{margin:10px 0}</style><h1>${escapeHTML(caseFile.title)}</h1><small>${networkName} · ${escapeHTML(caseFile.rootAddress || 'No target selected')} · exported ${escapeHTML(caseFile.updatedAt)}</small><article>${escapeHTML(caseFile.notes)}</article><h2>Annotations</h2><ul>${caseFile.annotations.map((item) => `<li><strong>${escapeHTML(item.target.kind)}:</strong> ${escapeHTML(item.target.id)}<br>${escapeHTML(item.note)}</li>`).join('')}</ul>`;
 }

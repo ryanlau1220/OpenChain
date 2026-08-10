@@ -42,4 +42,10 @@ describe('local case files', () => {
 		saveLocalCase(caseFile);
 		expect(loadLocalCase().title).toBe('Saved locally');
 	});
+
+	it('keeps Base case files separate from Ethereum case files', () => {
+		const caseFile = createLocalCase();
+		caseFile.network = 'base-mainnet';
+		expect(parseCaseFile(JSON.stringify(caseFile)).network).toBe('base-mainnet');
+	});
 });

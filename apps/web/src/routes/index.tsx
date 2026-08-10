@@ -4,16 +4,20 @@ import { CaseWorkspace } from '../components/CaseWorkspace';
 import { EvidencePaths } from '../components/EvidencePaths';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
+import { TransferInspector } from '../components/TransferInspector';
 import { WalletLookup } from '../components/WalletLookup';
 import {
 	type AddressLabel,
 	type AddressSummary,
+	type EVMNetwork,
 	type GraphEdge,
 	type GraphNode,
+	Network,
 	TraceGraphResponse,
 	expandNode,
 	fetchTraceGraph,
 	lookupAddress,
+	networkDetails,
 	requestErrorMessage,
 } from '../services/api';
 import {
@@ -29,6 +33,7 @@ type BranchPage = { cursor: string; hasMore: boolean };
 
 function Index() {
 	const [address, setAddress] = useState('');
+	const [network, setNetwork] = useState<EVMNetwork>(Network.ETHEREUM_MAINNET);
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
@@ -44,7 +49,11 @@ function Index() {
 	const investigationRef = useRef(0);
 
 	useEffect(() => {
-		setCaseFile(loadLocalCase());
+		const storedCase = loadLocalCase();
+		setCaseFile(storedCase);
+		setNetwork(
+			storedCase.network === 'base-mainnet' ? Network.BASE_MAINNET : Network.ETHEREUM_MAINNET,
+		);
 		setCaseLoaded(true);
 	}, []);
 
@@ -52,53 +61,57 @@ function Index() {
 		if (caseLoaded) saveLocalCase(caseFile);
 	}, [caseFile, caseLoaded]);
 
-	const load = useCallback(async (target: string, preserveCurrentGraph = false) => {
-		const investigation = preserveCurrentGraph
-			? investigationRef.current
-			: ++investigationRef.current;
-		if (!preserveCurrentGraph) setLoading(true);
-		setErrorMessage('');
-		if (!preserveCurrentGraph) {
-			setGraphData(null);
-			setSelectedNode(null);
-			setSelectedEdge(null);
-			setSummary(null);
-			setLabels([]);
-			setBranchPages({});
-			setExpandingAddress(null);
-			setPendingExpansion(null);
-		}
-		try {
-			const graph = await fetchTraceGraph(target, !preserveCurrentGraph);
-			if (investigation !== investigationRef.current) return;
-			setGraphData(graph);
-			setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
-			setCaseFile((current) => ({
-				...current,
-				rootAddress: graph.seedAddress,
-				updatedAt: new Date().toISOString(),
-			}));
-			setBranchPages({
-				[graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore },
-			});
-			void lookupAddress(target).then((lookup) => {
+	const load = useCallback(
+		async (target: string, preserveCurrentGraph = false) => {
+			const investigation = preserveCurrentGraph
+				? investigationRef.current
+				: ++investigationRef.current;
+			if (!preserveCurrentGraph) setLoading(true);
+			setErrorMessage('');
+			if (!preserveCurrentGraph) {
+				setGraphData(null);
+				setSelectedNode(null);
+				setSelectedEdge(null);
+				setSummary(null);
+				setLabels([]);
+				setBranchPages({});
+				setExpandingAddress(null);
+				setPendingExpansion(null);
+			}
+			try {
+				const graph = await fetchTraceGraph(target, network, !preserveCurrentGraph);
 				if (investigation !== investigationRef.current) return;
-				setSummary(lookup.summary ?? null);
-				setLabels(lookup.labels);
-			});
-		} catch (error) {
-			console.error(error);
-			if (investigation === investigationRef.current)
-				setErrorMessage(
-					requestErrorMessage(
-						error,
-						'Unable to load this address. Check the backend and Etherscan status.',
-					),
-				);
-		} finally {
-			if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
-		}
-	}, []);
+				setGraphData(graph);
+				setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
+				setCaseFile((current) => ({
+					...current,
+					network: networkDetails(network).slug,
+					rootAddress: graph.seedAddress,
+					updatedAt: new Date().toISOString(),
+				}));
+				setBranchPages({
+					[graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore },
+				});
+				void lookupAddress(target, network).then((lookup) => {
+					if (investigation !== investigationRef.current) return;
+					setSummary(lookup.summary ?? null);
+					setLabels(lookup.labels);
+				});
+			} catch (error) {
+				console.error(error);
+				if (investigation === investigationRef.current)
+					setErrorMessage(
+						requestErrorMessage(
+							error,
+							'Unable to load this address. Check the backend and Etherscan status.',
+						),
+					);
+			} finally {
+				if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
+			}
+		},
+		[network],
+	);
 
 	useEffect(() => {
 		if (!graphData?.pending) return;
@@ -106,24 +119,27 @@ function Index() {
 		return () => window.clearTimeout(timer);
 	}, [graphData, load]);
 
-	const handleSelect = useCallback(async (node: GraphNode | null) => {
-		setSelectedNode(node);
-		setSelectedEdge(null);
-		if (node)
-			setCaseFile((current) => ({
-				...current,
-				selectedAddressIds: [...new Set([...current.selectedAddressIds, node.id])],
-				updatedAt: new Date().toISOString(),
-			}));
-		if (!node) return;
-		try {
-			const lookup = await lookupAddress(node.id);
-			setSummary(lookup.summary ?? null);
-			setLabels(lookup.labels);
-		} catch (error) {
-			console.error(error);
-		}
-	}, []);
+	const handleSelect = useCallback(
+		async (node: GraphNode | null) => {
+			setSelectedNode(node);
+			setSelectedEdge(null);
+			if (node)
+				setCaseFile((current) => ({
+					...current,
+					selectedAddressIds: [...new Set([...current.selectedAddressIds, node.id])],
+					updatedAt: new Date().toISOString(),
+				}));
+			if (!node) return;
+			try {
+				const lookup = await lookupAddress(node.id, network);
+				setSummary(lookup.summary ?? null);
+				setLabels(lookup.labels);
+			} catch (error) {
+				console.error(error);
+			}
+		},
+		[network],
+	);
 
 	const handleExpand = useCallback(
 		async (nodeAddress: string, retry = true) => {
@@ -139,7 +155,7 @@ function Index() {
 			const investigation = investigationRef.current;
 			setExpandingAddress(key);
 			try {
-				const expanded = await expandNode(nodeAddress, page?.cursor, retry);
+				const expanded = await expandNode(nodeAddress, network, page?.cursor, retry);
 				if (investigation !== investigationRef.current) return;
 				if (expanded.pending) {
 					setPendingExpansion(key);
@@ -180,7 +196,7 @@ function Index() {
 				if (investigation === investigationRef.current) setExpandingAddress(null);
 			}
 		},
-		[branchPages, expandingAddress, graphData, pendingExpansion],
+		[branchPages, expandingAddress, graphData, network, pendingExpansion],
 	);
 
 	useEffect(() => {
@@ -201,12 +217,35 @@ function Index() {
 					setAddress(value);
 					void load(value);
 				}}
-				network="Ethereum Mainnet"
+				network={network}
+				onNetworkChange={(nextNetwork) => {
+					if (nextNetwork === network) return;
+					investigationRef.current++;
+					setNetwork(nextNetwork);
+					setGraphData(null);
+					setSelectedNode(null);
+					setSelectedEdge(null);
+					setSummary(null);
+					setLabels([]);
+					setBranchPages({});
+					setExpandingAddress(null);
+					setPendingExpansion(null);
+					setErrorMessage('');
+					setCaseFile((current) => ({
+						...current,
+						network: networkDetails(nextNetwork).slug,
+						rootAddress: '',
+						selectedAddressIds: [],
+						selectedTransferIds: [],
+						annotations: [],
+						updatedAt: new Date().toISOString(),
+					}));
+				}}
 			/>
 			<div className="flex-1 flex overflow-hidden">
 				<div className="flex-1 relative">
 					<GraphCanvas
-						key={graphData?.seedAddress ?? 'empty'}
+						key={`${network}:${graphData?.seedAddress ?? 'empty'}`}
 						graphData={graphData}
 						selectedNode={selectedNode}
 						onNodeSelect={handleSelect}
@@ -231,7 +270,7 @@ function Index() {
 							className="absolute inset-0 grid place-items-center pointer-events-none text-sm"
 							style={{ color: 'var(--ink-3)' }}
 						>
-							Search an Ethereum mainnet address to start an investigation.
+							Search a {networkDetails(network).name} address to start an investigation.
 						</div>
 					)}
 					{errorMessage && (
@@ -265,13 +304,17 @@ function Index() {
 						summary={summary}
 						labels={labels}
 						loading={loading}
+						network={network}
 						targetSeedAddress={address}
 						onTraceAddress={(value) => {
 							setAddress(value);
 							void load(value);
 						}}
 					/>
-					{graphData && <EvidencePaths nodes={graphData.nodes} edges={graphData.edges} />}
+					<TransferInspector edge={selectedEdge} network={network} />
+					{graphData && (
+						<EvidencePaths nodes={graphData.nodes} edges={graphData.edges} network={network} />
+					)}
 					<CaseWorkspace
 						caseFile={caseFile}
 						onChange={setCaseFile}

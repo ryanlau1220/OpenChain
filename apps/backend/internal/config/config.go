@@ -11,6 +11,7 @@ type Config struct {
 	Port                    string
 	DatabaseURL             string
 	EthereumMainnetRPCURL   string
+	BaseMainnetRPCURL       string
 	EtherscanAPIKey         string
 	WebOrigin               string
 	PublicRequestsPerMinute int
@@ -31,6 +32,7 @@ func LoadConfig() *Config {
 	}
 
 	ethRPC := os.Getenv("ETHEREUM_MAINNET_RPC_URL")
+	baseRPC := os.Getenv("BASE_MAINNET_RPC_URL")
 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
 
 	webOrigin := os.Getenv("WEB_ORIGIN")
@@ -52,6 +54,7 @@ func LoadConfig() *Config {
 		Port:                    port,
 		DatabaseURL:             dbURL,
 		EthereumMainnetRPCURL:   ethRPC,
+		BaseMainnetRPCURL:       baseRPC,
 		EtherscanAPIKey:         etherscanAPIKey,
 		WebOrigin:               webOrigin,
 		PublicRequestsPerMinute: publicRequestsPerMinute,
@@ -65,11 +68,15 @@ func (c *Config) Validate() error {
 	if c.validationError != nil {
 		return c.validationError
 	}
-	if c.EthereumMainnetRPCURL == "" {
-		return fmt.Errorf("ETHEREUM_MAINNET_RPC_URL is required")
-	}
-	if endpoint, err := url.Parse(c.EthereumMainnetRPCURL); err != nil || endpoint.Scheme != "https" || endpoint.Host == "" {
-		return fmt.Errorf("ETHEREUM_MAINNET_RPC_URL must be an https URL")
+	for _, rpc := range []struct {
+		name, value string
+	}{{"ETHEREUM_MAINNET_RPC_URL", c.EthereumMainnetRPCURL}, {"BASE_MAINNET_RPC_URL", c.BaseMainnetRPCURL}} {
+		if rpc.value == "" {
+			return fmt.Errorf("%s is required", rpc.name)
+		}
+		if endpoint, err := url.Parse(rpc.value); err != nil || endpoint.Scheme != "https" || endpoint.Host == "" {
+			return fmt.Errorf("%s must be an https URL", rpc.name)
+		}
 	}
 	if c.EtherscanAPIKey == "" {
 		return fmt.Errorf("ETHERSCAN_API_KEY is required")

@@ -328,6 +328,11 @@ export class SearchLabelsRequest extends Message<SearchLabelsRequest> {
    */
   limit = 0;
 
+  /**
+   * @generated from field: openchain.v1.Network network = 4;
+   */
+  network = Network.UNSPECIFIED;
+
   constructor(data?: PartialMessage<SearchLabelsRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -339,6 +344,7 @@ export class SearchLabelsRequest extends Message<SearchLabelsRequest> {
     { no: 1, name: "query", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "category", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SearchLabelsRequest {

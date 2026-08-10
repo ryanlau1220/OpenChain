@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,12 +30,14 @@ type GraphNode struct {
 	Labels                                []labels.LabelItem
 }
 type GraphEdge struct {
-	ID, Source, Target, ValueWei, ValueFormatted, AssetSymbol, TransactionHash string
-	TxCount, EventIndex                                                        uint32
-	BlockNumber                                                                uint64
-	Timestamp                                                                  int64
+	ID, Source, Target, AmountBaseUnits, AmountFormatted, EventID, TransactionHash, TransferKind, SourceName string
+	Asset                                                                                                    adapter.Asset
+	TxCount                                                                                                  uint32
+	BlockNumber                                                                                              uint64
+	Timestamp, RetrievedAt                                                                                   int64
 }
 type GraphResult struct {
+	Network                string
 	SeedAddress            string
 	Nodes                  []GraphNode
 	Edges                  []GraphEdge
@@ -48,34 +49,30 @@ type GraphResult struct {
 }
 
 type Engine struct {
-	chainAdapter  *adapter.EVMChainAdapter
+	chainAdapter  adapter.ChainAdapter
 	database      *db.DB
 	labelRegistry *labels.Service
 }
 
-func NewEngine(chainAdapter *adapter.EVMChainAdapter, database *db.DB, labels *labels.Service) *Engine {
+func NewEngine(chainAdapter adapter.ChainAdapter, database *db.DB, labels *labels.Service) *Engine {
 	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels}
 }
 
 func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string) (*GraphResult, error) {
 	if e.chainAdapter == nil {
-		return nil, fmt.Errorf("Etherscan is not configured")
+		return nil, fmt.Errorf("trace data source is not configured")
 	}
 	if limit == 0 || limit > maxPageSize {
 		limit = maxPageSize
 	}
-	offset, err := parseCursor(cursor)
+	page, err := e.chainAdapter.ListTransfers(ctx, address, limit, cursor)
 	if err != nil {
 		return nil, err
 	}
-	page, err := e.chainAdapter.ListNativeTransfers(ctx, address, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	transactions := filterTransactions(page.Transactions, address, direction)
-	result := e.graph(ctx, address, transactions, page)
+	transfers := filterTransfers(page.Transfers, address, direction)
+	result := e.graph(ctx, address, transfers, page)
 	if e.database != nil {
-		if err := e.database.SaveGraph(ctx, toAddresses(result.Nodes), toTransfers(transactions, page.SourceStatus)); err != nil {
+		if err := e.database.SaveGraph(ctx, e.toAddresses(result.Nodes), e.toTransfers(transfers, page.SourceStatus)); err != nil {
 			return nil, err
 		}
 	}
@@ -85,39 +82,47 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 func (e *Engine) PendingGraph(address, warning string) *GraphResult {
 	seed := strings.ToLower(address)
 	return &GraphResult{
+		Network:     e.Network(),
 		SeedAddress: seed,
 		Nodes:       []GraphNode{{ID: seed, Label: shortAddress(seed), EntityType: "EOA", IsSeed: true, TotalVolumeWei: "0"}},
 		TotalNodes:  1,
 		Pending:     true,
 		SourceStatus: adapter.SourceStatus{
-			Source:      adapter.EtherscanSource,
+			Source:      e.SourceStatus(context.Background()).Source,
 			RetrievedAt: time.Now().UTC(),
 			Warning:     warning,
 		},
 	}
 }
 
+func (e *Engine) Network() string {
+	if e.chainAdapter == nil {
+		return ""
+	}
+	return e.chainAdapter.Network()
+}
+
 func (e *Engine) LookupTransaction(ctx context.Context, hash string) (*adapter.TransactionItem, adapter.SourceStatus, error) {
 	if e.chainAdapter == nil {
-		return nil, adapter.SourceStatus{}, fmt.Errorf("Etherscan is not configured")
+		return nil, adapter.SourceStatus{}, fmt.Errorf("trace data source is not configured")
 	}
 	return e.chainAdapter.LookupTransaction(ctx, hash)
 }
 
 func (e *Engine) SourceStatus(ctx context.Context) adapter.SourceStatus {
 	if e.chainAdapter == nil {
-		return adapter.SourceStatus{Source: adapter.EtherscanSource, Warning: "Etherscan is not configured."}
+		return adapter.SourceStatus{Warning: "Trace data source is not configured."}
 	}
 	return e.chainAdapter.SourceStatus()
 }
 
-func (e *Engine) graph(ctx context.Context, seed string, transactions []adapter.TransactionItem, page *adapter.TransferPage) *GraphResult {
+func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.TransferItem, page *adapter.TransferPage) *GraphResult {
 	seed = strings.ToLower(seed)
 	nodes := map[string]GraphNode{seed: e.node(ctx, seed, true)}
 	inCounts, outCounts := map[string]uint32{}, map[string]uint32{}
-	edges := make([]GraphEdge, 0, len(transactions))
-	for _, transaction := range transactions {
-		from, to := strings.ToLower(transaction.From), strings.ToLower(transaction.To)
+	edges := make([]GraphEdge, 0, len(transfers))
+	for _, transfer := range transfers {
+		from, to := strings.ToLower(transfer.From), strings.ToLower(transfer.To)
 		if _, ok := nodes[from]; !ok {
 			nodes[from] = e.node(ctx, from, from == seed)
 		}
@@ -126,7 +131,7 @@ func (e *Engine) graph(ctx context.Context, seed string, transactions []adapter.
 		}
 		outCounts[from]++
 		inCounts[to]++
-		edges = append(edges, GraphEdge{ID: transferID(transaction.Hash), Source: from, Target: to, ValueWei: transaction.ValueWei, ValueFormatted: formatValue(transaction.ValueWei), TxCount: 1, AssetSymbol: "ETH", TransactionHash: transaction.Hash, BlockNumber: uint64(transaction.BlockNumber), Timestamp: transaction.Timestamp.Unix()})
+		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix()})
 	}
 	graphNodes := make([]GraphNode, 0, len(nodes))
 	for id, node := range nodes {
@@ -140,14 +145,14 @@ func (e *Engine) graph(ctx context.Context, seed string, transactions []adapter.
 		return graphNodes[i].ID < graphNodes[j].ID
 	})
 	sort.Slice(edges, func(i, j int) bool { return edges[i].ID < edges[j].ID })
-	return &GraphResult{SeedAddress: seed, Nodes: graphNodes, Edges: edges, TotalNodes: uint32(len(graphNodes)), TotalEdges: uint32(len(edges)), NextCursor: page.NextCursor, HasMore: page.HasMore, SourceStatus: page.SourceStatus}
+	return &GraphResult{Network: e.Network(), SeedAddress: seed, Nodes: graphNodes, Edges: edges, TotalNodes: uint32(len(graphNodes)), TotalEdges: uint32(len(edges)), NextCursor: page.NextCursor, HasMore: page.HasMore, SourceStatus: page.SourceStatus}
 }
 
 func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode {
 	label, entityType := shortAddress(address), "EOA"
 	var nodeLabels []labels.LabelItem
 	if e.labelRegistry != nil {
-		if items, err := e.labelRegistry.GetLabels(ctx, address); err == nil && len(items) > 0 {
+		if items, err := e.labelRegistry.GetLabels(ctx, e.Network(), address); err == nil && len(items) > 0 {
 			label = items[0].Label
 			nodeLabels = items
 			if strings.EqualFold(items[0].Category, "exchange") {
@@ -163,55 +168,56 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, TotalVolumeWei: "0", Labels: nodeLabels}
 }
 
-func filterTransactions(transactions []adapter.TransactionItem, address string, direction Direction) []adapter.TransactionItem {
+func filterTransfers(transfers []adapter.TransferItem, address string, direction Direction) []adapter.TransferItem {
 	address = strings.ToLower(address)
-	result := make([]adapter.TransactionItem, 0, len(transactions))
-	for _, transaction := range transactions {
-		from, to := strings.ToLower(transaction.From), strings.ToLower(transaction.To)
+	result := make([]adapter.TransferItem, 0, len(transfers))
+	for _, transfer := range transfers {
+		from, to := strings.ToLower(transfer.From), strings.ToLower(transfer.To)
 		if direction == DirectionInbound && to != address {
 			continue
 		}
 		if direction == DirectionOutbound && from != address {
 			continue
 		}
-		result = append(result, transaction)
+		result = append(result, transfer)
 	}
 	return result
 }
 
-func toTransfers(transactions []adapter.TransactionItem, source adapter.SourceStatus) []db.Transfer {
-	transfers := make([]db.Transfer, 0, len(transactions))
-	for _, transaction := range transactions {
-		transfers = append(transfers, db.Transfer{ID: transferID(transaction.Hash), Network: "ethereum-mainnet", TransactionHash: transaction.Hash, FromAddress: strings.ToLower(transaction.From), ToAddress: strings.ToLower(transaction.To), AssetSymbol: "ETH", AmountBaseUnits: transaction.ValueWei, BlockNumber: transaction.BlockNumber, BlockTimestamp: transaction.Timestamp, Source: source.Source, RetrievedAt: source.RetrievedAt})
+func (e *Engine) toTransfers(items []adapter.TransferItem, source adapter.SourceStatus) []db.Transfer {
+	transfers := make([]db.Transfer, 0, len(items))
+	for _, item := range items {
+		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: strings.ToLower(item.From), ToAddress: strings.ToLower(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockTimestamp: item.Timestamp, Source: source.Source, RetrievedAt: source.RetrievedAt})
 	}
 	return transfers
 }
 
-func toAddresses(nodes []GraphNode) []db.Address {
+func (e *Engine) toAddresses(nodes []GraphNode) []db.Address {
 	addresses := make([]db.Address, 0, len(nodes))
 	for _, node := range nodes {
-		addresses = append(addresses, db.Address{Address: node.ID, Label: node.Label, EntityType: node.EntityType})
+		addresses = append(addresses, db.Address{Network: e.Network(), Address: node.ID, Label: node.Label, EntityType: node.EntityType})
 	}
 	return addresses
 }
 
-func parseCursor(cursor string) (uint64, error) {
-	if cursor == "" {
-		return 0, nil
-	}
-	value, err := strconv.ParseUint(cursor, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid cursor")
-	}
-	return value, nil
+func transferID(network, hash, eventID string) string {
+	return network + ":" + strings.ToLower(hash) + ":" + eventID
 }
-func transferID(hash string) string { return "ethereum-mainnet:" + strings.ToLower(hash) + ":0" }
-func formatValue(value string) string {
-	wei, ok := new(big.Int).SetString(value, 10)
+func formatAmount(value string, asset adapter.Asset) string {
+	amount, ok := new(big.Int).SetString(value, 10)
 	if !ok {
-		return value + " Wei"
+		return value + " " + asset.Symbol
 	}
-	return adapter.FormatWeiToETH(wei)
+	if asset.Kind == "NATIVE" {
+		return adapter.FormatWeiToETH(amount)
+	}
+	return formatTokenAmount(amount, asset.Decimals, asset.Symbol)
+}
+
+func formatTokenAmount(amount *big.Int, decimals uint32, symbol string) string {
+	base := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	value := new(big.Rat).SetFrac(amount, base)
+	return value.FloatString(4) + " " + symbol
 }
 func shortAddress(address string) string {
 	if len(address) <= 10 {

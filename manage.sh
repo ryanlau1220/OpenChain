@@ -30,8 +30,8 @@ fi
 
 case "$1" in
     dev)
-        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ]; then
-            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL and ETHERSCAN_API_KEY are required.${RESET}"
+        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${BASE_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ]; then
+            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL, BASE_MAINNET_RPC_URL, and ETHERSCAN_API_KEY are required.${RESET}"
             exit 1
         fi
 
@@ -61,7 +61,7 @@ case "$1" in
 
         echo -e "${GREEN}✓ [OK] OpenChain Go Backend is 100% HEALTHY & READY on port ${PORT:-8081}!${RESET}"
         echo -e "${MAGENTA}Launching OpenChain TanStack Start Web App (Port ${web_port})...${RESET}"
-        (cd apps/web && pnpm exec vite dev --port "${web_port}" 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
+        (cd apps/web && pnpm exec vite dev --strictPort --port "${web_port}" 2>&1 | stdbuf -oL sed "s/^/$(printf "${MAGENTA}[web]${RESET}") /") &
         wait
 
         ;;
@@ -122,7 +122,7 @@ case "$1" in
 
     test)
         echo -e "${CYAN}Running Go backend unit and integration tests...${RESET}"
-        (cd apps/backend && go test -v ./...)
+        (cd apps/backend && GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go test -v ./...)
         echo -e "${MAGENTA}Running web frontend unit tests (Vitest)...${RESET}"
         env -u NODE_OPTIONS pnpm --filter @openchain/web test
         echo -e "${GREEN}✓ Full-stack test suite complete.${RESET}"

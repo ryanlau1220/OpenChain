@@ -22,3 +22,10 @@ func TestPendingGraphReturnsSeedImmediately(t *testing.T) {
 		t.Fatalf("pending result = %#v", result)
 	}
 }
+
+func TestTransferIDIncludesNetwork(t *testing.T) {
+	hash := "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if transferID("ethereum-mainnet", hash, "tx") == transferID("base-mainnet", hash, "tx") {
+		t.Fatal("transfer IDs must be unique across networks")
+	}
+}

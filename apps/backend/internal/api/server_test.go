@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
 	"github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1/openchainv1connect"
+	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
@@ -21,17 +22,21 @@ const testAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
 
 func setupTestServer() (http.Handler, *Server) {
 	registry := labels.NewService(nil)
-	engine := tracing.NewEngine(nil, nil, registry)
-	return NewServer(nil, registry, engine, nil, "http://localhost:3000", 30, false).Handler(), NewServer(nil, registry, engine, nil, "http://localhost:3000", 30, false)
+	server := NewServer(testNetworks(registry), registry, "http://localhost:3000", 30, false)
+	return server.Handler(), server
+}
+
+func testNetworks(registry *labels.Service) map[pb.Network]NetworkRuntime {
+	engine := tracing.NewEngine(adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil), nil, registry)
+	return map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Engine: engine}}
 }
 
 func TestPublicRequestLimitUsesConnectResourceExhausted(t *testing.T) {
 	registry := labels.NewService(nil)
-	engine := tracing.NewEngine(nil, nil, registry)
-	server := httptest.NewServer(NewServer(nil, registry, engine, nil, "http://localhost:3000", 1, false).Handler())
+	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 1, false).Handler())
 	defer server.Close()
 	client := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
-	request := connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: testAddress})
+	request := connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET})
 	if _, err := client.TraceGraph(context.Background(), request); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("first code = %v", connect.CodeOf(err))
 	}
@@ -94,9 +99,17 @@ func TestLookupRejectsInvalidAddress(t *testing.T) {
 
 func TestTraceWithoutDataSourceIsUnavailable(t *testing.T) {
 	_, server := setupTestServer()
-	response, err := (&connectTracingHandler{server: server}).TraceGraph(context.Background(), connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: testAddress}))
+	response, err := (&connectTracingHandler{server: server}).TraceGraph(context.Background(), connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
 	_ = response
 	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v", connect.CodeOf(err))
+	}
+}
+
+func TestTraceRejectsUnspecifiedNetwork(t *testing.T) {
+	_, server := setupTestServer()
+	_, err := (&connectTracingHandler{server: server}).TraceGraph(context.Background(), connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: testAddress}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v", connect.CodeOf(err))
 	}
 }
@@ -126,8 +139,8 @@ func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	if err := service.ImportSeed(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine := tracing.NewEngine(nil, database, service)
-	server := NewServer(nil, service, engine, nil, "http://localhost:3000", 30, false)
+	engine := tracing.NewEngine(adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil), database, service)
+	server := NewServer(map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Engine: engine}}, service, "http://localhost:3000", 30, false)
 	labelsResponse, err := (&connectLabelHandler{server: server}).GetLabels(ctx, connect.NewRequest(&pb.GetLabelsRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
 	if err != nil {
 		t.Fatal(err)

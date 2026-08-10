@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/api"
 	"github.com/openchain/openchain/apps/backend/internal/config"
@@ -24,9 +25,6 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("Starting OpenChain backend on port %s", cfg.Port)
-	evmClient := adapter.NewEVMClient(cfg.EthereumMainnetRPCURL)
-	chainAdapter := adapter.NewEVMChainAdapter(adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
-
 	database, err := db.NewDB(db.DefaultConfig(cfg.DatabaseURL))
 	if err != nil {
 		log.Fatalf("Database unavailable: %v", err)
@@ -47,11 +45,32 @@ func main() {
 	if err != nil {
 		log.Fatalf("Curated label import failed: %v", err)
 	}
-	engine := tracing.NewEngine(chainAdapter, database, registry)
-	queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs)
+	runtimes := make(map[pb.Network]api.NetworkRuntime, 2)
+	queues := make([]*tracing.Queue, 0, 2)
+	for _, network := range []struct {
+		id                    pb.Network
+		name, chainID, rpcURL string
+	}{
+		{pb.Network_NETWORK_ETHEREUM_MAINNET, "ethereum-mainnet", "1", cfg.EthereumMainnetRPCURL},
+		{pb.Network_NETWORK_BASE_MAINNET, "base-mainnet", "8453", cfg.BaseMainnetRPCURL},
+	} {
+		evmClient := adapter.NewEVMClient(network.rpcURL)
+		var chainAdapter adapter.ChainAdapter
+		if network.id == pb.Network_NETWORK_BASE_MAINNET {
+			chainAdapter = adapter.NewBlockscoutChainAdapter(network.name, adapter.BlockscoutBaseAPIURL, evmClient)
+		} else {
+			chainAdapter = adapter.NewEVMChainAdapter(network.name, network.chainID, adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
+		}
+		engine := tracing.NewEngine(chainAdapter, database, registry)
+		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs)
+		runtimes[network.id] = api.NetworkRuntime{EVM: evmClient, Engine: engine, Queue: queue}
+		queues = append(queues, queue)
+	}
 	workerContext, stopWorker := context.WithCancel(context.Background())
-	queue.Start(workerContext)
-	server := api.NewServer(evmClient, registry, engine, queue, cfg.WebOrigin, cfg.PublicRequestsPerMinute, cfg.TrustProxy)
+	for _, queue := range queues {
+		queue.Start(workerContext)
+	}
+	server := api.NewServer(runtimes, registry, cfg.WebOrigin, cfg.PublicRequestsPerMinute, cfg.TrustProxy)
 	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 
 	stop := make(chan os.Signal, 1)
@@ -69,6 +88,8 @@ func main() {
 		log.Printf("Server forced shutdown: %v", err)
 	}
 	stopWorker()
-	queue.Wait()
+	for _, queue := range queues {
+		queue.Wait()
+	}
 	fmt.Println("Server stopped cleanly.")
 }

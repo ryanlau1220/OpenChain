@@ -65,7 +65,7 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 	if q.database == nil {
 		return q.engine.ResolveGraph(ctx, address, direction, limit, cursor)
 	}
-	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: "ethereum-mainnet:etherscan-v2", Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry, q.maxQueued)
+	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry, q.maxQueued)
 	if err != nil {
 		return nil, fmt.Errorf("queue trace job: %w", err)
 	}
@@ -98,16 +98,16 @@ func (q *Queue) Stats(ctx context.Context) (Stats, error) {
 	if q == nil || q.database == nil {
 		return Stats{}, nil
 	}
-	stats, err := q.database.TraceJobStats(ctx)
+	stats, err := q.database.TraceJobStats(ctx, q.engine.Network())
 	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed}, err
 }
 
 func (q *Queue) runOnce(ctx context.Context) {
-	if err := q.database.RecoverExpiredTraceJobs(ctx); err != nil {
+	if err := q.database.RecoverExpiredTraceJobs(ctx, q.engine.Network()); err != nil {
 		slog.Error("recover trace jobs", "error", err)
 		return
 	}
-	job, err := q.database.ClaimTraceJob(ctx, traceJobLease)
+	job, err := q.database.ClaimTraceJob(ctx, q.engine.Network(), traceJobLease)
 	if err != nil {
 		slog.Error("claim trace job", "error", err)
 		return
@@ -130,7 +130,11 @@ func (q *Queue) runOnce(ctx context.Context) {
 			return
 		}
 		slog.Warn("trace job failed", "job_id", job.ID, "error", err)
-		if failErr := q.database.FailTraceJob(writeContext, job.ID, "Trace retrieval did not complete. Search again to retry."); failErr != nil {
+		message := "Trace retrieval failed: " + err.Error()
+		if len(message) > 500 {
+			message = message[:500]
+		}
+		if failErr := q.database.FailTraceJob(writeContext, job.ID, message); failErr != nil {
 			slog.Error("mark trace job failed", "job_id", job.ID, "error", failErr)
 		}
 		return

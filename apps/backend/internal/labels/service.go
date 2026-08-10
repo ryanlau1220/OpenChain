@@ -69,19 +69,19 @@ func (s *Service) ImportSeed(ctx context.Context) error {
 	return s.database.UpsertCuratedLabels(ctx, values)
 }
 
-func (s *Service) GetLabels(ctx context.Context, address string) ([]LabelItem, error) {
+func (s *Service) GetLabels(ctx context.Context, network, address string) ([]LabelItem, error) {
 	if s == nil || s.database == nil {
 		return nil, fmt.Errorf("curated label database is unavailable")
 	}
-	items, err := s.database.GetCuratedLabels(ctx, ethereumMainnet, address)
+	items, err := s.database.GetCuratedLabels(ctx, network, address)
 	return fromDB(items), err
 }
 
-func (s *Service) SearchLabels(ctx context.Context, query, category string, limit int) ([]LabelItem, error) {
+func (s *Service) SearchLabels(ctx context.Context, network, query, category string, limit int) ([]LabelItem, error) {
 	if s == nil || s.database == nil {
 		return nil, fmt.Errorf("curated label database is unavailable")
 	}
-	items, err := s.database.SearchCuratedLabels(ctx, ethereumMainnet, query, category, limit)
+	items, err := s.database.SearchCuratedLabels(ctx, network, query, category, limit)
 	return fromDB(items), err
 }
 

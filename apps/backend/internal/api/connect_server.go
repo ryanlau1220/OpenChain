@@ -34,8 +34,11 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
+	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
 	if err != nil {
+		if errors.Is(err, errUnsupportedNetwork) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		if errors.Is(err, tracing.ErrQueueFull) {
 			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
 		}
@@ -50,8 +53,11 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
+	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
 	if err != nil {
+		if errors.Is(err, errUnsupportedNetwork) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		if errors.Is(err, tracing.ErrQueueFull) {
 			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
 		}
@@ -72,7 +78,7 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
-		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, ValueWei: edge.ValueWei, ValueFormatted: edge.ValueFormatted, TxCount: edge.TxCount, AssetSymbol: edge.AssetSymbol, EventIndex: edge.EventIndex, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp})
+		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp})
 	}
 	return nodes, edges
 }
@@ -84,17 +90,21 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	balance := big.NewInt(0)
 	var txCount uint64
 	var isContract bool
-	if h.server.evm != nil {
-		if value, callErr := h.server.evm.GetBalance(ctx, address); callErr == nil {
+	if runtime.EVM != nil {
+		if value, callErr := runtime.EVM.GetBalance(ctx, address); callErr == nil {
 			balance = value
 		}
-		if value, callErr := h.server.evm.GetTxCount(ctx, address); callErr == nil {
+		if value, callErr := runtime.EVM.GetTxCount(ctx, address); callErr == nil {
 			txCount = value
 		}
-		if value, callErr := h.server.evm.IsContract(ctx, address); callErr == nil {
+		if value, callErr := runtime.EVM.IsContract(ctx, address); callErr == nil {
 			isContract = value
 		}
 	}
@@ -103,14 +113,14 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 		entityType = pb.EntityType_ENTITY_TYPE_CONTRACT
 	}
 	if h.server.labels != nil {
-		if items, labelErr := h.server.labels.GetLabels(ctx, address); labelErr == nil && len(items) > 0 {
+		if items, labelErr := h.server.labels.GetLabels(ctx, runtime.Engine.Network(), address); labelErr == nil && len(items) > 0 {
 			label = items[0].Label
 			if strings.EqualFold(items[0].Category, "exchange") {
 				entityType = pb.EntityType_ENTITY_TYPE_EXCHANGE
 			}
 		}
 	}
-	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, EntityType: entityType, Label: label, BalanceWei: balance.String(), BalanceFormatted: adapter.FormatWeiToETH(balance), TxCount: txCount}, SourceStatus: toSourceStatus(h.server.tracingEngine.SourceStatus(ctx))}), nil
+	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: req.Msg.GetNetwork(), EntityType: entityType, Label: label, BalanceWei: balance.String(), BalanceFormatted: adapter.FormatWeiToETH(balance), TxCount: txCount}, SourceStatus: toSourceStatus(runtime.Engine.SourceStatus(ctx))}), nil
 }
 
 func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *connect.Request[pb.LookupTransactionRequest]) (*connect.Response[pb.LookupTransactionResponse], error) {
@@ -118,7 +128,11 @@ func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *conne
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	transaction, source, err := h.server.tracingEngine.LookupTransaction(ctx, hash)
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	transaction, source, err := runtime.Engine.LookupTransaction(ctx, hash)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -150,7 +164,14 @@ func toSourceStatus(status adapter.SourceStatus) *pb.SourceStatus {
 type connectLabelHandler struct{ server *Server }
 
 func toLabelProto(item labels.LabelItem) *pb.AddressLabel {
-	return &pb.AddressLabel{Id: item.ID, Address: item.Address, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceUrl: item.EvidenceURL, Source: item.Source, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt.Unix(), TrustTier: pb.TrustTier(item.TrustTier), SourceVersion: item.SourceVersion, Visibility: pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC}
+	return &pb.AddressLabel{Id: item.ID, Address: item.Address, Network: protoNetwork(item.Network), Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceUrl: item.EvidenceURL, Source: item.Source, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt.Unix(), TrustTier: pb.TrustTier(item.TrustTier), SourceVersion: item.SourceVersion, Visibility: pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC}
+}
+
+func protoNetwork(network string) pb.Network {
+	if network == "base-mainnet" {
+		return pb.Network_NETWORK_BASE_MAINNET
+	}
+	return pb.Network_NETWORK_ETHEREUM_MAINNET
 }
 
 func (h *connectLabelHandler) GetLabels(ctx context.Context, req *connect.Request[pb.GetLabelsRequest]) (*connect.Response[pb.GetLabelsResponse], error) {
@@ -161,7 +182,11 @@ func (h *connectLabelHandler) GetLabels(ctx context.Context, req *connect.Reques
 	if h.server.labels == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("curated labels are unavailable"))
 	}
-	items, err := h.server.labels.GetLabels(ctx, address)
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	items, err := h.server.labels.GetLabels(ctx, runtime.Engine.Network(), address)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -183,7 +208,11 @@ func (h *connectLabelHandler) SearchLabels(ctx context.Context, req *connect.Req
 	if h.server.labels == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("curated labels are unavailable"))
 	}
-	items, err := h.server.labels.SearchLabels(ctx, req.Msg.GetQuery(), req.Msg.GetCategory(), limit)
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	items, err := h.server.labels.SearchLabels(ctx, runtime.Engine.Network(), req.Msg.GetQuery(), req.Msg.GetCategory(), limit)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}

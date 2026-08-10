@@ -22,15 +22,18 @@ message GraphEdge {
   string id = 1;
   string source = 2;
   string target = 3;
-  string value_wei = 4;
-  string value_formatted = 5;
+  string amount_base_units = 4;
+  string amount_formatted = 5;
   uint32 tx_count = 6;
-  string asset_symbol = 7; // ETH or ERC20 symbol
+  Asset asset = 7;
   int64 first_tx_timestamp = 8;
   int64 last_tx_timestamp = 9;
-  uint32 event_index = 10;
+  string event_id = 10; // provider log index, trace ID, or transaction event key
   uint64 block_number = 11;
   string transaction_hash = 12;
+  string transfer_kind = 13; // NATIVE, INTERNAL, or ERC20
+  string source_name = 14;
+  int64 retrieved_at = 15;
 }
 
 message TraceGraphRequest {

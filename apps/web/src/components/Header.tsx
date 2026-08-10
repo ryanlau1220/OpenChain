@@ -1,15 +1,22 @@
 import { Search } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
+import { type EVMNetwork, evmNetworks, networkDetails } from '../services/api';
 import { EthIcon } from './Icons';
 
 interface HeaderProps {
 	currentAddress: string;
 	onSearch: (address: string) => void;
-	network: string;
+	network: EVMNetwork;
+	onNetworkChange: (network: EVMNetwork) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, network }) => {
+export const Header: React.FC<HeaderProps> = ({
+	currentAddress,
+	onSearch,
+	network,
+	onNetworkChange,
+}) => {
 	const [singleInput, setSingleInput] = useState(currentAddress);
 
 	const handleSubmit = (e: React.FormEvent) => {
@@ -74,7 +81,18 @@ export const Header: React.FC<HeaderProps> = ({ currentAddress, onSearch, networ
 							}}
 						>
 							<EthIcon className="w-3.5 h-3.5" />
-							<span>{network}</span>
+							<select
+								aria-label="Network"
+								value={network}
+								onChange={(event) => onNetworkChange(Number(event.target.value) as EVMNetwork)}
+								className="bg-transparent outline-none cursor-pointer"
+							>
+								{evmNetworks.map((item) => (
+									<option key={item} value={item}>
+										{networkDetails(item).name}
+									</option>
+								))}
+							</select>
 						</div>
 					</div>
 

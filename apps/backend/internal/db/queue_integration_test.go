@@ -26,12 +26,16 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 		hash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	)
 	etherscan := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Query().Get("module") != "account" || request.URL.Query().Get("action") != "txlist" {
+		if request.URL.Query().Get("module") != "account" {
 			http.NotFound(writer, request)
 			return
 		}
 		if request.URL.Query().Get("address") != from {
 			t.Errorf("address = %q", request.URL.Query().Get("address"))
+		}
+		if request.URL.Query().Get("action") != "txlist" {
+			_, _ = writer.Write([]byte(`{"status":"1","message":"OK","result":[]}`))
+			return
 		}
 		_, _ = writer.Write([]byte(`{"status":"1","message":"OK","result":[{"hash":"` + hash + `","blockNumber":"10","timeStamp":"100","from":"` + from + `","to":"` + to + `","value":"42"}]}`))
 	}))
@@ -54,12 +58,12 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = 'ethereum-mainnet:etherscan-v2' AND address = $1`, from)
+		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = 'ethereum-mainnet' AND address = $1`, from)
 		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
-		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM transfers WHERE id = $1`, "ethereum-mainnet:"+hash+":0")
+		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM transfers WHERE id = $1`, "ethereum-mainnet:"+hash+":tx")
 	}()
 
-	client := adapter.NewEVMChainAdapter(etherscan.URL, "test-key", nil)
+	client := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
 	queue := tracing.NewQueue(tracing.NewEngine(client, database, labels.NewService(database)), database, 2)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)

@@ -4,8 +4,10 @@ import { useState } from 'react';
 import {
 	type AddressLabel,
 	type AddressSummary,
+	type EVMNetwork,
 	LabelVisibility,
 	entityLabel,
+	explorerURL,
 } from '../services/api';
 
 interface WalletLookupProps {
@@ -14,6 +16,7 @@ interface WalletLookupProps {
 	loading: boolean;
 	onTraceAddress: (addr: string) => void;
 	targetSeedAddress?: string;
+	network: EVMNetwork;
 }
 
 export const WalletLookup: React.FC<WalletLookupProps> = ({
@@ -22,6 +25,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	loading,
 	onTraceAddress: _onTraceAddress,
 	targetSeedAddress,
+	network,
 }) => {
 	const [copied, setCopied] = useState<boolean>(false);
 
@@ -114,13 +118,13 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 							)}
 						</button>
 						<a
-							href={`https://etherscan.io/address/${summary.address}`}
+							href={explorerURL(network, 'address', summary.address)}
 							target="_blank"
 							rel="noreferrer"
 							className="flex items-center gap-1 text-[10px] transition hover:text-[var(--accent)]"
 							style={{ color: 'var(--ink-3)' }}
 						>
-							Etherscan <ExternalLink className="w-3 h-3" />
+							Explorer <ExternalLink className="w-3 h-3" />
 						</a>
 					</div>
 				</div>
