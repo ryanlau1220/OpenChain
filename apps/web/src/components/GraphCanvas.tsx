@@ -22,6 +22,7 @@ interface GraphCanvasProps {
 	graphData: TraceGraphResponse | null;
 	selectedNode?: GraphNode | null;
 	onNodeSelect: (node: GraphNode | null) => void;
+	onEdgeSelect?: (edge: GraphEdge | null) => void;
 	onExpandNode?: (address: string) => void;
 	canExpand?: boolean;
 	expanding?: boolean;
@@ -80,6 +81,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	graphData,
 	selectedNode: propSelectedNode,
 	onNodeSelect,
+	onEdgeSelect,
 	onExpandNode,
 	canExpand = false,
 	expanding = false,
@@ -98,6 +100,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	useEffect(() => {
 		onNodeSelectRef.current = onNodeSelect;
 	}, [onNodeSelect]);
+	const onEdgeSelectRef = useRef(onEdgeSelect);
+	useEffect(() => {
+		onEdgeSelectRef.current = onEdgeSelect;
+	}, [onEdgeSelect]);
 
 	useEffect(() => {
 		if (!cyRef.current) return;
@@ -306,18 +312,22 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			if (!nData) return;
 			setInternalSelectedNode(nData);
 			setSelectedEdge(null);
+			onEdgeSelectRef.current?.(null);
 			onNodeSelectRef.current(nData);
 			applyNodeStyles(cy, nData.id);
 		});
 
 		cy.on('tap', 'edge', (evt) => {
-			setSelectedEdge(evt.target.data('raw'));
+			const edge = evt.target.data('raw') as GraphEdge;
+			setSelectedEdge(edge);
+			onEdgeSelectRef.current?.(edge);
 		});
 
 		cy.on('tap', (evt) => {
 			if (evt.target === cy && !isPanningCanvas) {
 				setInternalSelectedNode(null);
 				setSelectedEdge(null);
+				onEdgeSelectRef.current?.(null);
 				onNodeSelectRef.current(null);
 				applyNodeStyles(cy, undefined);
 			}

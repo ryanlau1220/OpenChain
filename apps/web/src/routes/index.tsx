@@ -1,9 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
+import { CaseWorkspace } from '../components/CaseWorkspace';
 import { Header } from '../components/Header';
 import { WalletLookup } from '../components/WalletLookup';
-import { type AddressLabel, type AddressSummary, type GraphNode, TraceGraphResponse, expandNode, fetchTraceGraph, lookupAddress } from '../services/api';
+import { type AddressLabel, type AddressSummary, type GraphEdge, type GraphNode, TraceGraphResponse, expandNode, fetchTraceGraph, lookupAddress } from '../services/api';
+import { createLocalCase, loadLocalCase, saveLocalCase, type LocalCase } from '../services/case-file';
 
 export const Route = createFileRoute('/')({ component: Index });
 
@@ -16,11 +18,23 @@ function Index() {
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+	const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
+	const [caseFile, setCaseFile] = useState<LocalCase>(createLocalCase);
+	const [caseLoaded, setCaseLoaded] = useState(false);
 	const [branchPages, setBranchPages] = useState<Record<string, BranchPage>>({});
 	const [expandingAddress, setExpandingAddress] = useState<string | null>(null);
 	const [pendingExpansion, setPendingExpansion] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState('');
 	const investigationRef = useRef(0);
+
+	useEffect(() => {
+		setCaseFile(loadLocalCase());
+		setCaseLoaded(true);
+	}, []);
+
+	useEffect(() => {
+		if (caseLoaded) saveLocalCase(caseFile);
+	}, [caseFile, caseLoaded]);
 
 	const load = useCallback(async (target: string, preserveCurrentGraph = false) => {
 		const investigation = preserveCurrentGraph ? investigationRef.current : ++investigationRef.current;
@@ -29,6 +43,7 @@ function Index() {
 		if (!preserveCurrentGraph) {
 			setGraphData(null);
 			setSelectedNode(null);
+			setSelectedEdge(null);
 			setSummary(null);
 			setLabels([]);
 			setBranchPages({});
@@ -40,6 +55,7 @@ function Index() {
 			if (investigation !== investigationRef.current) return;
 			setGraphData(graph);
 			setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
+			setCaseFile((current) => ({ ...current, rootAddress: graph.seedAddress, updatedAt: new Date().toISOString() }));
 			setBranchPages({ [graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore } });
 			void lookupAddress(target).then((lookup) => {
 				if (investigation !== investigationRef.current) return;
@@ -62,6 +78,8 @@ function Index() {
 
 	const handleSelect = useCallback(async (node: GraphNode | null) => {
 		setSelectedNode(node);
+		setSelectedEdge(null);
+		if (node) setCaseFile((current) => ({ ...current, selectedAddressIds: [...new Set([...current.selectedAddressIds, node.id])], updatedAt: new Date().toISOString() }));
 		if (!node) return;
 		try {
 			const lookup = await lookupAddress(node.id);
@@ -117,7 +135,7 @@ function Index() {
 		<Header currentAddress={address} onSearch={(value) => { setAddress(value); void load(value); }} network="Ethereum Mainnet" />
 		<div className="flex-1 flex overflow-hidden">
 			<div className="flex-1 relative">
-				<GraphCanvas key={graphData?.seedAddress ?? 'empty'} graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} canExpand={canExpand} expanding={expandingAddress === activeAddress.toLowerCase() || pendingExpansion === activeAddress.toLowerCase()} />
+				<GraphCanvas key={graphData?.seedAddress ?? 'empty'} graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onEdgeSelect={(edge) => { setSelectedEdge(edge); if (edge) setCaseFile((current) => ({ ...current, selectedTransferIds: [...new Set([...current.selectedTransferIds, edge.id])], updatedAt: new Date().toISOString() })); }} onExpandNode={handleExpand} canExpand={canExpand} expanding={expandingAddress === activeAddress.toLowerCase() || pendingExpansion === activeAddress.toLowerCase()} />
 				{!graphData && !loading && <div className="absolute inset-0 grid place-items-center pointer-events-none text-sm" style={{ color: 'var(--ink-3)' }}>Search an Ethereum mainnet address to start an investigation.</div>}
 				{errorMessage && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>{errorMessage}</div>}
 				{graphData?.sourceStatus?.warning && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>{graphData.sourceStatus.warning}</div>}
@@ -125,6 +143,7 @@ function Index() {
 			<div className="w-80 overflow-y-auto p-4" style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}>
 				<h3 className="text-[10px] uppercase font-bold tracking-widest mb-4" style={{ color: 'var(--ink-3)' }}>Address Inspector</h3>
 				<WalletLookup summary={summary} labels={labels} loading={loading} targetSeedAddress={address} onTraceAddress={(value) => { setAddress(value); void load(value); }} />
+				<CaseWorkspace caseFile={caseFile} onChange={setCaseFile} activeTarget={selectedEdge ? { kind: 'transfer', id: selectedEdge.id } : selectedNode ? { kind: 'address', id: selectedNode.id } : null} />
 			</div>
 		</div>
 	</div>;
