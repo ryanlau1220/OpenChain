@@ -154,7 +154,7 @@ func findBlockHeight(value any) (int64, bool) {
 	switch value := value.(type) {
 	case map[string]any:
 		for key, child := range value {
-			if strings.EqualFold(key, "indexedUpToBlock") || strings.EqualFold(key, "lastBlock") {
+			if strings.EqualFold(key, "indexedUpToBlock") || strings.EqualFold(key, "lastBlock") || strings.EqualFold(key, "ripe") {
 				if number, ok := child.(json.Number); ok {
 					parsed, err := number.Int64()
 					return parsed, err == nil

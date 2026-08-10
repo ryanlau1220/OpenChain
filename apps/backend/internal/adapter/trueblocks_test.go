@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -34,6 +35,13 @@ func TestTrueBlocksListsBoundedTransactions(t *testing.T) {
 	}
 	if page.Transactions[0].ValueWei != "42" || page.Transactions[0].AssetSymbol != "ETH" {
 		t.Fatalf("transaction = %#v", page.Transactions[0])
+	}
+}
+
+func TestFindBlockHeightReadsRipeIndex(t *testing.T) {
+	height, ok := findBlockHeight(map[string]any{"meta": map[string]any{"ripe": json.Number("22997660")}})
+	if !ok || height != 22997660 {
+		t.Fatalf("height = %d, ok = %t", height, ok)
 	}
 }
 
