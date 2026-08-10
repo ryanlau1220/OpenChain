@@ -1,6 +1,11 @@
 import { Link2 } from 'lucide-react';
 import type React from 'react';
-import { type EVMNetwork, type GraphEdge, type GraphNode, explorerURL } from '../services/api';
+import {
+	type GraphEdge,
+	type GraphNode,
+	type SupportedNetwork,
+	explorerURL,
+} from '../services/api';
 
 export type EvidencePath = {
 	label: string;
@@ -31,7 +36,7 @@ export function evidencePaths(
 export const EvidencePaths: React.FC<{
 	nodes: readonly GraphNode[];
 	edges: readonly GraphEdge[];
-	network: EVMNetwork;
+	network: SupportedNetwork;
 }> = ({ nodes, edges, network }) => {
 	const paths = evidencePaths(nodes, edges).slice(0, 5);
 	if (paths.length === 0) return null;

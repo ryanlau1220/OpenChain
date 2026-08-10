@@ -25,31 +25,63 @@ export const labelClient = createClient(LabelService, transport);
 export type { GraphNode, GraphEdge, AddressLabel, AddressSummary };
 export { EntityType, LabelVisibility, Network, TraceGraphResponse };
 
-export type EVMNetwork = Network.ETHEREUM_MAINNET | Network.BASE_MAINNET;
+export type SupportedNetwork =
+	| Network.ETHEREUM_MAINNET
+	| Network.BASE_MAINNET
+	| Network.SOLANA_MAINNET
+	| Network.TRON_MAINNET;
+
+export type NetworkSlug = 'ethereum-mainnet' | 'base-mainnet' | 'solana-mainnet' | 'tron-mainnet';
 
 const NETWORK_DETAILS: Record<
-	EVMNetwork,
-	{ name: string; slug: 'ethereum-mainnet' | 'base-mainnet'; explorer: string }
+	SupportedNetwork,
+	{ name: string; slug: NetworkSlug; explorer: string; activityLabel?: string }
 > = {
 	[Network.ETHEREUM_MAINNET]: {
 		name: 'Ethereum Mainnet',
 		slug: 'ethereum-mainnet',
 		explorer: 'https://etherscan.io',
+		activityLabel: 'Outgoing nonce',
 	},
 	[Network.BASE_MAINNET]: {
 		name: 'Base Mainnet',
 		slug: 'base-mainnet',
 		explorer: 'https://basescan.org',
+		activityLabel: 'Outgoing nonce',
+	},
+	[Network.SOLANA_MAINNET]: {
+		name: 'Solana Mainnet',
+		slug: 'solana-mainnet',
+		explorer: 'https://explorer.solana.com',
+	},
+	[Network.TRON_MAINNET]: {
+		name: 'TRON Mainnet',
+		slug: 'tron-mainnet',
+		explorer: 'https://tronscan.org/#',
 	},
 };
 
-export const evmNetworks = [Network.ETHEREUM_MAINNET, Network.BASE_MAINNET] as const;
+export const supportedNetworks = [
+	Network.ETHEREUM_MAINNET,
+	Network.BASE_MAINNET,
+	Network.SOLANA_MAINNET,
+	Network.TRON_MAINNET,
+] as const;
 
-export function networkDetails(network: EVMNetwork) {
+export function networkDetails(network: SupportedNetwork) {
 	return NETWORK_DETAILS[network];
 }
 
-export function explorerURL(network: EVMNetwork, resource: 'address' | 'tx', value: string) {
+export function networkFromSlug(slug: NetworkSlug): SupportedNetwork {
+	return (
+		supportedNetworks.find((network) => NETWORK_DETAILS[network].slug === slug) ??
+		Network.ETHEREUM_MAINNET
+	);
+}
+
+export function explorerURL(network: SupportedNetwork, resource: 'address' | 'tx', value: string) {
+	if (network === Network.TRON_MAINNET)
+		return `${NETWORK_DETAILS[network].explorer}/${resource === 'tx' ? 'transaction' : 'address'}/${value}`;
 	return `${NETWORK_DETAILS[network].explorer}/${resource}/${value}`;
 }
 
@@ -74,13 +106,13 @@ export function entityLabel(t?: EntityType): string {
 
 export async function fetchTraceGraph(
 	seedAddress: string,
-	network: EVMNetwork,
+	network: SupportedNetwork,
 	retry = false,
 ): Promise<TraceGraphResponse> {
 	return tracingClient.traceGraph({ seedAddress, network, limit: 25, retry });
 }
 
-export async function lookupAddress(address: string, network: EVMNetwork) {
+export async function lookupAddress(address: string, network: SupportedNetwork) {
 	const [lookupRes, labelsRes] = await Promise.allSettled([
 		lookupClient.lookupAddress({
 			address,
@@ -94,7 +126,12 @@ export async function lookupAddress(address: string, network: EVMNetwork) {
 	};
 }
 
-export async function expandNode(address: string, network: EVMNetwork, cursor = '', retry = false) {
+export async function expandNode(
+	address: string,
+	network: SupportedNetwork,
+	cursor = '',
+	retry = false,
+) {
 	return tracingClient.expandNode({ nodeAddress: address, network, limit: 25, cursor, retry });
 }
 

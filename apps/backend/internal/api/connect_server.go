@@ -30,7 +30,11 @@ func parseEntityType(value string) pb.EntityType {
 }
 
 func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Request[pb.TraceGraphRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
-	address, err := ethereumAddress(req.Msg.GetSeedAddress())
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	address, err := runtime.Chain.NormalizeAddress(req.Msg.GetSeedAddress())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -49,7 +53,11 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
-	address, err := ethereumAddress(req.Msg.GetNodeAddress())
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	address, err := runtime.Chain.NormalizeAddress(req.Msg.GetNodeAddress())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -74,7 +82,7 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 		for _, label := range node.Labels {
 			nodeLabels = append(nodeLabels, toLabelProto(label))
 		}
-		nodes = append(nodes, &pb.GraphNode{Id: node.ID, Label: node.Label, EntityType: parseEntityType(node.EntityType), IsSeed: node.IsSeed, TotalVolumeWei: node.TotalVolumeWei, InTxCount: node.InTxCount, OutTxCount: node.OutTxCount, Labels: nodeLabels})
+		nodes = append(nodes, &pb.GraphNode{Id: node.ID, Label: node.Label, EntityType: parseEntityType(node.EntityType), IsSeed: node.IsSeed, TotalVolumeBaseUnits: node.TotalVolumeBaseUnits, InTxCount: node.InTxCount, OutTxCount: node.OutTxCount, Labels: nodeLabels})
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
@@ -86,27 +94,27 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 type connectLookupHandler struct{ server *Server }
 
 func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.Request[pb.LookupAddressRequest]) (*connect.Response[pb.LookupAddressResponse], error) {
-	address, err := ethereumAddress(req.Msg.GetAddress())
+	runtime, err := h.server.network(req.Msg.GetNetwork())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	runtime, err := h.server.network(req.Msg.GetNetwork())
+	address, err := runtime.Chain.NormalizeAddress(req.Msg.GetAddress())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	balance := big.NewInt(0)
 	var txCount uint64
 	var isContract bool
-	if runtime.EVM != nil {
-		if value, callErr := runtime.EVM.GetBalance(ctx, address); callErr == nil {
-			balance = value
-		}
-		if value, callErr := runtime.EVM.GetTxCount(ctx, address); callErr == nil {
+	if value, callErr := runtime.Chain.GetBalance(ctx, address); callErr == nil {
+		balance = value
+	}
+	if runtime.Chain.ActivityLabel() != "" {
+		if value, callErr := runtime.Chain.GetTxCount(ctx, address); callErr == nil {
 			txCount = value
 		}
-		if value, callErr := runtime.EVM.IsContract(ctx, address); callErr == nil {
-			isContract = value
-		}
+	}
+	if value, callErr := runtime.Chain.IsContract(ctx, address); callErr == nil {
+		isContract = value
 	}
 	entityType, label := pb.EntityType_ENTITY_TYPE_EOA, shortAddress(address)
 	if isContract {
@@ -120,15 +128,15 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 			}
 		}
 	}
-	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: req.Msg.GetNetwork(), EntityType: entityType, Label: label, BalanceWei: balance.String(), BalanceFormatted: adapter.FormatWeiToETH(balance), TxCount: txCount}, SourceStatus: toSourceStatus(runtime.Engine.SourceStatus(ctx))}), nil
+	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: req.Msg.GetNetwork(), EntityType: entityType, Label: label, BalanceBaseUnits: balance.String(), BalanceFormatted: adapter.FormatAmount(balance, runtime.Chain.NativeAsset()), TxCount: txCount}, SourceStatus: toSourceStatus(runtime.Engine.SourceStatus(ctx))}), nil
 }
 
 func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *connect.Request[pb.LookupTransactionRequest]) (*connect.Response[pb.LookupTransactionResponse], error) {
-	hash, err := transactionHash(req.Msg.GetHash())
+	runtime, err := h.server.network(req.Msg.GetNetwork())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	runtime, err := h.server.network(req.Msg.GetNetwork())
+	hash, err := runtime.Chain.NormalizeTransactionHash(req.Msg.GetHash())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -136,7 +144,7 @@ func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *conne
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	return connect.NewResponse(&pb.LookupTransactionResponse{Transaction: &pb.TransactionItem{Hash: transaction.Hash, BlockNumber: uint64(transaction.BlockNumber), Timestamp: transaction.Timestamp.Unix(), FromAddress: transaction.From, ToAddress: transaction.To, ValueWei: transaction.ValueWei, ValueFormatted: adapter.FormatWeiToETH(bigInt(transaction.ValueWei)), StatusSuccess: true}, SourceStatus: toSourceStatus(source)}), nil
+	return connect.NewResponse(&pb.LookupTransactionResponse{Transaction: &pb.TransactionItem{Hash: transaction.Hash, BlockNumber: uint64(transaction.BlockNumber), Timestamp: transaction.Timestamp.Unix(), FromAddress: transaction.From, ToAddress: transaction.To, ValueBaseUnits: transaction.ValueBaseUnits, ValueFormatted: adapter.FormatAmount(bigInt(transaction.ValueBaseUnits), runtime.Chain.NativeAsset()), StatusSuccess: true}, SourceStatus: toSourceStatus(source)}), nil
 }
 
 func bigInt(value string) *big.Int {
@@ -168,21 +176,26 @@ func toLabelProto(item labels.LabelItem) *pb.AddressLabel {
 }
 
 func protoNetwork(network string) pb.Network {
-	if network == "base-mainnet" {
+	switch network {
+	case "base-mainnet":
 		return pb.Network_NETWORK_BASE_MAINNET
+	case "solana-mainnet":
+		return pb.Network_NETWORK_SOLANA_MAINNET
+	case "tron-mainnet":
+		return pb.Network_NETWORK_TRON_MAINNET
 	}
 	return pb.Network_NETWORK_ETHEREUM_MAINNET
 }
 
 func (h *connectLabelHandler) GetLabels(ctx context.Context, req *connect.Request[pb.GetLabelsRequest]) (*connect.Response[pb.GetLabelsResponse], error) {
-	address, err := ethereumAddress(req.Msg.GetAddress())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
 	if h.server.labels == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("curated labels are unavailable"))
 	}
 	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	address, err := runtime.Chain.NormalizeAddress(req.Msg.GetAddress())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}

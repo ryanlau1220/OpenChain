@@ -12,10 +12,10 @@ message TransactionItem {
   int64 timestamp = 3;
   string from_address = 4;
   string to_address = 5;
-  string value_wei = 6;
+  string value_base_units = 6;
   string value_formatted = 7;
   string gas_used = 8;
-  string gas_price_wei = 9;
+  string fee_base_units = 9;
   bool is_contract_creation = 10;
   bool status_success = 11;
   string method_name = 12;

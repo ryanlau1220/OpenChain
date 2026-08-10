@@ -38,6 +38,20 @@ func NewBlockscoutChainAdapter(network, apiURL, apiKey string, evmClient *EVMCli
 
 func (a *BlockscoutChainAdapter) Network() string { return a.network }
 
+func (a *BlockscoutChainAdapter) NormalizeAddress(value string) (string, error) {
+	return normalizeEthereumAddress(value)
+}
+
+func (a *BlockscoutChainAdapter) NormalizeTransactionHash(value string) (string, error) {
+	return normalizeEthereumHash(value)
+}
+
+func (a *BlockscoutChainAdapter) NativeAsset() Asset {
+	return Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}
+}
+
+func (a *BlockscoutChainAdapter) ActivityLabel() string { return "Outgoing nonce" }
+
 func (a *BlockscoutChainAdapter) GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	if a.evmClient == nil {
 		return big.NewInt(0), fmt.Errorf("Base RPC is unavailable")
@@ -275,7 +289,7 @@ func (a *BlockscoutChainAdapter) LookupTransaction(ctx context.Context, hash str
 	if err != nil {
 		return nil, SourceStatus{}, err
 	}
-	return &TransactionItem{Hash: transaction.Hash, From: transaction.From, To: transaction.To, ValueWei: transaction.AmountBaseUnits, AssetSymbol: "ETH", BlockNumber: transaction.BlockNumber, Timestamp: transaction.Timestamp}, a.SourceStatus(), nil
+	return &TransactionItem{Hash: transaction.Hash, From: transaction.From, To: transaction.To, ValueBaseUnits: transaction.AmountBaseUnits, AssetSymbol: "ETH", BlockNumber: transaction.BlockNumber, Timestamp: transaction.Timestamp}, a.SourceStatus(), nil
 }
 
 func (a *BlockscoutChainAdapter) GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error) {

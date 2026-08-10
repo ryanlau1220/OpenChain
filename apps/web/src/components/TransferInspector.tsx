@@ -1,9 +1,9 @@
-import { type EVMNetwork, type GraphEdge, explorerURL } from '../services/api';
+import { type GraphEdge, type SupportedNetwork, explorerURL } from '../services/api';
 
 export function TransferInspector({
 	edge,
 	network,
-}: { edge: GraphEdge | null; network: EVMNetwork }) {
+}: { edge: GraphEdge | null; network: SupportedNetwork }) {
 	if (!edge) return null;
 	const asset = edge.asset;
 	const rows = [

@@ -39,6 +39,20 @@ func NewEVMChainAdapter(network, chainID, apiURL, apiKey string, evmClient *EVMC
 
 func (a *EVMChainAdapter) Network() string { return a.network }
 
+func (a *EVMChainAdapter) NormalizeAddress(value string) (string, error) {
+	return normalizeEthereumAddress(value)
+}
+
+func (a *EVMChainAdapter) NormalizeTransactionHash(value string) (string, error) {
+	return normalizeEthereumHash(value)
+}
+
+func (a *EVMChainAdapter) NativeAsset() Asset {
+	return Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}
+}
+
+func (a *EVMChainAdapter) ActivityLabel() string { return "Outgoing nonce" }
+
 func (a *EVMChainAdapter) GetBalance(ctx context.Context, address string) (*big.Int, error) {
 	if a.evmClient == nil {
 		return big.NewInt(0), fmt.Errorf("Ethereum RPC is unavailable")
@@ -348,7 +362,7 @@ func (a *EVMChainAdapter) LookupTransaction(ctx context.Context, hash string) (*
 	if !ok {
 		return nil, SourceStatus{}, fmt.Errorf("parse Etherscan transaction value")
 	}
-	return &TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueWei: value.String(), AssetSymbol: "ETH", BlockNumber: block}, a.SourceStatus(), nil
+	return &TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueBaseUnits: value.String(), AssetSymbol: "ETH", BlockNumber: block}, a.SourceStatus(), nil
 }
 
 func (a *EVMChainAdapter) GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error) {

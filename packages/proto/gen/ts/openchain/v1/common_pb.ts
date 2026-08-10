@@ -24,12 +24,24 @@ export enum Network {
    * @generated from enum value: NETWORK_BASE_MAINNET = 2;
    */
   BASE_MAINNET = 2,
+
+  /**
+   * @generated from enum value: NETWORK_SOLANA_MAINNET = 3;
+   */
+  SOLANA_MAINNET = 3,
+
+  /**
+   * @generated from enum value: NETWORK_TRON_MAINNET = 4;
+   */
+  TRON_MAINNET = 4,
 }
 // Retrieve enum metadata with: proto3.getEnumType(Network)
 proto3.util.setEnumType(Network, "openchain.v1.Network", [
   { no: 0, name: "NETWORK_UNSPECIFIED" },
   { no: 1, name: "NETWORK_ETHEREUM_MAINNET" },
   { no: 2, name: "NETWORK_BASE_MAINNET" },
+  { no: 3, name: "NETWORK_SOLANA_MAINNET" },
+  { no: 4, name: "NETWORK_TRON_MAINNET" },
 ]);
 
 /**
@@ -233,9 +245,9 @@ export class AddressSummary extends Message<AddressSummary> {
   label = "";
 
   /**
-   * @generated from field: string balance_wei = 5;
+   * @generated from field: string balance_base_units = 5;
    */
-  balanceWei = "";
+  balanceBaseUnits = "";
 
   /**
    * @generated from field: string balance_formatted = 6;
@@ -258,14 +270,14 @@ export class AddressSummary extends Message<AddressSummary> {
   lastSeenTimestamp = protoInt64.zero;
 
   /**
-   * @generated from field: string total_received_wei = 10;
+   * @generated from field: string total_received_base_units = 10;
    */
-  totalReceivedWei = "";
+  totalReceivedBaseUnits = "";
 
   /**
-   * @generated from field: string total_sent_wei = 11;
+   * @generated from field: string total_sent_base_units = 11;
    */
-  totalSentWei = "";
+  totalSentBaseUnits = "";
 
   constructor(data?: PartialMessage<AddressSummary>) {
     super();
@@ -279,13 +291,13 @@ export class AddressSummary extends Message<AddressSummary> {
     { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
     { no: 3, name: "entity_type", kind: "enum", T: proto3.getEnumType(EntityType) },
     { no: 4, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 5, name: "balance_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "balance_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "balance_formatted", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "tx_count", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
     { no: 8, name: "first_seen_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 9, name: "last_seen_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
-    { no: 10, name: "total_received_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 11, name: "total_sent_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "total_received_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "total_sent_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AddressSummary {

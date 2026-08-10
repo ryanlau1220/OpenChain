@@ -266,7 +266,5 @@ func FormatWeiToETH(wei *big.Int) string {
 	if wei == nil {
 		return "0.0 ETH"
 	}
-	f := new(big.Float).SetInt(wei)
-	eth := new(big.Float).Quo(f, big.NewFloat(1e18))
-	return fmt.Sprintf("%.4f ETH", eth)
+	return FormatAmount(wei, Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18})
 }

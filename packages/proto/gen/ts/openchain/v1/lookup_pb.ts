@@ -37,9 +37,9 @@ export class TransactionItem extends Message<TransactionItem> {
   toAddress = "";
 
   /**
-   * @generated from field: string value_wei = 6;
+   * @generated from field: string value_base_units = 6;
    */
-  valueWei = "";
+  valueBaseUnits = "";
 
   /**
    * @generated from field: string value_formatted = 7;
@@ -52,9 +52,9 @@ export class TransactionItem extends Message<TransactionItem> {
   gasUsed = "";
 
   /**
-   * @generated from field: string gas_price_wei = 9;
+   * @generated from field: string fee_base_units = 9;
    */
-  gasPriceWei = "";
+  feeBaseUnits = "";
 
   /**
    * @generated from field: bool is_contract_creation = 10;
@@ -89,10 +89,10 @@ export class TransactionItem extends Message<TransactionItem> {
     { no: 3, name: "timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 4, name: "from_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "to_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 6, name: "value_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "value_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "value_formatted", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "gas_used", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 9, name: "gas_price_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "fee_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 10, name: "is_contract_creation", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 11, name: "status_success", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 12, name: "method_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },

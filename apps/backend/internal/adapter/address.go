@@ -1,11 +1,11 @@
-package api
+package adapter
 
 import (
 	"fmt"
 	"strings"
 )
 
-func ethereumAddress(value string) (string, error) {
+func normalizeEthereumAddress(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if len(value) != 42 || !strings.HasPrefix(value, "0x") {
 		return "", fmt.Errorf("expected an Ethereum address")
@@ -18,7 +18,7 @@ func ethereumAddress(value string) (string, error) {
 	return strings.ToLower(value), nil
 }
 
-func transactionHash(value string) (string, error) {
+func normalizeEthereumHash(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if len(value) != 66 || !strings.HasPrefix(value, "0x") {
 		return "", fmt.Errorf("expected an Ethereum transaction hash")

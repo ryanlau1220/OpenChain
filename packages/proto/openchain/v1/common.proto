@@ -8,6 +8,8 @@ enum Network {
   NETWORK_UNSPECIFIED = 0;
   NETWORK_ETHEREUM_MAINNET = 1;
   NETWORK_BASE_MAINNET = 2;
+  NETWORK_SOLANA_MAINNET = 3;
+  NETWORK_TRON_MAINNET = 4;
 }
 
 message SourceStatus {
@@ -41,13 +43,13 @@ message AddressSummary {
   Network network = 2;
   EntityType entity_type = 3;
   string label = 4;
-  string balance_wei = 5;
+  string balance_base_units = 5;
   string balance_formatted = 6;
   uint64 tx_count = 7;
   int64 first_seen_timestamp = 8;
   int64 last_seen_timestamp = 9;
-  string total_received_wei = 10;
-  string total_sent_wei = 11;
+  string total_received_base_units = 10;
+  string total_sent_base_units = 11;
 }
 
 message TokenBalance {

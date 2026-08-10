@@ -45,7 +45,7 @@ describe('local case files', () => {
 
 	it('keeps Base case files separate from Ethereum case files', () => {
 		const caseFile = createLocalCase();
-		caseFile.network = 'base-mainnet';
-		expect(parseCaseFile(JSON.stringify(caseFile)).network).toBe('base-mainnet');
+		caseFile.network = 'solana-mainnet';
+		expect(parseCaseFile(JSON.stringify(caseFile)).network).toBe('solana-mainnet');
 	});
 });

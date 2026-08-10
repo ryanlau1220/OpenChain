@@ -30,8 +30,8 @@ fi
 
 case "$1" in
     dev)
-        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${BASE_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ] || [ -z "${BLOCKSCOUT_API_KEY:-}" ]; then
-            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL, BASE_MAINNET_RPC_URL, ETHERSCAN_API_KEY, and BLOCKSCOUT_API_KEY are required.${RESET}"
+        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${BASE_MAINNET_RPC_URL:-}" ] || [ -z "${SOLANA_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ] || [ -z "${BLOCKSCOUT_API_KEY:-}" ] || [ -z "${TRONGRID_API_KEY:-}" ]; then
+            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL, BASE_MAINNET_RPC_URL, SOLANA_MAINNET_RPC_URL, ETHERSCAN_API_KEY, BLOCKSCOUT_API_KEY, and TRONGRID_API_KEY are required.${RESET}"
             exit 1
         fi
 

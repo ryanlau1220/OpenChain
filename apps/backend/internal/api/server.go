@@ -45,7 +45,7 @@ type Server struct {
 var errUnsupportedNetwork = errors.New("unsupported network")
 
 type NetworkRuntime struct {
-	EVM    *adapter.EVMClient
+	Chain  adapter.ChainAdapter
 	Engine *tracing.Engine
 	Queue  *tracing.Queue
 }
@@ -56,7 +56,7 @@ func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service,
 
 func (s *Server) network(network pb.Network) (NetworkRuntime, error) {
 	runtime, ok := s.networks[network]
-	if !ok || runtime.Engine == nil {
+	if !ok || runtime.Chain == nil || runtime.Engine == nil {
 		return NetworkRuntime{}, errUnsupportedNetwork
 	}
 	return runtime, nil

@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"time"
 )
@@ -24,7 +25,7 @@ type TransactionItem struct {
 	Hash             string    `json:"hash"`
 	From             string    `json:"from"`
 	To               string    `json:"to"`
-	ValueWei         string    `json:"value_wei"`
+	ValueBaseUnits   string    `json:"value_base_units"`
 	AssetSymbol      string    `json:"asset_symbol"`
 	BlockNumber      int64     `json:"block_number"`
 	Timestamp        time.Time `json:"timestamp"`
@@ -62,6 +63,10 @@ type ContractMetadata struct {
 // ChainAdapter defines the abstract interface for multi-chain network adapters (EVM, Solana, Bitcoin, etc.)
 type ChainAdapter interface {
 	Network() string
+	NormalizeAddress(value string) (string, error)
+	NormalizeTransactionHash(value string) (string, error)
+	NativeAsset() Asset
+	ActivityLabel() string
 	GetBalance(ctx context.Context, address string) (*big.Int, error)
 	GetTxCount(ctx context.Context, address string) (uint64, error)
 	IsContract(ctx context.Context, address string) (bool, error)
@@ -69,4 +74,13 @@ type ChainAdapter interface {
 	LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error)
 	GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error)
 	SourceStatus() SourceStatus
+}
+
+func FormatAmount(value *big.Int, asset Asset) string {
+	if value == nil {
+		return "0 " + asset.Symbol
+	}
+	base := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(asset.Decimals)), nil)
+	amount := new(big.Rat).SetFrac(value, base)
+	return fmt.Sprintf("%s %s", amount.FloatString(4), asset.Symbol)
 }

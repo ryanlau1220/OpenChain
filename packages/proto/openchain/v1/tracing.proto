@@ -12,7 +12,7 @@ message GraphNode {
   string label = 2;
   EntityType entity_type = 3;
   bool is_seed = 6;
-  string total_volume_wei = 7;
+  string total_volume_base_units = 7;
   uint32 in_tx_count = 8;
   uint32 out_tx_count = 9;
   repeated AddressLabel labels = 10;

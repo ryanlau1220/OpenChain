@@ -45,8 +45,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Curated label import failed: %v", err)
 	}
-	runtimes := make(map[pb.Network]api.NetworkRuntime, 2)
-	queues := make([]*tracing.Queue, 0, 2)
+	runtimes := make(map[pb.Network]api.NetworkRuntime, 4)
+	queues := make([]*tracing.Queue, 0, 4)
 	for _, network := range []struct {
 		id                    pb.Network
 		name, chainID, rpcURL string
@@ -63,7 +63,25 @@ func main() {
 		}
 		engine := tracing.NewEngine(chainAdapter, database, registry)
 		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs)
-		runtimes[network.id] = api.NetworkRuntime{EVM: evmClient, Engine: engine, Queue: queue}
+		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
+		queues = append(queues, queue)
+	}
+	for _, network := range []struct {
+		id   pb.Network
+		name string
+	}{
+		{pb.Network_NETWORK_SOLANA_MAINNET, "solana-mainnet"},
+		{pb.Network_NETWORK_TRON_MAINNET, "tron-mainnet"},
+	} {
+		var chainAdapter adapter.ChainAdapter
+		if network.id == pb.Network_NETWORK_SOLANA_MAINNET {
+			chainAdapter = adapter.NewSolanaAdapter(network.name, cfg.SolanaMainnetRPCURL)
+		} else {
+			chainAdapter = adapter.NewTronAdapter(network.name, adapter.TronGridAPIURL, cfg.TronGridAPIKey)
+		}
+		engine := tracing.NewEngine(chainAdapter, database, registry)
+		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs)
+		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)
 	}
 	workerContext, stopWorker := context.WithCancel(context.Background())

@@ -67,9 +67,9 @@ export class GraphNode extends Message<GraphNode> {
   isSeed = false;
 
   /**
-   * @generated from field: string total_volume_wei = 7;
+   * @generated from field: string total_volume_base_units = 7;
    */
-  totalVolumeWei = "";
+  totalVolumeBaseUnits = "";
 
   /**
    * @generated from field: uint32 in_tx_count = 8;
@@ -98,7 +98,7 @@ export class GraphNode extends Message<GraphNode> {
     { no: 2, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "entity_type", kind: "enum", T: proto3.getEnumType(EntityType) },
     { no: 6, name: "is_seed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 7, name: "total_volume_wei", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "total_volume_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 8, name: "in_tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 9, name: "out_tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 10, name: "labels", kind: "message", T: AddressLabel, repeated: true },

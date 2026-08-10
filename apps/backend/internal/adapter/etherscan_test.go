@@ -102,7 +102,7 @@ func TestEtherscanLooksUpTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if transaction.ValueWei != "42" || transaction.BlockNumber != 10 || source.Source != EtherscanSource {
+	if transaction.ValueBaseUnits != "42" || transaction.BlockNumber != 10 || source.Source != EtherscanSource {
 		t.Fatalf("transaction = %#v, source = %#v", transaction, source)
 	}
 }

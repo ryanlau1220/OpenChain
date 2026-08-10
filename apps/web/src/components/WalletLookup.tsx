@@ -4,10 +4,11 @@ import { useState } from 'react';
 import {
 	type AddressLabel,
 	type AddressSummary,
-	type EVMNetwork,
 	LabelVisibility,
+	type SupportedNetwork,
 	entityLabel,
 	explorerURL,
+	networkDetails,
 } from '../services/api';
 
 interface WalletLookupProps {
@@ -16,7 +17,7 @@ interface WalletLookupProps {
 	loading: boolean;
 	onTraceAddress: (addr: string) => void;
 	targetSeedAddress?: string;
-	network: EVMNetwork;
+	network: SupportedNetwork;
 }
 
 export const WalletLookup: React.FC<WalletLookupProps> = ({
@@ -52,7 +53,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					}}
 				/>
 				<p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-					Querying EVM RPC…
+					Querying blockchain data…
 				</p>
 			</div>
 		);
@@ -223,11 +224,15 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 						value: summary.balanceFormatted || '—',
 						icon: <Wallet className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
 					},
-					{
-						label: 'Outgoing nonce',
-						value: String(summary.txCount ?? '—'),
-						icon: <Clock className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
-					},
+					...(networkDetails(network).activityLabel
+						? [
+								{
+									label: networkDetails(network).activityLabel,
+									value: String(summary.txCount ?? '—'),
+									icon: <Clock className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
+								},
+							]
+						: []),
 					{
 						label: 'Entity',
 						value: entityLabel(summary.entityType),

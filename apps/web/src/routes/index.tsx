@@ -9,15 +9,16 @@ import { WalletLookup } from '../components/WalletLookup';
 import {
 	type AddressLabel,
 	type AddressSummary,
-	type EVMNetwork,
 	type GraphEdge,
 	type GraphNode,
 	Network,
+	type SupportedNetwork,
 	TraceGraphResponse,
 	expandNode,
 	fetchTraceGraph,
 	lookupAddress,
 	networkDetails,
+	networkFromSlug,
 	requestErrorMessage,
 } from '../services/api';
 import {
@@ -33,7 +34,7 @@ type BranchPage = { cursor: string; hasMore: boolean };
 
 function Index() {
 	const [address, setAddress] = useState('');
-	const [network, setNetwork] = useState<EVMNetwork>(Network.ETHEREUM_MAINNET);
+	const [network, setNetwork] = useState<SupportedNetwork>(Network.ETHEREUM_MAINNET);
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
@@ -51,9 +52,7 @@ function Index() {
 	useEffect(() => {
 		const storedCase = loadLocalCase();
 		setCaseFile(storedCase);
-		setNetwork(
-			storedCase.network === 'base-mainnet' ? Network.BASE_MAINNET : Network.ETHEREUM_MAINNET,
-		);
+		setNetwork(networkFromSlug(storedCase.network));
 		setCaseLoaded(true);
 	}, []);
 
@@ -103,7 +102,7 @@ function Index() {
 					setErrorMessage(
 						requestErrorMessage(
 							error,
-							'Unable to load this address. Check the backend and Etherscan status.',
+							'Unable to load this address. Check the backend and data-provider status.',
 						),
 					);
 			} finally {

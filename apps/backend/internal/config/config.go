@@ -12,8 +12,10 @@ type Config struct {
 	DatabaseURL             string
 	EthereumMainnetRPCURL   string
 	BaseMainnetRPCURL       string
+	SolanaMainnetRPCURL     string
 	EtherscanAPIKey         string
 	BlockscoutAPIKey        string
+	TronGridAPIKey          string
 	WebOrigin               string
 	PublicRequestsPerMinute int
 	MaxQueuedTraceJobs      int
@@ -34,8 +36,10 @@ func LoadConfig() *Config {
 
 	ethRPC := os.Getenv("ETHEREUM_MAINNET_RPC_URL")
 	baseRPC := os.Getenv("BASE_MAINNET_RPC_URL")
+	solanaRPC := os.Getenv("SOLANA_MAINNET_RPC_URL")
 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
 	blockscoutAPIKey := os.Getenv("BLOCKSCOUT_API_KEY")
+	tronGridAPIKey := os.Getenv("TRONGRID_API_KEY")
 
 	webOrigin := os.Getenv("WEB_ORIGIN")
 	if webOrigin == "" {
@@ -57,8 +61,10 @@ func LoadConfig() *Config {
 		DatabaseURL:             dbURL,
 		EthereumMainnetRPCURL:   ethRPC,
 		BaseMainnetRPCURL:       baseRPC,
+		SolanaMainnetRPCURL:     solanaRPC,
 		EtherscanAPIKey:         etherscanAPIKey,
 		BlockscoutAPIKey:        blockscoutAPIKey,
+		TronGridAPIKey:          tronGridAPIKey,
 		WebOrigin:               webOrigin,
 		PublicRequestsPerMinute: publicRequestsPerMinute,
 		MaxQueuedTraceJobs:      maxQueuedTraceJobs,
@@ -73,7 +79,7 @@ func (c *Config) Validate() error {
 	}
 	for _, rpc := range []struct {
 		name, value string
-	}{{"ETHEREUM_MAINNET_RPC_URL", c.EthereumMainnetRPCURL}, {"BASE_MAINNET_RPC_URL", c.BaseMainnetRPCURL}} {
+	}{{"ETHEREUM_MAINNET_RPC_URL", c.EthereumMainnetRPCURL}, {"BASE_MAINNET_RPC_URL", c.BaseMainnetRPCURL}, {"SOLANA_MAINNET_RPC_URL", c.SolanaMainnetRPCURL}} {
 		if rpc.value == "" {
 			return fmt.Errorf("%s is required", rpc.name)
 		}
@@ -86,6 +92,9 @@ func (c *Config) Validate() error {
 	}
 	if c.BlockscoutAPIKey == "" {
 		return fmt.Errorf("BLOCKSCOUT_API_KEY is required")
+	}
+	if c.TronGridAPIKey == "" {
+		return fmt.Errorf("TRONGRID_API_KEY is required")
 	}
 	return nil
 }

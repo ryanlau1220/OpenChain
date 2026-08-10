@@ -81,7 +81,7 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 		result.Pending = false
 		return result, nil
 	case "running":
-		return q.engine.PendingGraph(address, "Trace retrieval is in progress. This address may need initial index data."), nil
+		return q.engine.PendingGraph(address, "Trace retrieval is in progress."), nil
 	default:
 		return q.engine.PendingGraph(address, "Trace retrieval is queued and will begin shortly."), nil
 	}

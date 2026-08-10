@@ -1,14 +1,13 @@
 import { Search } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
-import { type EVMNetwork, evmNetworks, networkDetails } from '../services/api';
-import { EthIcon } from './Icons';
+import { type SupportedNetwork, networkDetails, supportedNetworks } from '../services/api';
 
 interface HeaderProps {
 	currentAddress: string;
 	onSearch: (address: string) => void;
-	network: EVMNetwork;
-	onNetworkChange: (network: EVMNetwork) => void;
+	network: SupportedNetwork;
+	onNetworkChange: (network: SupportedNetwork) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -80,14 +79,15 @@ export const Header: React.FC<HeaderProps> = ({
 								color: '#627EEA',
 							}}
 						>
-							<EthIcon className="w-3.5 h-3.5" />
 							<select
 								aria-label="Network"
 								value={network}
-								onChange={(event) => onNetworkChange(Number(event.target.value) as EVMNetwork)}
+								onChange={(event) =>
+									onNetworkChange(Number(event.target.value) as SupportedNetwork)
+								}
 								className="bg-transparent outline-none cursor-pointer"
 							>
-								{evmNetworks.map((item) => (
+								{supportedNetworks.map((item) => (
 									<option key={item} value={item}>
 										{networkDetails(item).name}
 									</option>
@@ -102,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({
 							type="text"
 							value={singleInput}
 							onChange={(e) => setSingleInput(e.target.value)}
-							placeholder="Search target address (0x…)"
+							placeholder="Search target address"
 							className="prism-input font-mono pl-3.5 pr-12"
 						/>
 						<button

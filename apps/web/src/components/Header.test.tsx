@@ -16,5 +16,7 @@ describe('Header Component', () => {
 		);
 		expect(screen.getByText('OpenChain')).toBeTruthy();
 		expect(screen.getByRole('option', { name: 'Base Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('option', { name: 'Solana Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('option', { name: 'TRON Mainnet' })).toBeTruthy();
 	});
 });

@@ -27,8 +27,9 @@ func setupTestServer() (http.Handler, *Server) {
 }
 
 func testNetworks(registry *labels.Service) map[pb.Network]NetworkRuntime {
-	engine := tracing.NewEngine(adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil), nil, registry)
-	return map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Engine: engine}}
+	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil)
+	engine := tracing.NewEngine(chain, nil, registry)
+	return map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine}}
 }
 
 func TestPublicRequestLimitUsesConnectResourceExhausted(t *testing.T) {
@@ -139,8 +140,9 @@ func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	if err := service.ImportSeed(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine := tracing.NewEngine(adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil), database, service)
-	server := NewServer(map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Engine: engine}}, service, "http://localhost:3000", 30, false)
+	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil)
+	engine := tracing.NewEngine(chain, database, service)
+	server := NewServer(map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine}}, service, "http://localhost:3000", 30, false)
 	labelsResponse, err := (&connectLabelHandler{server: server}).GetLabels(ctx, connect.NewRequest(&pb.GetLabelsRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
 	if err != nil {
 		t.Fatal(err)

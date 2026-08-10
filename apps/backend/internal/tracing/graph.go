@@ -24,10 +24,10 @@ const (
 )
 
 type GraphNode struct {
-	ID, Label, EntityType, TotalVolumeWei string
-	IsSeed                                bool
-	InTxCount, OutTxCount                 uint32
-	Labels                                []labels.LabelItem
+	ID, Label, EntityType, TotalVolumeBaseUnits string
+	IsSeed                                      bool
+	InTxCount, OutTxCount                       uint32
+	Labels                                      []labels.LabelItem
 }
 type GraphEdge struct {
 	ID, Source, Target, AmountBaseUnits, AmountFormatted, EventID, TransactionHash, TransferKind, SourceName string
@@ -62,6 +62,11 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	if e.chainAdapter == nil {
 		return nil, fmt.Errorf("trace data source is not configured")
 	}
+	var err error
+	address, err = e.chainAdapter.NormalizeAddress(address)
+	if err != nil {
+		return nil, err
+	}
 	if limit == 0 || limit > maxPageSize {
 		limit = maxPageSize
 	}
@@ -80,11 +85,11 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 }
 
 func (e *Engine) PendingGraph(address, warning string) *GraphResult {
-	seed := strings.ToLower(address)
+	seed := e.normalizeAddress(address)
 	return &GraphResult{
 		Network:     e.Network(),
 		SeedAddress: seed,
-		Nodes:       []GraphNode{{ID: seed, Label: shortAddress(seed), EntityType: "EOA", IsSeed: true, TotalVolumeWei: "0"}},
+		Nodes:       []GraphNode{{ID: seed, Label: shortAddress(seed), EntityType: "EOA", IsSeed: true, TotalVolumeBaseUnits: "0"}},
 		TotalNodes:  1,
 		Pending:     true,
 		SourceStatus: adapter.SourceStatus{
@@ -106,7 +111,11 @@ func (e *Engine) LookupTransaction(ctx context.Context, hash string) (*adapter.T
 	if e.chainAdapter == nil {
 		return nil, adapter.SourceStatus{}, fmt.Errorf("trace data source is not configured")
 	}
-	return e.chainAdapter.LookupTransaction(ctx, hash)
+	normalized, err := e.chainAdapter.NormalizeTransactionHash(hash)
+	if err != nil {
+		return nil, adapter.SourceStatus{}, err
+	}
+	return e.chainAdapter.LookupTransaction(ctx, normalized)
 }
 
 func (e *Engine) SourceStatus(ctx context.Context) adapter.SourceStatus {
@@ -117,12 +126,12 @@ func (e *Engine) SourceStatus(ctx context.Context) adapter.SourceStatus {
 }
 
 func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.TransferItem, page *adapter.TransferPage) *GraphResult {
-	seed = strings.ToLower(seed)
+	seed = e.normalizeAddress(seed)
 	nodes := map[string]GraphNode{seed: e.node(ctx, seed, true)}
 	inCounts, outCounts := map[string]uint32{}, map[string]uint32{}
 	edges := make([]GraphEdge, 0, len(transfers))
 	for _, transfer := range transfers {
-		from, to := strings.ToLower(transfer.From), strings.ToLower(transfer.To)
+		from, to := e.normalizeAddress(transfer.From), e.normalizeAddress(transfer.To)
 		if _, ok := nodes[from]; !ok {
 			nodes[from] = e.node(ctx, from, from == seed)
 		}
@@ -165,14 +174,13 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 			entityType = "CONTRACT"
 		}
 	}
-	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, TotalVolumeWei: "0", Labels: nodeLabels}
+	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, TotalVolumeBaseUnits: "0", Labels: nodeLabels}
 }
 
 func filterTransfers(transfers []adapter.TransferItem, address string, direction Direction) []adapter.TransferItem {
-	address = strings.ToLower(address)
 	result := make([]adapter.TransferItem, 0, len(transfers))
 	for _, transfer := range transfers {
-		from, to := strings.ToLower(transfer.From), strings.ToLower(transfer.To)
+		from, to := transfer.From, transfer.To
 		if direction == DirectionInbound && to != address {
 			continue
 		}
@@ -187,7 +195,7 @@ func filterTransfers(transfers []adapter.TransferItem, address string, direction
 func (e *Engine) toTransfers(items []adapter.TransferItem, source adapter.SourceStatus) []db.Transfer {
 	transfers := make([]db.Transfer, 0, len(items))
 	for _, item := range items {
-		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: strings.ToLower(item.From), ToAddress: strings.ToLower(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockTimestamp: item.Timestamp, Source: source.Source, RetrievedAt: source.RetrievedAt})
+		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: e.normalizeAddress(item.From), ToAddress: e.normalizeAddress(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockTimestamp: item.Timestamp, Source: source.Source, RetrievedAt: source.RetrievedAt})
 	}
 	return transfers
 }
@@ -201,23 +209,24 @@ func (e *Engine) toAddresses(nodes []GraphNode) []db.Address {
 }
 
 func transferID(network, hash, eventID string) string {
-	return network + ":" + strings.ToLower(hash) + ":" + eventID
+	return network + ":" + hash + ":" + eventID
 }
 func formatAmount(value string, asset adapter.Asset) string {
 	amount, ok := new(big.Int).SetString(value, 10)
 	if !ok {
 		return value + " " + asset.Symbol
 	}
-	if asset.Kind == "NATIVE" {
-		return adapter.FormatWeiToETH(amount)
-	}
-	return formatTokenAmount(amount, asset.Decimals, asset.Symbol)
+	return adapter.FormatAmount(amount, asset)
 }
 
-func formatTokenAmount(amount *big.Int, decimals uint32, symbol string) string {
-	base := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-	value := new(big.Rat).SetFrac(amount, base)
-	return value.FloatString(4) + " " + symbol
+func (e *Engine) normalizeAddress(value string) string {
+	if e.chainAdapter == nil {
+		return value
+	}
+	if normalized, err := e.chainAdapter.NormalizeAddress(value); err == nil {
+		return normalized
+	}
+	return value
 }
 func shortAddress(address string) string {
 	if len(address) <= 10 {
