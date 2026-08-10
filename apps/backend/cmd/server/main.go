@@ -25,10 +25,7 @@ func main() {
 	}
 	log.Printf("Starting OpenChain backend on port %s", cfg.Port)
 	evmClient := adapter.NewEVMClient(cfg.EthereumMainnetRPCURL)
-	trueBlocks, err := adapter.NewTrueBlocksClient(cfg.TrueBlocksAPIURL)
-	if err != nil {
-		log.Fatal(err)
-	}
+	chainAdapter := adapter.NewEVMChainAdapter(adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
 
 	database, err := db.NewDB(db.DefaultConfig(cfg.DatabaseURL))
 	if err != nil {
@@ -54,7 +51,7 @@ func main() {
 			log.Printf("Curated label import failed: %v", err)
 		}
 	}
-	engine := tracing.NewEngine(evmClient, trueBlocks, database, registry)
+	engine := tracing.NewEngine(chainAdapter, database, registry)
 	queue := tracing.NewQueue(engine, database)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)

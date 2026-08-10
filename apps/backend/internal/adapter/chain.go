@@ -21,6 +21,24 @@ type TransactionItem struct {
 	LastTxTimestamp  int64     `json:"last_tx_timestamp,omitempty"`
 }
 
+const EtherscanSource = "etherscan-v2"
+
+type SourceStatus struct {
+	Source           string
+	RetrievedAt      time.Time
+	IndexedUpToBlock int64
+	LatestChainBlock int64
+	IsComplete       bool
+	Warning          string
+}
+
+type TransferPage struct {
+	Transactions []TransactionItem
+	NextCursor   string
+	HasMore      bool
+	SourceStatus SourceStatus
+}
+
 // ContractMetadata represents dynamically resolved smart contract metadata
 type ContractMetadata struct {
 	ContractName string `json:"contract_name"`
@@ -34,6 +52,7 @@ type ChainAdapter interface {
 	GetBalance(ctx context.Context, address string) (*big.Int, error)
 	GetTxCount(ctx context.Context, address string) (uint64, error)
 	IsContract(ctx context.Context, address string) (bool, error)
-	GetAccountTransactions(ctx context.Context, address string, limit int) ([]TransactionItem, error)
+	ListNativeTransfers(ctx context.Context, address string, limit uint32, cursor uint64) (*TransferPage, error)
+	LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error)
 	GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error)
 }

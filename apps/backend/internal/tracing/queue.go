@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -13,8 +14,8 @@ import (
 
 const (
 	traceWorkerPollInterval = time.Second
-	traceJobTimeout         = 10 * time.Minute
-	traceJobLease           = 11 * time.Minute
+	traceJobTimeout         = time.Minute
+	traceJobLease           = 2 * time.Minute
 )
 
 type Queue struct {
@@ -61,7 +62,7 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 	if q.database == nil {
 		return q.engine.ResolveGraph(ctx, address, direction, limit, cursor)
 	}
-	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: "ethereum-mainnet", Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry)
+	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: "ethereum-mainnet:etherscan-v2", Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry)
 	if err != nil {
 		return nil, fmt.Errorf("queue trace job: %w", err)
 	}
@@ -99,10 +100,19 @@ func (q *Queue) runOnce(ctx context.Context) {
 
 	jobContext, cancel := context.WithTimeout(ctx, traceJobTimeout)
 	result, err := q.engine.ResolveGraph(jobContext, job.Query.Address, Direction(job.Query.Direction), job.Query.Limit, job.Query.Cursor)
+	interrupted := errors.Is(jobContext.Err(), context.Canceled)
 	cancel()
 	if err != nil {
+		writeContext, writeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer writeCancel()
+		if interrupted {
+			if requeueErr := q.database.RequeueTraceJob(writeContext, job.ID); requeueErr != nil {
+				slog.Error("requeue interrupted trace job", "job_id", job.ID, "error", requeueErr)
+			}
+			return
+		}
 		slog.Warn("trace job failed", "job_id", job.ID, "error", err)
-		if failErr := q.database.FailTraceJob(ctx, job.ID, "Trace retrieval did not complete. Search again to retry."); failErr != nil {
+		if failErr := q.database.FailTraceJob(writeContext, job.ID, "Trace retrieval did not complete. Search again to retry."); failErr != nil {
 			slog.Error("mark trace job failed", "job_id", job.ID, "error", failErr)
 		}
 		return

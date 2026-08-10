@@ -84,6 +84,11 @@ func (d *DB) FailTraceJob(ctx context.Context, id int64, message string) error {
 	return err
 }
 
+func (d *DB) RequeueTraceJob(ctx context.Context, id int64) error {
+	_, err := d.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'queued', lease_expires_at = NULL, updated_at = now() WHERE id = $1 AND status = 'running'`, id)
+	return err
+}
+
 type traceJobScanner interface {
 	Scan(...any) error
 }

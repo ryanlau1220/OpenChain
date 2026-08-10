@@ -25,20 +25,17 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 		to   = "0x2000000000000000000000000000000000000002"
 		hash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	)
-	trueBlocks := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/export":
-			if request.URL.Query().Get("addrs") != from {
-				t.Errorf("address = %q", request.URL.Query().Get("addrs"))
-			}
-			_, _ = writer.Write([]byte(`{"data":[{"hash":"` + hash + `","blockNumber":10,"timestamp":100,"from":"` + from + `","to":"` + to + `","value":"42"}]}`))
-		case "/status":
-			_, _ = writer.Write([]byte(`{"data":[{}]}`))
-		default:
+	etherscan := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("module") != "account" || request.URL.Query().Get("action") != "txlist" {
 			http.NotFound(writer, request)
+			return
 		}
+		if request.URL.Query().Get("address") != from {
+			t.Errorf("address = %q", request.URL.Query().Get("address"))
+		}
+		_, _ = writer.Write([]byte(`{"status":"1","message":"OK","result":[{"hash":"` + hash + `","blockNumber":"10","timeStamp":"100","from":"` + from + `","to":"` + to + `","value":"42"}]}`))
 	}))
-	defer trueBlocks.Close()
+	defer etherscan.Close()
 
 	database, err := db.NewDB(db.DefaultConfig(os.Getenv("DATABASE_URL")))
 	if err != nil {
@@ -57,16 +54,13 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = 'ethereum-mainnet' AND address = $1`, from)
+		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = 'ethereum-mainnet:etherscan-v2' AND address = $1`, from)
 		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM transfers WHERE id = $1`, "ethereum-mainnet:"+hash+":0")
 	}()
 
-	client, err := adapter.NewTrueBlocksClient(trueBlocks.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	queue := tracing.NewQueue(tracing.NewEngine(nil, client, database, labels.NewService(database)), database)
+	client := adapter.NewEVMChainAdapter(etherscan.URL, "test-key", nil)
+	queue := tracing.NewQueue(tracing.NewEngine(client, database, labels.NewService(database)), database)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)
 	defer func() {

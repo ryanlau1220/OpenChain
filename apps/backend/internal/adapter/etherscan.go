@@ -5,71 +5,55 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+const (
+	EtherscanAPIURL     = "https://api.etherscan.io/v2/api"
+	etherscanRequestGap = time.Second / 5
+)
+
 type EVMChainAdapter struct {
-	network    string
-	apiBaseURL string
+	apiURL     string
 	apiKey     string
 	evmClient  *EVMClient
 	httpClient *http.Client
+
+	requestMu   sync.Mutex
+	lastRequest time.Time
 }
 
-func NewEVMChainAdapter(network string, apiBaseURL string, apiKey string, evmClient *EVMClient) *EVMChainAdapter {
-	if apiBaseURL == "" {
-		if strings.Contains(strings.ToUpper(network), "SEPOLIA") {
-			apiBaseURL = "https://eth-sepolia.blockscout.com/api"
-		} else {
-			apiBaseURL = "https://eth.blockscout.com/api"
-		}
-	}
-	return &EVMChainAdapter{
-		network:    network,
-		apiBaseURL: strings.TrimRight(apiBaseURL, "/"),
-		apiKey:     apiKey,
-		evmClient:  evmClient,
-		httpClient: &http.Client{
-			Timeout: 8 * time.Second,
-		},
-	}
+func NewEVMChainAdapter(apiURL, apiKey string, evmClient *EVMClient) *EVMChainAdapter {
+	return &EVMChainAdapter{apiURL: apiURL, apiKey: apiKey, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}}
 }
 
-func (a *EVMChainAdapter) Network() string {
-	return a.network
-}
+func (a *EVMChainAdapter) Network() string { return "ethereum-mainnet" }
 
 func (a *EVMChainAdapter) GetBalance(ctx context.Context, address string) (*big.Int, error) {
-	if a.evmClient != nil {
-		return a.evmClient.GetBalance(ctx, address)
+	if a.evmClient == nil {
+		return big.NewInt(0), fmt.Errorf("Ethereum RPC is unavailable")
 	}
-	return big.NewInt(0), nil
+	return a.evmClient.GetBalance(ctx, address)
 }
 
 func (a *EVMChainAdapter) GetTxCount(ctx context.Context, address string) (uint64, error) {
-	if a.evmClient != nil {
-		return a.evmClient.GetTxCount(ctx, address)
+	if a.evmClient == nil {
+		return 0, fmt.Errorf("Ethereum RPC is unavailable")
 	}
-	return 0, nil
+	return a.evmClient.GetTxCount(ctx, address)
 }
 
 func (a *EVMChainAdapter) IsContract(ctx context.Context, address string) (bool, error) {
-	if a.evmClient != nil {
-		isC, err := a.evmClient.IsContract(ctx, address)
-		if err == nil && isC {
-			return true, nil
-		}
+	if a.evmClient == nil {
+		return false, fmt.Errorf("Ethereum RPC is unavailable")
 	}
-	meta, err := a.GetContractMetadata(ctx, address)
-	if err == nil && meta != nil && meta.ContractName != "" {
-		return true, nil
-	}
-	return false, nil
+	return a.evmClient.IsContract(ctx, address)
 }
 
 type etherscanResponse struct {
@@ -85,7 +69,6 @@ type etherscanTxResult struct {
 	Value       string `json:"value"`
 	BlockNumber string `json:"blockNumber"`
 	TimeStamp   string `json:"timeStamp"`
-	TokenSymbol string `json:"tokenSymbol"`
 }
 
 type etherscanSourceCodeResult struct {
@@ -93,120 +76,130 @@ type etherscanSourceCodeResult struct {
 	ABI          string `json:"ABI"`
 }
 
-func (a *EVMChainAdapter) GetAccountTransactions(ctx context.Context, address string, limit int) ([]TransactionItem, error) {
-	if limit <= 0 {
-		limit = 15
+func (a *EVMChainAdapter) ListNativeTransfers(ctx context.Context, address string, limit uint32, cursor uint64) (*TransferPage, error) {
+	if limit == 0 {
+		limit = 25
 	}
-	clean := strings.ToLower(strings.TrimSpace(address))
-	if clean == "" {
-		return nil, fmt.Errorf("empty address")
-	}
-
-	url := fmt.Sprintf("%s?module=account&action=txlist&address=%s&startblock=0&endblock=99999999&page=1&offset=%d&sort=desc", a.apiBaseURL, clean, limit)
-	if a.apiKey != "" {
-		url += "&apikey=" + a.apiKey
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
+	page := cursor + 1
+	var response etherscanResponse
+	if err := a.get(ctx, url.Values{"module": {"account"}, "action": {"txlist"}, "chainid": {"1"}, "address": {strings.ToLower(address)}, "startblock": {"0"}, "endblock": {"999999999"}, "page": {strconv.FormatUint(page, 10)}, "offset": {strconv.FormatUint(uint64(limit)+1, 10)}, "sort": {"desc"}}, &response); err != nil {
 		return nil, err
 	}
-
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		slog.Warn("Etherscan API request failed", "address", clean, "error", err)
-		return []TransactionItem{}, nil
+	if response.Status != "1" && !strings.EqualFold(response.Message, "No transactions found") {
+		return nil, fmt.Errorf("Etherscan transaction history: %s", response.Message)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return []TransactionItem{}, nil
+	var rawTransactions []etherscanTxResult
+	if len(response.Result) > 0 && string(response.Result) != "null" {
+		if err := json.Unmarshal(response.Result, &rawTransactions); err != nil {
+			return nil, fmt.Errorf("decode Etherscan transaction history: %w", err)
+		}
 	}
-
-	var apiResp etherscanResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return []TransactionItem{}, nil
+	hasMore := len(rawTransactions) > int(limit)
+	if hasMore {
+		rawTransactions = rawTransactions[:limit]
 	}
-
-	var rawTxs []etherscanTxResult
-	if err := json.Unmarshal(apiResp.Result, &rawTxs); err != nil {
-		return []TransactionItem{}, nil
-	}
-
-	var txs []TransactionItem
-	for _, tx := range rawTxs {
-		if tx.From == "" || tx.To == "" {
+	transactions := make([]TransactionItem, 0, len(rawTransactions))
+	for _, item := range rawTransactions {
+		if item.Hash == "" || item.From == "" || item.To == "" {
 			continue
 		}
-		blk, _ := strconv.ParseInt(tx.BlockNumber, 10, 64)
-		tsSec, _ := strconv.ParseInt(tx.TimeStamp, 10, 64)
-		sym := tx.TokenSymbol
-		if sym == "" {
-			sym = "ETH"
+		block, err := strconv.ParseInt(item.BlockNumber, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse Etherscan block number: %w", err)
 		}
-		txs = append(txs, TransactionItem{
-			Hash:        tx.Hash,
-			From:        strings.ToLower(tx.From),
-			To:          strings.ToLower(tx.To),
-			ValueWei:    tx.Value,
-			AssetSymbol: sym,
-			BlockNumber: blk,
-			Timestamp:   time.Unix(tsSec, 0),
-		})
+		timestamp, err := strconv.ParseInt(item.TimeStamp, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse Etherscan timestamp: %w", err)
+		}
+		if _, ok := new(big.Int).SetString(item.Value, 10); !ok {
+			return nil, fmt.Errorf("parse Etherscan transaction value")
+		}
+		transactions = append(transactions, TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueWei: item.Value, AssetSymbol: "ETH", BlockNumber: block, Timestamp: time.Unix(timestamp, 0)})
 	}
+	nextCursor := ""
+	if hasMore {
+		nextCursor = strconv.FormatUint(page, 10)
+	}
+	return &TransferPage{Transactions: transactions, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: a.SourceStatus()}, nil
+}
 
-	return txs, nil
+func (a *EVMChainAdapter) LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error) {
+	var response etherscanResponse
+	if err := a.get(ctx, url.Values{"module": {"proxy"}, "action": {"eth_getTransactionByHash"}, "txhash": {hash}}, &response); err != nil {
+		return nil, SourceStatus{}, err
+	}
+	var item struct {
+		Hash        string `json:"hash"`
+		From        string `json:"from"`
+		To          string `json:"to"`
+		Value       string `json:"value"`
+		BlockNumber string `json:"blockNumber"`
+	}
+	if len(response.Result) == 0 || string(response.Result) == "null" || json.Unmarshal(response.Result, &item) != nil || item.Hash == "" || item.From == "" || item.To == "" {
+		return nil, SourceStatus{}, fmt.Errorf("transaction not found")
+	}
+	block, err := strconv.ParseInt(strings.TrimPrefix(item.BlockNumber, "0x"), 16, 64)
+	if err != nil {
+		return nil, SourceStatus{}, fmt.Errorf("parse Etherscan transaction block: %w", err)
+	}
+	value, ok := new(big.Int).SetString(strings.TrimPrefix(item.Value, "0x"), 16)
+	if !ok {
+		return nil, SourceStatus{}, fmt.Errorf("parse Etherscan transaction value")
+	}
+	return &TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueWei: value.String(), AssetSymbol: "ETH", BlockNumber: block}, a.SourceStatus(), nil
 }
 
 func (a *EVMChainAdapter) GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error) {
-	clean := strings.ToLower(strings.TrimSpace(address))
-	url := fmt.Sprintf("%s?module=contract&action=getsourcecode&address=%s", a.apiBaseURL, clean)
-	if a.apiKey != "" {
-		url += "&apikey=" + a.apiKey
+	var response etherscanResponse
+	if err := a.get(ctx, url.Values{"module": {"contract"}, "action": {"getsourcecode"}, "chainid": {"1"}, "address": {strings.ToLower(address)}}, &response); err != nil {
+		return nil, err
 	}
+	var values []etherscanSourceCodeResult
+	if err := json.Unmarshal(response.Result, &values); err != nil || len(values) == 0 || values[0].ContractName == "" {
+		return &ContractMetadata{Category: "EOA"}, nil
+	}
+	return &ContractMetadata{ContractName: values[0].ContractName, IsVerified: values[0].ABI != "Contract source code not verified", Category: "CONTRACT"}, nil
+}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+func (a *EVMChainAdapter) SourceStatus() SourceStatus {
+	return SourceStatus{Source: EtherscanSource, RetrievedAt: time.Now().UTC(), IsComplete: true}
+}
+
+func (a *EVMChainAdapter) get(ctx context.Context, query url.Values, output *etherscanResponse) error {
+	a.requestMu.Lock()
+	defer a.requestMu.Unlock()
+	if delay := time.Until(a.lastRequest.Add(etherscanRequestGap)); delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	a.lastRequest = time.Now()
+	query.Set("apikey", a.apiKey)
+	requestURL, err := url.Parse(a.apiURL)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	resp, err := a.httpClient.Do(req)
+	requestURL.RawQuery = query.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
+	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("Etherscan request: %w", err)
 	}
-
-	var apiResp etherscanResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, err
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return fmt.Errorf("Etherscan returned %s", response.Status)
 	}
-
-	var codeResults []etherscanSourceCodeResult
-	if err := json.Unmarshal(apiResp.Result, &codeResults); err != nil || len(codeResults) == 0 {
-		return &ContractMetadata{ContractName: "", IsVerified: false, Category: "EOA"}, nil
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
+	if err := decoder.Decode(output); err != nil {
+		return fmt.Errorf("decode Etherscan response: %w", err)
 	}
-
-	res := codeResults[0]
-	if res.ContractName == "" {
-		return &ContractMetadata{ContractName: "", IsVerified: false, Category: "EOA"}, nil
-	}
-
-	cat := "CONTRACT"
-	if strings.Contains(strings.ToLower(res.ContractName), "router") {
-		cat = "DeFi"
-	} else if strings.Contains(strings.ToLower(res.ContractName), "vault") || strings.Contains(strings.ToLower(res.ContractName), "pool") {
-		cat = "DeFi Pool"
-	}
-
-	return &ContractMetadata{
-		ContractName: res.ContractName,
-		IsVerified:   res.ABI != "Contract source code not verified",
-		Category:     cat,
-	}, nil
+	return nil
 }

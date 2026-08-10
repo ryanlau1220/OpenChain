@@ -9,7 +9,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	// Clear env vars to test defaults
 	_ = os.Unsetenv("PORT")
 	_ = os.Unsetenv("ETHEREUM_MAINNET_RPC_URL")
-	_ = os.Unsetenv("TRUEBLOCKS_API_URL")
+	_ = os.Unsetenv("ETHERSCAN_API_KEY")
 
 	cfg := LoadConfig()
 	if cfg.Port != "8081" {
@@ -24,11 +24,11 @@ func TestLoadConfigDefaults(t *testing.T) {
 func TestLoadConfigCustomEnv(t *testing.T) {
 	_ = os.Setenv("PORT", "9090")
 	_ = os.Setenv("ETHEREUM_MAINNET_RPC_URL", "https://custom-rpc.example.com")
-	_ = os.Setenv("TRUEBLOCKS_API_URL", "http://trueblocks.internal:8080")
+	_ = os.Setenv("ETHERSCAN_API_KEY", "test-key")
 	defer func() {
 		_ = os.Unsetenv("PORT")
 		_ = os.Unsetenv("ETHEREUM_MAINNET_RPC_URL")
-		_ = os.Unsetenv("TRUEBLOCKS_API_URL")
+		_ = os.Unsetenv("ETHERSCAN_API_KEY")
 	}()
 
 	cfg := LoadConfig()

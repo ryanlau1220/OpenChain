@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -63,10 +64,16 @@ func TestTraceJobIntegration(t *testing.T) {
 	if err := database.InitSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	query := TraceJobQuery{Network: "test", Address: "trace-job-test-address", Direction: "both", Limit: 1}
+	database.SQL.SetMaxOpenConns(1)
+	database.SQL.SetMaxIdleConns(1)
+	schema := "openchain_jobs_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s; CREATE TABLE %s.trace_jobs (LIKE public.trace_jobs INCLUDING ALL); SET search_path = %s, public`, schema, schema, schema)); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
-		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = $1 AND address = $2`, query.Network, query.Address)
+		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 	}()
+	query := TraceJobQuery{Network: "test", Address: "trace-job-test-address", Direction: "both", Limit: 1}
 
 	queued, err := database.EnqueueTraceJob(ctx, query, false)
 	if err != nil {
@@ -86,6 +93,13 @@ func TestTraceJobIntegration(t *testing.T) {
 	}
 	if claimed == nil || claimed.ID != queued.ID || claimed.Status != "running" {
 		t.Fatalf("claimed = %#v, want running job %#v", claimed, queued)
+	}
+	if err := database.RequeueTraceJob(ctx, claimed.ID); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err = database.ClaimTraceJob(ctx, time.Minute)
+	if err != nil || claimed == nil || claimed.ID != queued.ID || claimed.Status != "running" {
+		t.Fatalf("reclaimed = %#v, err = %v", claimed, err)
 	}
 	other, err := database.ClaimTraceJob(ctx, time.Minute)
 	if err != nil {

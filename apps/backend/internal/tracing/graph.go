@@ -48,19 +48,18 @@ type GraphResult struct {
 }
 
 type Engine struct {
-	evmClient     *adapter.EVMClient
-	trueBlocks    *adapter.TrueBlocksClient
+	chainAdapter  *adapter.EVMChainAdapter
 	database      *db.DB
 	labelRegistry *labels.Service
 }
 
-func NewEngine(evm *adapter.EVMClient, trueBlocks *adapter.TrueBlocksClient, database *db.DB, labels *labels.Service) *Engine {
-	return &Engine{evmClient: evm, trueBlocks: trueBlocks, database: database, labelRegistry: labels}
+func NewEngine(chainAdapter *adapter.EVMChainAdapter, database *db.DB, labels *labels.Service) *Engine {
+	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels}
 }
 
 func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string) (*GraphResult, error) {
-	if e.trueBlocks == nil {
-		return nil, fmt.Errorf("TrueBlocks is not configured")
+	if e.chainAdapter == nil {
+		return nil, fmt.Errorf("Etherscan is not configured")
 	}
 	if limit == 0 || limit > maxPageSize {
 		limit = maxPageSize
@@ -69,11 +68,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	if err != nil {
 		return nil, err
 	}
-	var latestBlock uint64
-	if e.evmClient != nil {
-		latestBlock, _ = e.evmClient.GetLatestBlockNumber(ctx)
-	}
-	page, err := e.trueBlocks.ListNativeTransfers(ctx, address, limit, offset, latestBlock)
+	page, err := e.chainAdapter.ListNativeTransfers(ctx, address, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +90,7 @@ func (e *Engine) PendingGraph(address, warning string) *GraphResult {
 		TotalNodes:  1,
 		Pending:     true,
 		SourceStatus: adapter.SourceStatus{
-			Source:      "trueblocks-6.5.0",
+			Source:      adapter.EtherscanSource,
 			RetrievedAt: time.Now().UTC(),
 			Warning:     warning,
 		},
@@ -103,25 +98,17 @@ func (e *Engine) PendingGraph(address, warning string) *GraphResult {
 }
 
 func (e *Engine) LookupTransaction(ctx context.Context, hash string) (*adapter.TransactionItem, adapter.SourceStatus, error) {
-	if e.trueBlocks == nil {
-		return nil, adapter.SourceStatus{}, fmt.Errorf("TrueBlocks is not configured")
+	if e.chainAdapter == nil {
+		return nil, adapter.SourceStatus{}, fmt.Errorf("Etherscan is not configured")
 	}
-	var latestBlock uint64
-	if e.evmClient != nil {
-		latestBlock, _ = e.evmClient.GetLatestBlockNumber(ctx)
-	}
-	return e.trueBlocks.LookupTransaction(ctx, hash, latestBlock)
+	return e.chainAdapter.LookupTransaction(ctx, hash)
 }
 
 func (e *Engine) SourceStatus(ctx context.Context) adapter.SourceStatus {
-	if e.trueBlocks == nil {
-		return adapter.SourceStatus{Source: "trueblocks-6.5.0", Warning: "TrueBlocks is not configured."}
+	if e.chainAdapter == nil {
+		return adapter.SourceStatus{Source: adapter.EtherscanSource, Warning: "Etherscan is not configured."}
 	}
-	var latestBlock uint64
-	if e.evmClient != nil {
-		latestBlock, _ = e.evmClient.GetLatestBlockNumber(ctx)
-	}
-	return e.trueBlocks.Status(ctx, latestBlock)
+	return e.chainAdapter.SourceStatus()
 }
 
 func (e *Engine) graph(ctx context.Context, seed string, transactions []adapter.TransactionItem, page *adapter.TransferPage) *GraphResult {
@@ -168,8 +155,8 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 			}
 		}
 	}
-	if e.evmClient != nil {
-		if contract, err := e.evmClient.IsContract(ctx, address); err == nil && contract {
+	if e.chainAdapter != nil && seed {
+		if contract, err := e.chainAdapter.IsContract(ctx, address); err == nil && contract {
 			entityType = "CONTRACT"
 		}
 	}

@@ -20,7 +20,7 @@ const testAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
 
 func setupTestServer() (http.Handler, *Server) {
 	registry := labels.NewService(nil)
-	engine := tracing.NewEngine(nil, nil, nil, registry)
+	engine := tracing.NewEngine(nil, nil, registry)
 	return NewServer(nil, registry, engine, nil, "http://localhost:3000").Handler(), NewServer(nil, registry, engine, nil, "http://localhost:3000")
 }
 
@@ -102,7 +102,7 @@ func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	if err := service.ImportSeed(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine := tracing.NewEngine(nil, nil, database, service)
+	engine := tracing.NewEngine(nil, database, service)
 	server := NewServer(nil, service, engine, nil, "http://localhost:3000")
 	labelsResponse, err := (&connectLabelHandler{server: server}).GetLabels(ctx, connect.NewRequest(&pb.GetLabelsRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
 	if err != nil {

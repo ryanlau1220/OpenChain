@@ -30,8 +30,8 @@ fi
 
 case "$1" in
     dev)
-        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${TRUEBLOCKS_API_URL:-}" ]; then
-            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL and TRUEBLOCKS_API_URL are required for Milestone 1.${RESET}"
+        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ]; then
+            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL and ETHERSCAN_API_KEY are required.${RESET}"
             exit 1
         fi
 

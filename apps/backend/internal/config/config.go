@@ -9,7 +9,7 @@ type Config struct {
 	Port                  string
 	DatabaseURL           string
 	EthereumMainnetRPCURL string
-	TrueBlocksAPIURL      string
+	EtherscanAPIKey       string
 	WebOrigin             string
 }
 
@@ -25,7 +25,7 @@ func LoadConfig() *Config {
 	}
 
 	ethRPC := os.Getenv("ETHEREUM_MAINNET_RPC_URL")
-	trueBlocksURL := os.Getenv("TRUEBLOCKS_API_URL")
+	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
 
 	webOrigin := os.Getenv("WEB_ORIGIN")
 	if webOrigin == "" {
@@ -36,7 +36,7 @@ func LoadConfig() *Config {
 		Port:                  port,
 		DatabaseURL:           dbURL,
 		EthereumMainnetRPCURL: ethRPC,
-		TrueBlocksAPIURL:      trueBlocksURL,
+		EtherscanAPIKey:       etherscanAPIKey,
 		WebOrigin:             webOrigin,
 	}
 }
@@ -45,8 +45,8 @@ func (c *Config) Validate() error {
 	if c.EthereumMainnetRPCURL == "" {
 		return fmt.Errorf("ETHEREUM_MAINNET_RPC_URL is required")
 	}
-	if c.TrueBlocksAPIURL == "" {
-		return fmt.Errorf("TRUEBLOCKS_API_URL is required")
+	if c.EtherscanAPIKey == "" {
+		return fmt.Errorf("ETHERSCAN_API_KEY is required")
 	}
 	return nil
 }
