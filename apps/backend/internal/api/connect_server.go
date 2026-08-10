@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -35,6 +36,9 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	}
 	result, err := h.server.traceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
 	if err != nil {
+		if errors.Is(err, tracing.ErrQueueFull) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
+		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
@@ -48,6 +52,9 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	}
 	result, err := h.server.traceGraph(ctx, address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
 	if err != nil {
+		if errors.Is(err, tracing.ErrQueueFull) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
+		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
@@ -189,10 +196,20 @@ func (h *connectLabelHandler) SearchLabels(ctx context.Context, req *connect.Req
 
 func (s *Server) RegisterConnectRPC(mux *http.ServeMux) {
 	mount := func(path string, handler http.Handler) { mux.Handle(path, withLogging(handler.ServeHTTP)) }
-	path, handler := openchainv1connect.NewTracingServiceHandler(&connectTracingHandler{server: s})
+	options := []connect.HandlerOption{connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
+			if !s.requestLimiter.Allow(clientKey(ctx)) {
+				err := connect.NewError(connect.CodeResourceExhausted, errors.New("request limit reached; try again in one minute"))
+				err.Meta().Set("Retry-After", "60")
+				return nil, err
+			}
+			return next(ctx, request)
+		}
+	})), connect.WithReadMaxBytes(1 << 20)}
+	path, handler := openchainv1connect.NewTracingServiceHandler(&connectTracingHandler{server: s}, options...)
 	mount(path, handler)
-	path, handler = openchainv1connect.NewLookupServiceHandler(&connectLookupHandler{server: s})
+	path, handler = openchainv1connect.NewLookupServiceHandler(&connectLookupHandler{server: s}, options...)
 	mount(path, handler)
-	path, handler = openchainv1connect.NewLabelServiceHandler(&connectLabelHandler{server: s})
+	path, handler = openchainv1connect.NewLabelServiceHandler(&connectLabelHandler{server: s}, options...)
 	mount(path, handler)
 }

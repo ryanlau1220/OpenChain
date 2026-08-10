@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -75,11 +76,11 @@ func TestTraceJobIntegration(t *testing.T) {
 	}()
 	query := TraceJobQuery{Network: "test", Address: "trace-job-test-address", Direction: "both", Limit: 1}
 
-	queued, err := database.EnqueueTraceJob(ctx, query, false)
+	queued, err := database.EnqueueTraceJob(ctx, query, false, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	duplicate, err := database.EnqueueTraceJob(ctx, query, false)
+	duplicate, err := database.EnqueueTraceJob(ctx, query, false, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +114,7 @@ func TestTraceJobIntegration(t *testing.T) {
 	if err := database.CompleteTraceJob(ctx, claimed.ID, result); err != nil {
 		t.Fatal(err)
 	}
-	completed, err := database.EnqueueTraceJob(ctx, query, false)
+	completed, err := database.EnqueueTraceJob(ctx, query, false, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,19 +125,22 @@ func TestTraceJobIntegration(t *testing.T) {
 	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', result_json = NULL WHERE id = $1`, completed.ID); err != nil {
 		t.Fatal(err)
 	}
-	failed, err := database.EnqueueTraceJob(ctx, query, false)
+	failed, err := database.EnqueueTraceJob(ctx, query, false, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if failed.Status != "failed" {
 		t.Fatalf("polling a failed job requeued it: %#v", failed)
 	}
-	retried, err := database.EnqueueTraceJob(ctx, query, true)
+	retried, err := database.EnqueueTraceJob(ctx, query, true, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retried.Status != "queued" {
 		t.Fatalf("explicit retry = %#v", retried)
+	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "test", Address: "other-trace-job", Direction: "both", Limit: 1}, false, 1); !errors.Is(err, ErrTraceQueueFull) {
+		t.Fatalf("queue capacity error = %v", err)
 	}
 }
 

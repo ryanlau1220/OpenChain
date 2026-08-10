@@ -1,8 +1,14 @@
 package adapter
 
 import (
+	"context"
+	"encoding/json"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestFormatWeiToETH(t *testing.T) {
@@ -43,6 +49,43 @@ func TestFormatWeiToETH(t *testing.T) {
 				t.Errorf("expected %s, got %s", tt.expected, result)
 			}
 		})
+	}
+}
+
+func TestRPCRequestsUseSharedRateBudget(t *testing.T) {
+	var mu sync.Mutex
+	var calls []time.Time
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		calls = append(calls, time.Now())
+		mu.Unlock()
+		_ = json.NewEncoder(writer).Encode(RPCResponse{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`"0x0"`)})
+	}))
+	defer server.Close()
+	client := NewEVMClient(server.URL)
+	var wait sync.WaitGroup
+	for range 2 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, _ = client.GetBalance(context.Background(), "0x1000000000000000000000000000000000000001")
+		}()
+	}
+	wait.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 2 || calls[1].Sub(calls[0]) < rpcRequestGap-time.Millisecond*10 {
+		t.Fatalf("calls = %#v", calls)
+	}
+}
+
+func TestRPCRejectsHTTPFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	if _, err := NewEVMClient(server.URL).GetBalance(context.Background(), "0x1000000000000000000000000000000000000001"); err == nil {
+		t.Fatal("HTTP provider failure was accepted")
 	}
 }
 

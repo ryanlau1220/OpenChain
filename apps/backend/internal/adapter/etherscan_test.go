@@ -2,11 +2,17 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestEtherscanListsBoundedTransactions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -74,5 +80,16 @@ func TestEtherscanLimitsProviderCalls(t *testing.T) {
 	first, second := <-requests, <-requests
 	if second.Sub(first) < etherscanRequestGap-20*time.Millisecond {
 		t.Fatalf("provider calls were only %s apart", second.Sub(first))
+	}
+}
+
+func TestEtherscanTransportErrorDoesNotExposeAPIKey(t *testing.T) {
+	client := NewEVMChainAdapter("https://api.example", "secret-api-key", nil)
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		return nil, errors.New(request.URL.String())
+	})}
+	_, err := client.ListNativeTransfers(context.Background(), "0x1111111111111111111111111111111111111111", 1, 0)
+	if err == nil || strings.Contains(err.Error(), "secret-api-key") || strings.Contains(err.Error(), "api.example") {
+		t.Fatalf("transport error leaked request details: %v", err)
 	}
 }

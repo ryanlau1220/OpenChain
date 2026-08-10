@@ -33,15 +33,17 @@ func withLogging(next http.HandlerFunc) http.HandlerFunc {
 }
 
 type Server struct {
-	evm           *adapter.EVMClient
-	labels        *labels.Service
-	tracingEngine *tracing.Engine
-	tracingQueue  *tracing.Queue
-	webOrigin     string
+	evm            *adapter.EVMClient
+	labels         *labels.Service
+	tracingEngine  *tracing.Engine
+	tracingQueue   *tracing.Queue
+	webOrigin      string
+	requestLimiter *RequestLimiter
+	trustProxy     bool
 }
 
-func NewServer(evm *adapter.EVMClient, registry *labels.Service, engine *tracing.Engine, queue *tracing.Queue, webOrigin string) *Server {
-	return &Server{evm: evm, labels: registry, tracingEngine: engine, tracingQueue: queue, webOrigin: strings.TrimRight(webOrigin, "/")}
+func NewServer(evm *adapter.EVMClient, registry *labels.Service, engine *tracing.Engine, queue *tracing.Queue, webOrigin string, publicRequestsPerMinute int, trustProxy bool) *Server {
+	return &Server{evm: evm, labels: registry, tracingEngine: engine, tracingQueue: queue, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy}
 }
 
 func (s *Server) traceGraph(ctx context.Context, address string, direction tracing.Direction, limit uint32, cursor string, retry bool) (*tracing.GraphResult, error) {
@@ -59,7 +61,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.RegisterRoutes(mux)
-	return s.withCORS(mux)
+	return s.withCORS(withClientKey(mux, s.trustProxy))
 }
 
 func (s *Server) withCORS(next http.Handler) http.Handler {
@@ -79,9 +81,24 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	queue, err := s.tracingQueue.Stats(r.Context())
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy", "service": "openchain-api", "network": "ETHEREUM_MAINNET"})
+	if err != nil {
+		slog.Error("health queue stats", "error", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	status := "healthy"
+	if err != nil {
+		status = "unhealthy"
+	}
+	_ = json.NewEncoder(w).Encode(struct {
+		Status  string               `json:"status"`
+		Service string               `json:"service"`
+		Network string               `json:"network"`
+		Source  adapter.SourceStatus `json:"source"`
+		Queue   tracing.Stats        `json:"queue"`
+	}{Status: status, Service: "openchain-api", Network: "ETHEREUM_MAINNET", Source: s.tracingEngine.SourceStatus(r.Context()), Queue: queue})
 }
 
 func shortAddress(address string) string {

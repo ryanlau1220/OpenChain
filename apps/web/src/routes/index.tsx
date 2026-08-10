@@ -5,7 +5,7 @@ import { CaseWorkspace } from '../components/CaseWorkspace';
 import { EvidencePaths } from '../components/EvidencePaths';
 import { Header } from '../components/Header';
 import { WalletLookup } from '../components/WalletLookup';
-import { type AddressLabel, type AddressSummary, type GraphEdge, type GraphNode, TraceGraphResponse, expandNode, fetchTraceGraph, lookupAddress } from '../services/api';
+import { type AddressLabel, type AddressSummary, type GraphEdge, type GraphNode, TraceGraphResponse, expandNode, fetchTraceGraph, lookupAddress, requestErrorMessage } from '../services/api';
 import { createLocalCase, loadLocalCase, saveLocalCase, type LocalCase } from '../services/case-file';
 
 export const Route = createFileRoute('/')({ component: Index });
@@ -65,7 +65,7 @@ function Index() {
 			});
 		} catch (error) {
 			console.error(error);
-			if (investigation === investigationRef.current) setErrorMessage('Unable to load this address. Check the backend and TrueBlocks status.');
+			if (investigation === investigationRef.current) setErrorMessage(requestErrorMessage(error, 'Unable to load this address. Check the backend and Etherscan status.'));
 		} finally {
 			if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
 		}
@@ -116,7 +116,7 @@ function Index() {
 			setBranchPages((current) => ({ ...current, [key]: { cursor: expanded.nextCursor, hasMore: expanded.hasMore } }));
 		} catch (error) {
 			console.error(error);
-			if (investigation === investigationRef.current) setErrorMessage('Unable to expand this address. Try again when TrueBlocks is ready.');
+			if (investigation === investigationRef.current) setErrorMessage(requestErrorMessage(error, 'Unable to expand this address. Please try again.'));
 		} finally {
 			if (investigation === investigationRef.current) setExpandingAddress(null);
 		}

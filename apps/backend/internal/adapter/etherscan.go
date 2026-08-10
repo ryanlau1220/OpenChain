@@ -190,7 +190,7 @@ func (a *EVMChainAdapter) get(ctx context.Context, query url.Values, output *eth
 	}
 	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("Etherscan request: %w", err)
+		return fmt.Errorf("Etherscan request failed")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {

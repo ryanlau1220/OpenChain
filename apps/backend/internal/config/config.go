@@ -2,15 +2,21 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 )
 
 type Config struct {
-	Port                  string
-	DatabaseURL           string
-	EthereumMainnetRPCURL string
-	EtherscanAPIKey       string
-	WebOrigin             string
+	Port                    string
+	DatabaseURL             string
+	EthereumMainnetRPCURL   string
+	EtherscanAPIKey         string
+	WebOrigin               string
+	PublicRequestsPerMinute int
+	MaxQueuedTraceJobs      int
+	TrustProxy              bool
+	validationError         error
 }
 
 func LoadConfig() *Config {
@@ -31,22 +37,66 @@ func LoadConfig() *Config {
 	if webOrigin == "" {
 		webOrigin = "http://localhost:3000"
 	}
+	publicRequestsPerMinute, requestLimitError := positiveEnv("PUBLIC_REQUESTS_PER_MINUTE", 30)
+	maxQueuedTraceJobs, queueLimitError := positiveEnv("MAX_QUEUED_TRACE_JOBS", 25)
+	trustProxy, trustProxyError := boolEnv("TRUST_PROXY", false)
+	validationError := requestLimitError
+	if validationError == nil {
+		validationError = queueLimitError
+	}
+	if validationError == nil {
+		validationError = trustProxyError
+	}
 
 	return &Config{
-		Port:                  port,
-		DatabaseURL:           dbURL,
-		EthereumMainnetRPCURL: ethRPC,
-		EtherscanAPIKey:       etherscanAPIKey,
-		WebOrigin:             webOrigin,
+		Port:                    port,
+		DatabaseURL:             dbURL,
+		EthereumMainnetRPCURL:   ethRPC,
+		EtherscanAPIKey:         etherscanAPIKey,
+		WebOrigin:               webOrigin,
+		PublicRequestsPerMinute: publicRequestsPerMinute,
+		MaxQueuedTraceJobs:      maxQueuedTraceJobs,
+		TrustProxy:              trustProxy,
+		validationError:         validationError,
 	}
 }
 
 func (c *Config) Validate() error {
+	if c.validationError != nil {
+		return c.validationError
+	}
 	if c.EthereumMainnetRPCURL == "" {
 		return fmt.Errorf("ETHEREUM_MAINNET_RPC_URL is required")
+	}
+	if endpoint, err := url.Parse(c.EthereumMainnetRPCURL); err != nil || endpoint.Scheme != "https" || endpoint.Host == "" {
+		return fmt.Errorf("ETHEREUM_MAINNET_RPC_URL must be an https URL")
 	}
 	if c.EtherscanAPIKey == "" {
 		return fmt.Errorf("ETHERSCAN_API_KEY is required")
 	}
 	return nil
+}
+
+func positiveEnv(name string, fallback int) (int, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 1 {
+		return 0, fmt.Errorf("%s must be a positive integer", name)
+	}
+	return parsed, nil
+}
+
+func boolEnv(name string, fallback bool) (bool, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false", name)
+	}
+	return parsed, nil
 }

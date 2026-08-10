@@ -11,6 +11,8 @@ import (
 
 const traceResultCacheTTL = 5 * time.Minute
 
+var ErrTraceQueueFull = errors.New("trace queue is full")
+
 type TraceJobQuery struct {
 	Network, Address, Direction, Cursor string
 	Limit                               uint32
@@ -24,7 +26,28 @@ type TraceJob struct {
 	ErrorMessage string
 }
 
-func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry bool) (*TraceJob, error) {
+func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry bool, maxQueued int) (*TraceJob, error) {
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", int64(807_841)); err != nil {
+		return nil, err
+	}
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trace_jobs WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_size = $5)`, query.Network, query.Address, query.Direction, query.Cursor, query.Limit).Scan(&exists); err != nil {
+		return nil, err
+	}
+	if !exists {
+		var queued int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs WHERE status = 'queued'`).Scan(&queued); err != nil {
+			return nil, err
+		}
+		if queued >= maxQueued {
+			return nil, ErrTraceQueueFull
+		}
+	}
 	const statement = `INSERT INTO trace_jobs (network, address, direction, cursor, page_size, status)
 VALUES ($1, $2, $3, $4, $5, 'queued')
 ON CONFLICT (network, address, direction, cursor, page_size) DO UPDATE
@@ -46,7 +69,26 @@ completed_at = CASE
 END,
 updated_at = now()
 RETURNING id, network, address, direction, cursor, page_size, status, result_json, COALESCE(error_message, '')`
-	return scanTraceJob(d.SQL.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, traceResultCacheTTL.String(), retry))
+	job, err := scanTraceJob(tx.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, traceResultCacheTTL.String(), retry))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
+type TraceJobStats struct {
+	Queued  int64
+	Running int64
+	Failed  int64
+}
+
+func (d *DB) TraceJobStats(ctx context.Context) (TraceJobStats, error) {
+	stats := TraceJobStats{}
+	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed') FROM trace_jobs`).Scan(&stats.Queued, &stats.Running, &stats.Failed)
+	return stats, err
 }
 
 func (d *DB) RecoverExpiredTraceJobs(ctx context.Context) error {

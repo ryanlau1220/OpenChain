@@ -80,6 +80,18 @@ case "$1" in
         echo -e "${GREEN}✓ [OK] Docker containers stopped.${RESET}"
         ;;
 
+    docker:prod)
+        echo -e "${YELLOW}Building and starting the production Docker Compose stack...${RESET}"
+        docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build --remove-orphans
+        echo -e "${GREEN}✓ [OK] Production stack started successfully.${RESET}"
+        ;;
+
+    docker:prod:down)
+        echo -e "${YELLOW}Stopping production Docker Compose stack...${RESET}"
+        docker compose --env-file .env -f infra/docker-compose.production.yml down
+        echo -e "${GREEN}✓ [OK] Production containers stopped. Persistent volumes were kept.${RESET}"
+        ;;
+
     build)
         echo -e "${CYAN}Building Go backend binary...${RESET}"
         (cd apps/backend && go build -o bin/server ./cmd/server)
@@ -123,7 +135,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|build|lint|check|test|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|build|lint|check|test|clean}"
         exit 1
         ;;
 esac

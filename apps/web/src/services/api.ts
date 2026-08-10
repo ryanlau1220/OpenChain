@@ -1,4 +1,4 @@
-import { createClient } from '@connectrpc/connect';
+import { Code, ConnectError, createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
 import { EntityType } from '@openchain/proto/openchain/v1/common_pb';
@@ -12,7 +12,7 @@ import {
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8081';
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window === 'undefined' ? '' : window.location.origin);
 
 const transport = createConnectTransport({ baseUrl: API_BASE });
 
@@ -68,4 +68,10 @@ export async function lookupAddress(address: string) {
 
 export async function expandNode(address: string, cursor = '', retry = false) {
 	return tracingClient.expandNode({ nodeAddress: address, network: 1, limit: 25, cursor, retry });
+}
+
+export function requestErrorMessage(error: unknown, fallback: string): string {
+	if (error instanceof ConnectError && error.code === Code.ResourceExhausted) return error.rawMessage;
+	if (error instanceof ConnectError && error.code === Code.Unavailable) return 'Ethereum data is temporarily unavailable. Please try again.';
+	return fallback;
 }

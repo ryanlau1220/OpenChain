@@ -60,7 +60,7 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 	}()
 
 	client := adapter.NewEVMChainAdapter(etherscan.URL, "test-key", nil)
-	queue := tracing.NewQueue(tracing.NewEngine(client, database, labels.NewService(database)), database)
+	queue := tracing.NewQueue(tracing.NewEngine(client, database, labels.NewService(database)), database, 2)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)
 	defer func() {

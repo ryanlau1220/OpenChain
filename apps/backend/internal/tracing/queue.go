@@ -18,15 +18,18 @@ const (
 	traceJobLease           = 2 * time.Minute
 )
 
+var ErrQueueFull = db.ErrTraceQueueFull
+
 type Queue struct {
-	engine   *Engine
-	database *db.DB
-	done     chan struct{}
-	start    sync.Once
+	engine    *Engine
+	database  *db.DB
+	maxQueued int
+	done      chan struct{}
+	start     sync.Once
 }
 
-func NewQueue(engine *Engine, database *db.DB) *Queue {
-	return &Queue{engine: engine, database: database}
+func NewQueue(engine *Engine, database *db.DB, maxQueued int) *Queue {
+	return &Queue{engine: engine, database: database, maxQueued: maxQueued}
 }
 
 func (q *Queue) Start(ctx context.Context) {
@@ -62,7 +65,7 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 	if q.database == nil {
 		return q.engine.ResolveGraph(ctx, address, direction, limit, cursor)
 	}
-	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: "ethereum-mainnet:etherscan-v2", Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry)
+	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: "ethereum-mainnet:etherscan-v2", Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry, q.maxQueued)
 	if err != nil {
 		return nil, fmt.Errorf("queue trace job: %w", err)
 	}
@@ -82,6 +85,21 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 	default:
 		return q.engine.PendingGraph(address, "Trace retrieval is queued and will begin shortly."), nil
 	}
+}
+
+type Stats struct {
+	Enabled bool  `json:"enabled"`
+	Queued  int64 `json:"queued"`
+	Running int64 `json:"running"`
+	Failed  int64 `json:"failed"`
+}
+
+func (q *Queue) Stats(ctx context.Context) (Stats, error) {
+	if q == nil || q.database == nil {
+		return Stats{}, nil
+	}
+	stats, err := q.database.TraceJobStats(ctx)
+	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed}, err
 }
 
 func (q *Queue) runOnce(ctx context.Context) {

@@ -24,12 +24,12 @@ type TransactionItem struct {
 const EtherscanSource = "etherscan-v2"
 
 type SourceStatus struct {
-	Source           string
-	RetrievedAt      time.Time
-	IndexedUpToBlock int64
-	LatestChainBlock int64
-	IsComplete       bool
-	Warning          string
+	Source           string    `json:"source"`
+	RetrievedAt      time.Time `json:"retrieved_at"`
+	IndexedUpToBlock int64     `json:"indexed_up_to_block"`
+	LatestChainBlock int64     `json:"latest_chain_block"`
+	IsComplete       bool      `json:"is_complete"`
+	Warning          string    `json:"warning"`
 }
 
 type TransferPage struct {

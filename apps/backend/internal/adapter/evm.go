@@ -9,12 +9,17 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
+const rpcRequestGap = time.Second / 10
+
 type EVMClient struct {
-	rpcURL     string
-	httpClient *http.Client
+	rpcURL      string
+	httpClient  *http.Client
+	requestMu   sync.Mutex
+	lastRequest time.Time
 }
 
 func NewEVMClient(rpcURL string) *EVMClient {
@@ -48,6 +53,9 @@ type RPCError struct {
 func (c *EVMClient) callRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
 	rpcCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
+	if err := c.waitForRequest(rpcCtx); err != nil {
+		return nil, err
+	}
 
 	reqBody := RPCRequest{
 		JSONRPC: "2.0",
@@ -74,8 +82,12 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("rpc returned %s", resp.Status)
+	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +102,23 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 	}
 
 	return rpcResp.Result, nil
+}
+
+func (c *EVMClient) waitForRequest(ctx context.Context) error {
+	c.requestMu.Lock()
+	defer c.requestMu.Unlock()
+	if delay := time.Until(c.lastRequest.Add(rpcRequestGap)); delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	// ponytail: one shared RPC budget; split by configured network only when multi-network support exists.
+	c.lastRequest = time.Now()
+	return nil
 }
 
 func (c *EVMClient) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
