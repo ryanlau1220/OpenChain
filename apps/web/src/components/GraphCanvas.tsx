@@ -3,11 +3,8 @@ import {
 	ArrowLeftRight,
 	Layers,
 	Maximize2,
-	MinusCircle,
 	PlusCircle,
-	Redo2,
 	RotateCcw,
-	Undo2,
 	ZoomIn,
 	ZoomOut,
 } from 'lucide-react';
@@ -26,11 +23,8 @@ interface GraphCanvasProps {
 	selectedNode?: GraphNode | null;
 	onNodeSelect: (node: GraphNode | null) => void;
 	onExpandNode?: (address: string) => void;
-	onCollapseNode?: (address: string) => void;
-	onUndo?: () => void;
-	onRedo?: () => void;
-	canUndo?: boolean;
-	canRedo?: boolean;
+	canExpand?: boolean;
+	expanding?: boolean;
 }
 
 // PRISM node palette (light mode)
@@ -87,11 +81,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	selectedNode: propSelectedNode,
 	onNodeSelect,
 	onExpandNode,
-	onCollapseNode,
-	onUndo,
-	onRedo,
-	canUndo = false,
-	canRedo = false,
+	canExpand = false,
+	expanding = false,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
@@ -391,7 +382,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					>
 						<button
 							type="button"
-							disabled={!activeTargetAddress}
+							disabled={!activeTargetAddress || !canExpand || expanding}
 							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress)}
 							className="btn-outline text-[11px] flex items-center gap-1 transition font-medium"
 							style={{ padding: '0.25rem 0.625rem' }}
@@ -402,57 +393,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							}
 						>
 							<PlusCircle className="w-3.5 h-3.5 text-[var(--accent)]" />
-							Expand
-						</button>
-						<button
-							type="button"
-							disabled={!activeTargetAddress}
-							onClick={() => activeTargetAddress && onCollapseNode?.(activeTargetAddress)}
-							className="btn-outline text-[11px] flex items-center gap-1 transition font-medium"
-							style={{ padding: '0.25rem 0.625rem' }}
-							title={
-								selectedNode ? `Collapse expanded branch for ${selectedNode.id}` : 'Collapse branch'
-							}
-						>
-							<MinusCircle className="w-3.5 h-3.5 text-slate-500" />
-							Collapse
+							{expanding ? 'Expanding…' : 'Expand'}
 						</button>
 					</div>
 				</div>
 
-				{/* Right: layout + actions */}
-
 				<div className="flex items-center gap-2">
-					{/* Undo / Redo history controls */}
-					<div className="flex items-center gap-1 mr-1">
-						<button
-							type="button"
-							onClick={onUndo}
-							disabled={!canUndo}
-							className={`p-1.5 rounded-lg transition ${
-								canUndo
-									? 'hover:bg-[var(--slate)] text-[var(--ink-2)]'
-									: 'text-[var(--ink-3)] opacity-40 cursor-not-allowed'
-							}`}
-							title="Undo Graph Change (Ctrl+Z)"
-						>
-							<Undo2 className="w-3.5 h-3.5" />
-						</button>
-						<button
-							type="button"
-							onClick={onRedo}
-							disabled={!canRedo}
-							className={`p-1.5 rounded-lg transition ${
-								canRedo
-									? 'hover:bg-[var(--slate)] text-[var(--ink-2)]'
-									: 'text-[var(--ink-3)] opacity-40 cursor-not-allowed'
-							}`}
-							title="Redo Graph Change (Ctrl+Y)"
-						>
-							<Redo2 className="w-3.5 h-3.5" />
-						</button>
-					</div>
-
 					<select
 						value={layoutName}
 						onChange={(e) =>

@@ -1,11 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
 import { WalletLookup } from '../components/WalletLookup';
 import { type AddressLabel, type AddressSummary, type GraphNode, TraceGraphResponse, expandNode, fetchTraceGraph, lookupAddress } from '../services/api';
 
 export const Route = createFileRoute('/')({ component: Index });
+
+type BranchPage = { cursor: string; hasMore: boolean };
 
 function Index() {
 	const [address, setAddress] = useState('');
@@ -14,16 +16,35 @@ function Index() {
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+	const [branchPages, setBranchPages] = useState<Record<string, BranchPage>>({});
+	const [expandingAddress, setExpandingAddress] = useState<string | null>(null);
+	const [errorMessage, setErrorMessage] = useState('');
+	const investigationRef = useRef(0);
 
 	const load = useCallback(async (target: string) => {
+		const investigation = ++investigationRef.current;
 		setLoading(true);
+		setErrorMessage('');
+		setGraphData(null);
+		setSelectedNode(null);
+		setSummary(null);
+		setLabels([]);
+		setBranchPages({});
+		setExpandingAddress(null);
 		try {
 			const [graph, lookup] = await Promise.all([fetchTraceGraph(target), lookupAddress(target)]);
+			if (investigation !== investigationRef.current) return;
 			setGraphData(graph);
 			setSummary(lookup.summary ?? null);
 			setLabels(lookup.labels);
 			setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
-		} catch (error) { console.error(error); } finally { setLoading(false); }
+			setBranchPages({ [graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore } });
+		} catch (error) {
+			console.error(error);
+			if (investigation === investigationRef.current) setErrorMessage('Unable to load this address. Check the backend and TrueBlocks status.');
+		} finally {
+			if (investigation === investigationRef.current) setLoading(false);
+		}
 	}, []);
 
 	const handleSelect = useCallback(async (node: GraphNode | null) => {
@@ -33,27 +54,48 @@ function Index() {
 			const lookup = await lookupAddress(node.id);
 			setSummary(lookup.summary ?? null);
 			setLabels(lookup.labels);
-		} catch (error) { console.error(error); }
+		} catch (error) {
+			console.error(error);
+		}
 	}, []);
 
 	const handleExpand = useCallback(async (nodeAddress: string) => {
-		if (!graphData) return;
+		const key = nodeAddress.toLowerCase();
+		const page = branchPages[key];
+		if (!graphData || expandingAddress || (page && !page.hasMore)) return;
+		const investigation = investigationRef.current;
+		setExpandingAddress(key);
 		try {
-			const expanded = await expandNode(nodeAddress);
-			const nodeIds = new Set(graphData.nodes.map((node) => node.id));
-			const edgeIds = new Set(graphData.edges.map((edge) => edge.id));
-			const nodes = [...graphData.nodes, ...expanded.newNodes.filter((node) => !nodeIds.has(node.id))];
-			const edges = [...graphData.edges, ...expanded.newEdges.filter((edge) => !edgeIds.has(edge.id))];
-			setGraphData(new TraceGraphResponse({ ...graphData, nodes, edges, totalNodes: nodes.length, totalEdges: edges.length }));
-		} catch (error) { console.error(error); }
-	}, [graphData]);
+			const expanded = await expandNode(nodeAddress, page?.cursor);
+			if (investigation !== investigationRef.current) return;
+			setGraphData((current) => {
+				if (!current) return current;
+				const nodeIds = new Set(current.nodes.map((node) => node.id));
+				const edgeIds = new Set(current.edges.map((edge) => edge.id));
+				const nodes = [...current.nodes, ...expanded.newNodes.filter((node) => !nodeIds.has(node.id))];
+				const edges = [...current.edges, ...expanded.newEdges.filter((edge) => !edgeIds.has(edge.id))];
+				return new TraceGraphResponse({ ...current, nodes, edges, totalNodes: nodes.length, totalEdges: edges.length });
+			});
+			setBranchPages((current) => ({ ...current, [key]: { cursor: expanded.nextCursor, hasMore: expanded.hasMore } }));
+		} catch (error) {
+			console.error(error);
+			if (investigation === investigationRef.current) setErrorMessage('Unable to expand this address. Try again when TrueBlocks is ready.');
+		} finally {
+			if (investigation === investigationRef.current) setExpandingAddress(null);
+		}
+	}, [branchPages, expandingAddress, graphData]);
+
+	const activeAddress = selectedNode?.id || graphData?.seedAddress || '';
+	const activeBranch = branchPages[activeAddress.toLowerCase()];
+	const canExpand = Boolean(activeAddress) && (!activeBranch || activeBranch.hasMore);
 
 	return <div className="min-h-screen flex flex-col" style={{ background: 'var(--snow)' }}>
 		<Header currentAddress={address} onSearch={(value) => { setAddress(value); void load(value); }} network="Ethereum Mainnet" />
 		<div className="flex-1 flex overflow-hidden">
 			<div className="flex-1 relative">
-				<GraphCanvas graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} />
+				<GraphCanvas key={graphData?.seedAddress ?? 'empty'} graphData={graphData} selectedNode={selectedNode} onNodeSelect={handleSelect} onExpandNode={handleExpand} canExpand={canExpand} expanding={expandingAddress === activeAddress.toLowerCase()} />
 				{!graphData && !loading && <div className="absolute inset-0 grid place-items-center pointer-events-none text-sm" style={{ color: 'var(--ink-3)' }}>Search an Ethereum mainnet address to start an investigation.</div>}
+				{errorMessage && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>{errorMessage}</div>}
 				{graphData?.sourceStatus?.warning && <div className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>{graphData.sourceStatus.warning}</div>}
 			</div>
 			<div className="w-80 overflow-y-auto p-4" style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}>

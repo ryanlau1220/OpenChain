@@ -34,19 +34,21 @@ func main() {
 	if err != nil {
 		log.Printf("Database unavailable; continuing without it: %v", err)
 	} else {
-		defer func() { _ = database.Close() }()
+		defer func(connection *db.DB) { _ = connection.Close() }(database)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err = database.InitSchema(ctx)
 		cancel()
 		if err != nil {
 			log.Printf("Database schema unavailable; continuing without it: %v", err)
+			_ = database.Close()
+			database = nil
 		}
 	}
 
 	registry := labels.NewRegistry()
 	engine := tracing.NewEngine(evmClient, trueBlocks, database, registry)
 	server := api.NewServer(evmClient, registry, engine, cfg.WebOrigin)
-	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadTimeout: 15 * time.Second, WriteTimeout: 65 * time.Second, IdleTimeout: 60 * time.Second}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

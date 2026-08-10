@@ -66,6 +66,6 @@ export async function lookupAddress(address: string) {
 	};
 }
 
-export async function expandNode(address: string) {
-	return tracingClient.expandNode({ nodeAddress: address, network: 1, limit: 25 });
+export async function expandNode(address: string, cursor = '') {
+	return tracingClient.expandNode({ nodeAddress: address, network: 1, limit: 25, cursor });
 }

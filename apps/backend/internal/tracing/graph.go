@@ -77,7 +77,7 @@ func (e *Engine) TraceGraph(ctx context.Context, address string, direction Direc
 	transactions := filterTransactions(page.Transactions, address, direction)
 	result := e.graph(ctx, address, transactions, page)
 	if e.database != nil {
-		if err := e.database.SaveTransfers(ctx, toTransfers(transactions, page.SourceStatus)); err != nil {
+		if err := e.database.SaveGraph(ctx, toAddresses(result.Nodes), toTransfers(transactions, page.SourceStatus)); err != nil {
 			return nil, err
 		}
 	}
@@ -178,6 +178,14 @@ func toTransfers(transactions []adapter.TransactionItem, source adapter.SourceSt
 		transfers = append(transfers, db.Transfer{ID: transferID(transaction.Hash), Network: "ethereum-mainnet", TransactionHash: transaction.Hash, FromAddress: strings.ToLower(transaction.From), ToAddress: strings.ToLower(transaction.To), AssetSymbol: "ETH", AmountBaseUnits: transaction.ValueWei, BlockNumber: transaction.BlockNumber, BlockTimestamp: transaction.Timestamp, Source: source.Source, RetrievedAt: source.RetrievedAt})
 	}
 	return transfers
+}
+
+func toAddresses(nodes []GraphNode) []db.Address {
+	addresses := make([]db.Address, 0, len(nodes))
+	for _, node := range nodes {
+		addresses = append(addresses, db.Address{Address: node.ID, Label: node.Label, EntityType: node.EntityType})
+	}
+	return addresses
 }
 
 func parseCursor(cursor string) (uint64, error) {

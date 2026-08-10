@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const trueBlocksSource = "trueblocks-6.5.0"
+const (
+	trueBlocksSource         = "trueblocks-6.5.0"
+	trueBlocksRequestTimeout = 60 * time.Second
+)
 
 type SourceStatus struct {
 	Source           string
@@ -41,7 +44,7 @@ func NewTrueBlocksClient(rawURL string) (*TrueBlocksClient, error) {
 		return nil, fmt.Errorf("TRUEBLOCKS_API_URL must be an absolute HTTP URL")
 	}
 	baseURL.Path = strings.TrimRight(baseURL.Path, "/")
-	return &TrueBlocksClient{baseURL: baseURL, httpClient: &http.Client{Timeout: 15 * time.Second}}, nil
+	return &TrueBlocksClient{baseURL: baseURL, httpClient: &http.Client{Timeout: trueBlocksRequestTimeout}}, nil
 }
 
 type trueBlocksEnvelope struct {
