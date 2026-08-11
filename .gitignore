@@ -8,6 +8,7 @@ dist/
 .turbo/
 build/
 bin/
+apps/web/test-results/
 
 # Environment variables
 .env

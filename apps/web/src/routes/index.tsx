@@ -237,17 +237,19 @@ function Index() {
 
 	return (
 		<div className="min-h-screen flex flex-col" style={{ background: 'var(--snow)' }}>
-			<Header
-				currentAddress={address}
-				onSearch={(value, detectedNetwork) => {
-					const targetNetwork = detectedNetwork ?? network;
-					changeNetwork(targetNetwork);
-					setAddress(value);
-					void load(value, false, targetNetwork);
-				}}
-				network={network}
-				onNetworkChange={changeNetwork}
-			/>
+			{caseLoaded && (
+				<Header
+					currentAddress={address}
+					onSearch={(value, detectedNetwork) => {
+						const targetNetwork = detectedNetwork ?? network;
+						changeNetwork(targetNetwork);
+						setAddress(value);
+						void load(value, false, targetNetwork);
+					}}
+					network={network}
+					onNetworkChange={changeNetwork}
+				/>
+			)}
 			<div className="flex-1 flex overflow-hidden">
 				<div className="flex-1 relative">
 					<GraphCanvas
@@ -321,17 +323,19 @@ function Index() {
 					{graphData && (
 						<EvidencePaths nodes={graphData.nodes} edges={graphData.edges} network={network} />
 					)}
-					<CaseWorkspace
-						caseFile={caseFile}
-						onChange={setCaseFile}
-						activeTarget={
-							selectedEdge
-								? { kind: 'transfer', id: selectedEdge.id }
-								: selectedNode
-									? { kind: 'address', id: selectedNode.id }
-									: null
-						}
-					/>
+					{caseLoaded && (
+						<CaseWorkspace
+							caseFile={caseFile}
+							onChange={setCaseFile}
+							activeTarget={
+								selectedEdge
+									? { kind: 'transfer', id: selectedEdge.id }
+									: selectedNode
+										? { kind: 'address', id: selectedNode.id }
+										: null
+							}
+						/>
+					)}
 				</div>
 			</div>
 		</div>

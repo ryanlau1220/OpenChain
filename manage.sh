@@ -140,7 +140,8 @@ case "$1" in
             echo -e "${RED}Web smoke check failed. Start the stack with ./manage.sh dev first.${RESET}"
             exit 1
         fi
-        echo -e "${GREEN}✓ Live backend and web smoke checks passed.${RESET}"
+        OPENCHAIN_E2E_BASE_URL="${web_url}" pnpm --filter @openchain/web test:e2e
+        echo -e "${GREEN}✓ Live backend and web end-to-end checks passed.${RESET}"
         ;;
 
     clean)
