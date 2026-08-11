@@ -61,7 +61,7 @@ function Index() {
 	}, [caseFile, caseLoaded]);
 
 	const load = useCallback(
-		async (target: string, preserveCurrentGraph = false) => {
+		async (target: string, preserveCurrentGraph = false, targetNetwork = network) => {
 			const investigation = preserveCurrentGraph
 				? investigationRef.current
 				: ++investigationRef.current;
@@ -78,20 +78,20 @@ function Index() {
 				setPendingExpansion(null);
 			}
 			try {
-				const graph = await fetchTraceGraph(target, network, !preserveCurrentGraph);
+				const graph = await fetchTraceGraph(target, targetNetwork, !preserveCurrentGraph);
 				if (investigation !== investigationRef.current) return;
 				setGraphData(graph);
 				setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
 				setCaseFile((current) => ({
 					...current,
-					network: networkDetails(network).slug,
+					network: networkDetails(targetNetwork).slug,
 					rootAddress: graph.seedAddress,
 					updatedAt: new Date().toISOString(),
 				}));
 				setBranchPages({
 					[graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore },
 				});
-				void lookupAddress(target, network).then((lookup) => {
+				void lookupAddress(target, targetNetwork).then((lookup) => {
 					if (investigation !== investigationRef.current) return;
 					setSummary(lookup.summary ?? null);
 					setLabels(lookup.labels);
@@ -108,6 +108,33 @@ function Index() {
 			} finally {
 				if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
 			}
+		},
+		[network],
+	);
+
+	const changeNetwork = useCallback(
+		(nextNetwork: SupportedNetwork) => {
+			if (nextNetwork === network) return;
+			investigationRef.current++;
+			setNetwork(nextNetwork);
+			setGraphData(null);
+			setSelectedNode(null);
+			setSelectedEdge(null);
+			setSummary(null);
+			setLabels([]);
+			setBranchPages({});
+			setExpandingAddress(null);
+			setPendingExpansion(null);
+			setErrorMessage('');
+			setCaseFile((current) => ({
+				...current,
+				network: networkDetails(nextNetwork).slug,
+				rootAddress: '',
+				selectedAddressIds: [],
+				selectedTransferIds: [],
+				annotations: [],
+				updatedAt: new Date().toISOString(),
+			}));
 		},
 		[network],
 	);
@@ -212,34 +239,14 @@ function Index() {
 		<div className="min-h-screen flex flex-col" style={{ background: 'var(--snow)' }}>
 			<Header
 				currentAddress={address}
-				onSearch={(value) => {
+				onSearch={(value, detectedNetwork) => {
+					const targetNetwork = detectedNetwork ?? network;
+					changeNetwork(targetNetwork);
 					setAddress(value);
-					void load(value);
+					void load(value, false, targetNetwork);
 				}}
 				network={network}
-				onNetworkChange={(nextNetwork) => {
-					if (nextNetwork === network) return;
-					investigationRef.current++;
-					setNetwork(nextNetwork);
-					setGraphData(null);
-					setSelectedNode(null);
-					setSelectedEdge(null);
-					setSummary(null);
-					setLabels([]);
-					setBranchPages({});
-					setExpandingAddress(null);
-					setPendingExpansion(null);
-					setErrorMessage('');
-					setCaseFile((current) => ({
-						...current,
-						network: networkDetails(nextNetwork).slug,
-						rootAddress: '',
-						selectedAddressIds: [],
-						selectedTransferIds: [],
-						annotations: [],
-						updatedAt: new Date().toISOString(),
-					}));
-				}}
+				onNetworkChange={changeNetwork}
 			/>
 			<div className="flex-1 flex overflow-hidden">
 				<div className="flex-1 relative">

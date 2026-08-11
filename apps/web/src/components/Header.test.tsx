@@ -1,22 +1,29 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Network } from '../services/api';
 import { Header } from './Header';
 
 describe('Header Component', () => {
 	it('renders brand title and network name', () => {
+		const onNetworkChange = vi.fn();
 		render(
 			<Header
 				currentAddress="0x1234"
 				onSearch={vi.fn()}
 				network={Network.BASE_MAINNET}
-				onNetworkChange={vi.fn()}
+				onNetworkChange={onNetworkChange}
 			/>,
 		);
 		expect(screen.getByText('OpenChain')).toBeTruthy();
 		expect(screen.getByRole('option', { name: 'Base Mainnet' })).toBeTruthy();
 		expect(screen.getByRole('option', { name: 'Solana Mainnet' })).toBeTruthy();
 		expect(screen.getByRole('option', { name: 'TRON Mainnet' })).toBeTruthy();
+		expect(screen.getByAltText('Base Mainnet icon')).toBeTruthy();
+		fireEvent.change(screen.getByPlaceholderText('Search target address'), {
+			target: { value: '0x0000000000000000000000000000000000000000' },
+		});
+		expect(onNetworkChange).not.toHaveBeenCalled();
+		expect(screen.getByText('EVM address — choose its network')).toBeTruthy();
 	});
 });

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 64" role="img" aria-label="Solana">
+  <defs><linearGradient id="solana-gradient" x1="6" x2="64" y1="65" y2="0" gradientUnits="userSpaceOnUse"><stop offset=".08" stop-color="#9945ff"/><stop offset=".3" stop-color="#8752f3"/><stop offset=".5" stop-color="#5497d5"/><stop offset=".6" stop-color="#43b4ca"/><stop offset=".72" stop-color="#28e0b9"/><stop offset=".97" stop-color="#19fb9b"/></linearGradient></defs>
+  <path fill="url(#solana-gradient)" d="M70.665 50.177 58.94 62.775a2.8 2.8 0 0 1-2 0.867H1.36a1.36 1.36 0 0 1-.995-2.295L12.1 48.75a2.8 2.8 0 0 1 1.904-.867h55.666a1.36 1.36 0 0 1 .995 2.294ZM58.94 24.808a2.8 2.8 0 0 0-1.993-.867H1.361a1.36 1.36 0 0 0-.995 2.294L12.1 38.834a2.8 2.8 0 0 0 1.904.866H69.67a1.36 1.36 0 0 0 .995-2.294L58.94 24.808ZM1.361 15.759h55.586a2.8 2.8 0 0 0 1.993-.867L70.665 2.294A1.36 1.36 0 0 0 69.67 0H14.087a2.8 2.8 0 0 0-1.986.867L.369 13.465a1.36 1.36 0 0 0 .992 2.294Z"/>
+</svg>

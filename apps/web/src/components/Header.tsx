@@ -1,11 +1,17 @@
 import { Search } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
-import { type SupportedNetwork, networkDetails, supportedNetworks } from '../services/api';
+import {
+	type SupportedNetwork,
+	detectAddressNetwork,
+	isEVMAddress,
+	networkDetails,
+	supportedNetworks,
+} from '../services/api';
 
 interface HeaderProps {
 	currentAddress: string;
-	onSearch: (address: string) => void;
+	onSearch: (address: string, detectedNetwork?: SupportedNetwork) => void;
 	network: SupportedNetwork;
 	onNetworkChange: (network: SupportedNetwork) => void;
 }
@@ -17,12 +23,22 @@ export const Header: React.FC<HeaderProps> = ({
 	onNetworkChange,
 }) => {
 	const [singleInput, setSingleInput] = useState(currentAddress);
+	const detectedNetwork = detectAddressNetwork(singleInput);
+	const detectedDetails =
+		detectedNetwork === undefined ? undefined : networkDetails(detectedNetwork);
+	const hasEVMAddress = isEVMAddress(singleInput);
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (singleInput.trim()) {
-			onSearch(singleInput.trim());
+			onSearch(singleInput.trim(), detectedNetwork);
 		}
+	};
+
+	const handleInputChange = (value: string) => {
+		setSingleInput(value);
+		const detected = detectAddressNetwork(value);
+		if (detected !== undefined && detected !== network) onNetworkChange(detected);
 	};
 
 	return (
@@ -79,6 +95,11 @@ export const Header: React.FC<HeaderProps> = ({
 								color: '#627EEA',
 							}}
 						>
+							<img
+								src={networkDetails(network).icon}
+								alt={`${networkDetails(network).name} icon`}
+								className="h-3.5 w-3.5"
+							/>
 							<select
 								aria-label="Network"
 								value={network}
@@ -87,13 +108,37 @@ export const Header: React.FC<HeaderProps> = ({
 								}
 								className="bg-transparent outline-none cursor-pointer"
 							>
-								{supportedNetworks.map((item) => (
-									<option key={item} value={item}>
-										{networkDetails(item).name}
-									</option>
-								))}
+								<optgroup label="EVM Networks">
+									{supportedNetworks.slice(0, 2).map((item) => (
+										<option key={item} value={item}>
+											{networkDetails(item).name}
+										</option>
+									))}
+								</optgroup>
+								<optgroup label="Other Networks">
+									{supportedNetworks.slice(2).map((item) => (
+										<option key={item} value={item}>
+											{networkDetails(item).name}
+										</option>
+									))}
+								</optgroup>
 							</select>
 						</div>
+						{hasEVMAddress && (
+							<span className="text-[10px]" style={{ color: 'var(--accent)' }}>
+								EVM address — choose its network
+							</span>
+						)}
+						{detectedDetails && detectedNetwork !== network && (
+							<span className="text-[10px]" style={{ color: 'var(--accent)' }}>
+								<img
+									src={detectedDetails.icon}
+									alt={`${detectedDetails.name} icon`}
+									className="mr-1 inline h-3.5 w-3.5 align-text-bottom"
+								/>
+								{detectedDetails.name} detected
+							</span>
+						)}
 					</div>
 
 					{/* Single Input */}
@@ -101,7 +146,7 @@ export const Header: React.FC<HeaderProps> = ({
 						<input
 							type="text"
 							value={singleInput}
-							onChange={(e) => setSingleInput(e.target.value)}
+							onChange={(e) => handleInputChange(e.target.value)}
 							placeholder="Search target address"
 							className="prism-input font-mono pl-3.5 pr-12"
 						/>

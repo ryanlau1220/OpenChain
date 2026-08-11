@@ -35,29 +35,39 @@ export type NetworkSlug = 'ethereum-mainnet' | 'base-mainnet' | 'solana-mainnet'
 
 const NETWORK_DETAILS: Record<
 	SupportedNetwork,
-	{ name: string; slug: NetworkSlug; explorer: string; activityLabel?: string }
+	{
+		name: string;
+		slug: NetworkSlug;
+		explorer: string;
+		icon: string;
+		activityLabel?: string;
+	}
 > = {
 	[Network.ETHEREUM_MAINNET]: {
 		name: 'Ethereum Mainnet',
 		slug: 'ethereum-mainnet',
 		explorer: 'https://etherscan.io',
+		icon: '/networks/ethereum.svg',
 		activityLabel: 'Outgoing nonce',
 	},
 	[Network.BASE_MAINNET]: {
 		name: 'Base Mainnet',
 		slug: 'base-mainnet',
 		explorer: 'https://basescan.org',
+		icon: '/networks/base.svg',
 		activityLabel: 'Outgoing nonce',
 	},
 	[Network.SOLANA_MAINNET]: {
 		name: 'Solana Mainnet',
 		slug: 'solana-mainnet',
 		explorer: 'https://explorer.solana.com',
+		icon: '/networks/solana.svg',
 	},
 	[Network.TRON_MAINNET]: {
 		name: 'TRON Mainnet',
 		slug: 'tron-mainnet',
 		explorer: 'https://tronscan.org/#',
+		icon: '/networks/tron.svg',
 	},
 };
 
@@ -77,6 +87,30 @@ export function networkFromSlug(slug: NetworkSlug): SupportedNetwork {
 		supportedNetworks.find((network) => NETWORK_DETAILS[network].slug === slug) ??
 		Network.ETHEREUM_MAINNET
 	);
+}
+
+const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function decodedBase58Length(value: string): number {
+	if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(value) || value.length > 64) return 0;
+	let number = 0n;
+	for (const character of value) number = number * 58n + BigInt(BASE58.indexOf(character));
+	let bytes = 0;
+	for (let current = number; current > 0n; current /= 256n) bytes++;
+	return bytes + (value.length - value.replace(/^1+/, '').length);
+}
+
+// EVM address text is intentionally ambiguous between Ethereum and Base.
+export function detectAddressNetwork(value: string): SupportedNetwork | undefined {
+	const address = value.trim();
+	if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address) && decodedBase58Length(address) === 25)
+		return Network.TRON_MAINNET;
+	if (decodedBase58Length(address) === 32) return Network.SOLANA_MAINNET;
+	return undefined;
+}
+
+export function isEVMAddress(value: string): boolean {
+	return /^0x[\da-fA-F]{40}$/.test(value.trim());
 }
 
 export function explorerURL(network: SupportedNetwork, resource: 'address' | 'tx', value: string) {

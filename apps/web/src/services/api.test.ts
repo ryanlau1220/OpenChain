@@ -1,6 +1,12 @@
 import { Code, ConnectError } from '@connectrpc/connect';
 import { describe, expect, it } from 'vitest';
-import { Network, explorerURL, requestErrorMessage } from './api';
+import {
+	Network,
+	detectAddressNetwork,
+	explorerURL,
+	isEVMAddress,
+	requestErrorMessage,
+} from './api';
 
 describe('requestErrorMessage', () => {
 	it('shows a retryable quota message', () => {
@@ -20,5 +26,12 @@ describe('requestErrorMessage', () => {
 		expect(explorerURL(Network.TRON_MAINNET, 'address', 'TAddress')).toBe(
 			'https://tronscan.org/#/address/TAddress',
 		);
+	});
+
+	it('detects only unambiguous address formats', () => {
+		expect(detectAddressNetwork('11111111111111111111111111111111')).toBe(Network.SOLANA_MAINNET);
+		expect(detectAddressNetwork('T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb')).toBe(Network.TRON_MAINNET);
+		expect(detectAddressNetwork('0x0000000000000000000000000000000000000000')).toBeUndefined();
+		expect(isEVMAddress('0x0000000000000000000000000000000000000000')).toBe(true);
 	});
 });
