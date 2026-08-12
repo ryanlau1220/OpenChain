@@ -1,10 +1,10 @@
-import { Search } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import type React from 'react';
 import { useState } from 'react';
 import {
+	Network,
 	type SupportedNetwork,
 	detectAddressNetwork,
-	isEVMAddress,
 	networkDetails,
 	supportedNetworks,
 } from '../services/api';
@@ -23,23 +23,40 @@ export const Header: React.FC<HeaderProps> = ({
 	onNetworkChange,
 }) => {
 	const [singleInput, setSingleInput] = useState(currentAddress);
-	const detectedNetwork = detectAddressNetwork(singleInput);
-	const detectedDetails =
-		detectedNetwork === undefined ? undefined : networkDetails(detectedNetwork);
-	const hasEVMAddress = isEVMAddress(singleInput);
+	const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
+	const inputNetwork = (value: string) => {
+		const detected = detectAddressNetwork(value);
+		// Keep an explicit EVM network choice: an address alone cannot distinguish
+		// Ethereum from Base. Otherwise, a 0x address switches non-EVM views to Ethereum.
+		if (
+			detected === Network.ETHEREUM_MAINNET &&
+			(network === Network.ETHEREUM_MAINNET || network === Network.BASE_MAINNET)
+		)
+			return network;
+		return detected;
+	};
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (singleInput.trim()) {
-			onSearch(singleInput.trim(), detectedNetwork);
+			onSearch(singleInput.trim(), inputNetwork(singleInput));
 		}
 	};
 
 	const handleInputChange = (value: string) => {
 		setSingleInput(value);
-		const detected = detectAddressNetwork(value);
+		const detected = inputNetwork(value);
 		if (detected !== undefined && detected !== network) onNetworkChange(detected);
 	};
+	const selectNetwork = (nextNetwork: SupportedNetwork) => {
+		setNetworkMenuOpen(false);
+		onNetworkChange(nextNetwork);
+	};
+	const networkGroups = [
+		{ label: 'EVM networks', items: supportedNetworks.slice(0, 2) },
+		{ label: 'Other networks', items: supportedNetworks.slice(2) },
+	] as const;
+	const selectedNetwork = networkDetails(network);
 
 	return (
 		<header
@@ -49,9 +66,8 @@ export const Header: React.FC<HeaderProps> = ({
 				backdropFilter: 'blur(12px)',
 				WebkitBackdropFilter: 'blur(12px)',
 			}}
-			className="px-5 py-2.5 flex flex-col md:flex-row items-center justify-between sticky top-0 z-50 gap-3"
+			className="px-5 py-3 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-50 gap-3"
 		>
-			{/* Brand */}
 			<div className="flex items-center gap-3 shrink-0">
 				<img
 					src="/logo.png"
@@ -59,105 +75,83 @@ export const Header: React.FC<HeaderProps> = ({
 					className="w-8 h-8 rounded-lg object-cover"
 					style={{ boxShadow: '0 0 0 1px var(--border)' }}
 				/>
-				<div>
-					<div className="flex items-center gap-2">
-						<span className="font-bold text-sm tracking-tight" style={{ color: 'var(--ink)' }}>
-							OpenChain
-						</span>
-						<span
-							className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full"
-							style={{
-								background:
-									'linear-gradient(135deg, rgba(136,125,255,0.12), rgba(167,249,255,0.12))',
-								border: '1px solid rgba(136,125,255,0.28)',
-								color: 'var(--accent)',
-							}}
-						>
-							TRACE
-						</span>
-					</div>
-					<p className="text-[10px] mt-0.5" style={{ color: 'var(--ink-3)' }}>
-						Fund Flow Investigation
-					</p>
-				</div>
+				<span className="font-bold text-sm tracking-tight" style={{ color: 'var(--ink)' }}>
+					OpenChain
+				</span>
 			</div>
 
-			{/* Search */}
-			<form onSubmit={handleSubmit} className="flex-1 max-w-2xl w-full">
-				<div className="flex flex-col gap-1.5">
-					{/* Network Badge Row */}
-					<div className="flex items-center justify-end px-0.5">
-						<div
-							className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium"
-							style={{
-								background: 'rgba(98, 126, 234, 0.10)',
-								border: '1px solid rgba(98, 126, 234, 0.30)',
-								color: '#627EEA',
-							}}
+			<form onSubmit={handleSubmit} className="w-full max-w-2xl">
+				<div
+					className="flex h-11 rounded-xl"
+					style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
+				>
+					<div className="relative shrink-0">
+						<button
+							type="button"
+							aria-label="Network"
+							aria-expanded={networkMenuOpen}
+							onClick={() => setNetworkMenuOpen((open) => !open)}
+							className="flex h-full items-center gap-2 border-r px-3 text-xs font-medium transition hover:bg-[var(--snow)]"
+							style={{ borderColor: 'var(--border)', color: 'var(--ink-2)' }}
 						>
 							<img
-								src={networkDetails(network).icon}
-								alt={`${networkDetails(network).name} icon`}
-								className="h-3.5 w-3.5"
+								src={selectedNetwork.icon}
+								alt={`${selectedNetwork.name} icon`}
+								className="h-4 w-4"
 							/>
-							<select
-								aria-label="Network"
-								value={network}
-								onChange={(event) =>
-									onNetworkChange(Number(event.target.value) as SupportedNetwork)
-								}
-								className="bg-transparent outline-none cursor-pointer"
-							>
-								<optgroup label="EVM Networks">
-									{supportedNetworks.slice(0, 2).map((item) => (
-										<option key={item} value={item}>
-											{networkDetails(item).name}
-										</option>
-									))}
-								</optgroup>
-								<optgroup label="Other Networks">
-									{supportedNetworks.slice(2).map((item) => (
-										<option key={item} value={item}>
-											{networkDetails(item).name}
-										</option>
-									))}
-								</optgroup>
-							</select>
-						</div>
-						{hasEVMAddress && (
-							<span className="text-[10px]" style={{ color: 'var(--accent)' }}>
-								EVM address — choose its network
-							</span>
-						)}
-						{detectedDetails && detectedNetwork !== network && (
-							<span className="text-[10px]" style={{ color: 'var(--accent)' }}>
-								<img
-									src={detectedDetails.icon}
-									alt={`${detectedDetails.name} icon`}
-									className="mr-1 inline h-3.5 w-3.5 align-text-bottom"
-								/>
-								{detectedDetails.name} detected
-							</span>
-						)}
-					</div>
-
-					{/* Single Input */}
-					<div className="relative">
-						<input
-							type="text"
-							value={singleInput}
-							onChange={(e) => handleInputChange(e.target.value)}
-							placeholder="Search target address"
-							className="prism-input font-mono pl-3.5 pr-12"
-						/>
-						<button
-							type="submit"
-							className="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 text-xs flex items-center justify-center p-2 rounded-lg"
-							title="Investigate Address"
-						>
-							<Search className="w-4 h-4" />
+							<span className="hidden md:inline">{selectedNetwork.name}</span>
+							<ChevronDown className="h-3.5 w-3.5" />
 						</button>
+						{networkMenuOpen && (
+							<div
+								aria-label="Network choices"
+								className="absolute left-0 top-[calc(100%+0.4rem)] z-50 w-56 rounded-xl p-1.5 shadow-lg"
+								style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
+							>
+								{networkGroups.map((group) => (
+									<div key={group.label} className="py-1">
+										<p
+											className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
+											style={{ color: 'var(--ink-3)' }}
+										>
+											{group.label}
+										</p>
+										{group.items.map((item) => {
+											const details = networkDetails(item);
+											return (
+												<button
+													key={item}
+													type="button"
+													aria-pressed={item === network}
+													onClick={() => selectNetwork(item)}
+													className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs hover:bg-[var(--slate)]"
+													style={{ color: item === network ? 'var(--accent)' : 'var(--ink-2)' }}
+												>
+													<img src={details.icon} alt="" className="h-4 w-4" />
+													{details.name}
+												</button>
+											);
+										})}
+									</div>
+								))}
+							</div>
+						)}
 					</div>
+					<input
+						type="text"
+						value={singleInput}
+						onChange={(event) => handleInputChange(event.target.value)}
+						placeholder="Search target address"
+						className="min-w-0 flex-1 bg-transparent px-3 font-mono text-sm outline-none"
+					/>
+					<button
+						type="submit"
+						className="btn-primary m-1 px-3"
+						title="Investigate Address"
+						aria-label="Investigate address"
+					>
+						<Search className="h-4 w-4" />
+					</button>
 				</div>
 			</form>
 		</header>
