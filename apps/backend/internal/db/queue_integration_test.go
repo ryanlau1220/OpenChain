@@ -8,25 +8,32 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect"
+	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
+	"github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1/openchainv1connect"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
+	"github.com/openchain/openchain/apps/backend/internal/api"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/rules"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
-func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
+func TestQueueIntegrationTraceFindingAndEvidenceExport(t *testing.T) {
 	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
 		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test the trace worker")
 	}
 	const (
 		from = "0x1000000000000000000000000000000000000001"
-		to   = "0x2000000000000000000000000000000000000002"
-		hash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		toA  = "0x2000000000000000000000000000000000000002"
+		toB  = "0x3000000000000000000000000000000000000003"
+		toC  = "0x4000000000000000000000000000000000000004"
 	)
+	var txListAttempts atomic.Int32
 	etherscan := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Query().Get("module") != "account" {
 			http.NotFound(writer, request)
@@ -39,7 +46,14 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 			_, _ = writer.Write([]byte(`{"status":"1","message":"OK","result":[]}`))
 			return
 		}
-		_, _ = writer.Write([]byte(`{"status":"1","message":"OK","result":[{"hash":"` + hash + `","blockNumber":"10","timeStamp":"100","from":"` + from + `","to":"` + to + `","value":"42"}]}`))
+		if txListAttempts.Add(1) == 1 {
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = writer.Write([]byte(`{"status":"1","message":"OK","result":[` +
+			`{"hash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","blockNumber":"10","timeStamp":"100","from":"` + from + `","to":"` + toA + `","value":"42"},` +
+			`{"hash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","blockNumber":"11","timeStamp":"3700","from":"` + from + `","to":"` + toB + `","value":"43"},` +
+			`{"hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","blockNumber":"12","timeStamp":"7300","from":"` + from + `","to":"` + toC + `","value":"44"}]}`))
 	}))
 	defer etherscan.Close()
 
@@ -75,41 +89,56 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 		t.Fatal(err)
 	}
 
-	client := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
-	queue := tracing.NewQueue(tracing.NewEngine(client, database, labels.NewService(database)), database, 2)
+	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
+	registry := labels.NewService(database)
+	engine := tracing.NewEngine(chain, database, registry)
+	queue := tracing.NewQueue(engine, database, 2)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)
 	defer func() {
 		stopWorker()
 		queue.Wait()
 	}()
+	server := httptest.NewServer(api.NewServer(map[pb.Network]api.NetworkRuntime{
+		pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine, Queue: queue},
+	}, registry, "http://localhost:3000", 100, false).Handler())
+	defer server.Close()
+	tracingClient := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
+	evidenceClient := openchainv1connect.NewEvidenceServiceClient(server.Client(), server.URL)
 
-	pending, err := queue.TraceGraph(ctx, from, tracing.DirectionBoth, 1, "", true)
+	// The Etherscan adapter divides a requested graph page among native,
+	// internal, and token sources. Seven yields three native observations.
+	pending, err := tracingClient.TraceGraph(ctx, connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: from, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, Limit: 7, Retry: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !pending.Pending || len(pending.Nodes) != 1 {
-		t.Fatalf("pending trace = %#v", pending)
+	if !pending.Msg.GetPending() || len(pending.Msg.GetNodes()) != 1 {
+		t.Fatalf("pending trace = %#v", pending.Msg)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
-		result, err := queue.TraceStatus(ctx, from, tracing.DirectionBoth, 1, "")
+		result, err := tracingClient.GetTraceStatus(ctx, connect.NewRequest(&pb.TraceStatusRequest{Address: from, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, Limit: 7}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.Pending {
-			if len(result.Nodes) != 2 || len(result.Edges) != 1 || result.Edges[0].TransactionHash != hash {
-				t.Fatalf("completed trace = %#v", result)
+		if !result.Msg.GetPending() {
+			if len(result.Msg.GetNodes()) != 4 || len(result.Msg.GetEdges()) != 3 || txListAttempts.Load() != 2 {
+				t.Fatalf("completed trace = %#v", result.Msg)
+			}
+			if len(result.Msg.GetLeads()) != 1 || result.Msg.GetLeads()[0].GetRuleId() != "fan-out-dispersion" {
+				t.Fatalf("deterministic finding = %#v", result.Msg.GetLeads())
 			}
 			var snapshots, links int
 			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_snapshots`).Scan(&snapshots); err != nil {
 				t.Fatal(err)
 			}
-			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM transfer_acquisitions WHERE transfer_id = $1`, "ethereum-mainnet:"+hash+":tx").Scan(&links); err != nil {
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM transfer_acquisitions WHERE transfer_id = $1`, "ethereum-mainnet:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:tx").Scan(&links); err != nil {
 				t.Fatal(err)
 			}
-			if snapshots != 3 || links != 3 {
+			// The failed first provider request is preserved separately from the
+			// three successful source snapshots linked to each transfer.
+			if snapshots != 4 || links != 3 {
 				t.Fatalf("snapshots = %d, links = %d", snapshots, links)
 			}
 			var ruleRuns int
@@ -119,8 +148,20 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 			var version string
 			var parameters, inputIDs, ruleResult []byte
 			var startedAt, completedAt time.Time
-			if err := database.SQL.QueryRowContext(ctx, `SELECT rule_version, parameters, input_transfer_ids, result, started_at, completed_at FROM rule_runs WHERE rule_id = $1`, "fan-in-consolidation").Scan(&version, &parameters, &inputIDs, &ruleResult, &startedAt, &completedAt); err != nil || version != "1.0.0" || !json.Valid(parameters) || !json.Valid(inputIDs) || !json.Valid(ruleResult) || startedAt.IsZero() || completedAt.IsZero() {
+			if err := database.SQL.QueryRowContext(ctx, `SELECT rule_version, parameters, input_transfer_ids, result, started_at, completed_at FROM rule_runs WHERE rule_id = $1`, "fan-out-dispersion").Scan(&version, &parameters, &inputIDs, &ruleResult, &startedAt, &completedAt); err != nil || version != "1.0.0" || !json.Valid(parameters) || !json.Valid(inputIDs) || !json.Valid(ruleResult) || startedAt.IsZero() || completedAt.IsZero() {
 				t.Fatalf("rule run provenance version=%q parameters=%q inputs=%q result=%q started=%v completed=%v err=%v", version, parameters, inputIDs, ruleResult, startedAt, completedAt, err)
+			}
+			transferIDs := make([]string, 0, len(result.Msg.GetEdges()))
+			for _, edge := range result.Msg.GetEdges() {
+				transferIDs = append(transferIDs, edge.GetId())
+			}
+			exported, err := database.ExportEvidence(ctx, "ethereum-mainnet", transferIDs)
+			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 3 || len(exported.Provenance) != 9 || len(exported.RuleRuns) != 3 {
+				t.Fatalf("evidence export = %#v err=%v", exported, err)
+			}
+			packageResponse, err := evidenceClient.ExportEvidencePackage(ctx, connect.NewRequest(&pb.ExportEvidencePackageRequest{Network: pb.Network_NETWORK_ETHEREUM_MAINNET, TransferIds: transferIDs, CaseJson: `{"version":1,"title":"Integration case"}`}))
+			if err != nil || !json.Valid([]byte(packageResponse.Msg.GetPackageJson())) {
+				t.Fatalf("frozen package err=%v package=%s", err, packageResponse.Msg.GetPackageJson())
 			}
 			return
 		}

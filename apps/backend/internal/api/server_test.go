@@ -95,6 +95,26 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
+func TestHealthAlertsExposeQueueAndProviderThresholds(t *testing.T) {
+	registry := labels.NewService(nil)
+	runtimes := testNetworks(registry)
+	runtime := runtimes[pb.Network_NETWORK_ETHEREUM_MAINNET]
+	runtime.Queue = tracing.NewQueue(runtime.Engine, nil, 10)
+	runtimes[pb.Network_NETWORK_ETHEREUM_MAINNET] = runtime
+	failedAt := time.Now().UTC()
+	alerts := healthAlerts([]healthNetwork{{
+		Network: "ethereum-mainnet",
+		Queue:   tracing.Stats{Enabled: true, Queued: 10, Failed: 1},
+		Providers: []adapter.ProviderHealth{{
+			Provider:      "test-provider",
+			LastFailureAt: &failedAt,
+		}},
+	}}, runtimes)
+	if len(alerts) != 3 || alerts[0].Code != "trace_queue_full" || alerts[0].Severity != "critical" || alerts[1].Code != "trace_jobs_failed" || alerts[2].Code != "provider_unhealthy" {
+		t.Fatalf("alerts = %#v", alerts)
+	}
+}
+
 func TestCORSOnlyAllowsConfiguredOrigin(t *testing.T) {
 	handler, _ := setupTestServer()
 	for _, origin := range []string{"http://localhost:3000", "https://untrusted.example"} {

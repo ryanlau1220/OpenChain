@@ -69,7 +69,7 @@ func TestEvaluateFanRulesRespectDistinctCounterpartiesAndWindowBoundary(t *testi
 func TestEvaluateFindsRapidOnwardTransferOnlyWithinWindow(t *testing.T) {
 	transfers := []db.Transfer{
 		ruleTransfer("incoming", alice, hub, 0),
-		ruleTransfer("onward", hub, bob, time.Hour-time.Second),
+		ruleTransfer("onward", hub, bob, time.Hour),
 	}
 	leads, _ := Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
 	lead := findLead(t, leads, "rapid-onward-transfer")
@@ -77,10 +77,41 @@ func TestEvaluateFindsRapidOnwardTransferOnlyWithinWindow(t *testing.T) {
 		t.Fatalf("rapid onward lead = %#v", lead)
 	}
 
-	transfers[1].BlockTimestamp = transfers[1].BlockTimestamp.Add(2 * time.Second)
+	transfers[1].BlockTimestamp = transfers[1].BlockTimestamp.Add(time.Second)
 	leads, _ = Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
 	if hasLead(leads, "rapid-onward-transfer") {
 		t.Fatalf("rapid onward incorrectly crossed its time window: %#v", leads)
+	}
+}
+
+func TestEvaluateRejectsRuleFalsePositives(t *testing.T) {
+	fanOutRepeatedCounterparty := []db.Transfer{
+		ruleTransfer("out-1", hub, alice, 0),
+		ruleTransfer("out-2", hub, alice, time.Hour),
+		ruleTransfer("out-3", hub, bob, 2*time.Hour),
+	}
+	leads, _ := Evaluate("ethereum-mainnet", fanOutRepeatedCounterparty, time.Now().UTC())
+	if hasLead(leads, "fan-out-dispersion") {
+		t.Fatalf("fan-out counted repeated counterparty: %#v", leads)
+	}
+
+	returnTransfer := []db.Transfer{
+		ruleTransfer("incoming", alice, hub, 0),
+		ruleTransfer("return", hub, alice, time.Hour),
+	}
+	leads, _ = Evaluate("ethereum-mainnet", returnTransfer, time.Now().UTC())
+	if hasLead(leads, "rapid-onward-transfer") {
+		t.Fatalf("rapid-onward treated a return transfer as onward: %#v", leads)
+	}
+
+	differentAsset := []db.Transfer{
+		ruleTransfer("incoming", alice, hub, 0),
+		ruleTransfer("onward", hub, bob, time.Hour),
+	}
+	differentAsset[1].Asset.Symbol = "USDC"
+	leads, _ = Evaluate("ethereum-mainnet", differentAsset, time.Now().UTC())
+	if hasLead(leads, "rapid-onward-transfer") {
+		t.Fatalf("rapid-onward crossed assets: %#v", leads)
 	}
 }
 
