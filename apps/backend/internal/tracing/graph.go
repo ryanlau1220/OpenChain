@@ -36,6 +36,7 @@ type GraphEdge struct {
 	TxCount                                                                                                  uint32
 	BlockNumber                                                                                              uint64
 	Timestamp, RetrievedAt                                                                                   int64
+	Provisional                                                                                              bool
 }
 type GraphResult struct {
 	Network                string
@@ -154,7 +155,7 @@ func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.Tra
 		}
 		outCounts[from]++
 		inCounts[to]++
-		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix()})
+		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix(), Provisional: isProvisional(e.Network(), transfer.Timestamp, page.SourceStatus.RetrievedAt)})
 	}
 	graphNodes := make([]GraphNode, 0, len(nodes))
 	for id, node := range nodes {

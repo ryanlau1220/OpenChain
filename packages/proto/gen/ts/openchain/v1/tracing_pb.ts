@@ -204,6 +204,11 @@ export class GraphEdge extends Message<GraphEdge> {
    */
   retrievedAt = protoInt64.zero;
 
+  /**
+   * @generated from field: bool provisional = 16;
+   */
+  provisional = false;
+
   constructor(data?: PartialMessage<GraphEdge>) {
     super();
     proto3.util.initPartial(data, this);
@@ -227,6 +232,7 @@ export class GraphEdge extends Message<GraphEdge> {
     { no: 13, name: "transfer_kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 14, name: "source_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 15, name: "retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 16, name: "provisional", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GraphEdge {

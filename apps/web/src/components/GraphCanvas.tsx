@@ -1,6 +1,7 @@
 import cytoscape from 'cytoscape';
 import {
 	ArrowLeftRight,
+	Filter,
 	Layers,
 	Maximize2,
 	PlusCircle,
@@ -9,7 +10,7 @@ import {
 	ZoomOut,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
 	EntityType,
 	type GraphEdge,
@@ -23,9 +24,11 @@ interface GraphCanvasProps {
 	selectedNode?: GraphNode | null;
 	onNodeSelect: (node: GraphNode | null) => void;
 	onEdgeSelect?: (edge: GraphEdge | null) => void;
+	onRelationshipSelect?: (edges: readonly GraphEdge[]) => void;
 	onExpandNode?: (address: string) => void;
 	canExpand?: boolean;
 	expanding?: boolean;
+	highlightedTransferIds?: readonly string[];
 }
 
 // PRISM node palette (light mode)
@@ -43,7 +46,29 @@ export type GraphRelationship = {
 	label: string;
 	color: string;
 	representative: GraphEdge;
+	transfers: GraphEdge[];
+	provisional: boolean;
 };
+
+type DirectionFilter = 'both' | 'inbound' | 'outbound';
+type GraphFilters = {
+	from: string;
+	to: string;
+	direction: DirectionFilter;
+	asset: string;
+	minimumAmount: string;
+	transferKind: string;
+};
+
+const emptyFilters: GraphFilters = {
+	from: '',
+	to: '',
+	direction: 'both',
+	asset: '',
+	minimumAmount: '',
+	transferKind: '',
+};
+const emptyTransferIDs: readonly string[] = [];
 
 const baseUnits = (value: string) => {
 	try {
@@ -66,7 +91,7 @@ const formatRelationshipAmount = (amount: bigint, edge: GraphEdge) => {
 export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelationship[] {
 	const relationships = new Map<
 		string,
-		{ count: number; amount: bigint; representative: GraphEdge }
+		{ count: number; amount: bigint; representative: GraphEdge; transfers: GraphEdge[] }
 	>();
 	for (const edge of edges) {
 		const asset = edge.asset;
@@ -80,11 +105,13 @@ export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelations
 				count: edge.txCount || 1,
 				amount: baseUnits(edge.amountBaseUnits),
 				representative: edge,
+				transfers: [edge],
 			});
 			continue;
 		}
 		relationship.count += edge.txCount || 1;
 		relationship.amount += baseUnits(edge.amountBaseUnits);
+		relationship.transfers.push(edge);
 		if (Number(edge.lastTxTimestamp) > Number(relationship.representative.lastTxTimestamp))
 			relationship.representative = edge;
 	}
@@ -98,9 +125,60 @@ export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelations
 			label: `${relationship.count} ${relationship.count === 1 ? 'transfer' : 'transfers'} · ${formatRelationshipAmount(relationship.amount, edge)}`,
 			color: stable ? '#34D399' : '#887DFF',
 			representative: edge,
+			transfers: relationship.transfers.toSorted((left, right) => {
+				if (left.firstTxTimestamp !== right.firstTxTimestamp)
+					return Number(left.firstTxTimestamp) - Number(right.firstTxTimestamp);
+				return left.id.localeCompare(right.id);
+			}),
+			provisional: relationship.transfers.some((transfer) => transfer.provisional),
 		};
 	});
 }
+
+const assetKey = (edge: GraphEdge) =>
+	[edge.asset?.kind, edge.asset?.contractAddress || edge.asset?.symbol, edge.asset?.decimals].join(
+		':',
+	);
+
+const minimumBaseUnits = (value: string, decimals: number) => {
+	if (!/^\d+(?:\.\d+)?$/.test(value)) return null;
+	const [whole, fraction = ''] = value.split('.');
+	const safeDecimals = Math.min(decimals, 30);
+	if (fraction.length > safeDecimals) return null;
+	return BigInt(whole + fraction.padEnd(safeDecimals, '0'));
+};
+
+export function filterGraphEdges(
+	edges: readonly GraphEdge[],
+	seedAddress: string,
+	filters: GraphFilters,
+): GraphEdge[] {
+	const fromTimestamp = filters.from ? Date.parse(filters.from) : 0;
+	const toTimestamp = filters.to ? Date.parse(filters.to) : Number.POSITIVE_INFINITY;
+	if (Number.isNaN(fromTimestamp) || Number.isNaN(toTimestamp)) return [];
+	const from = fromTimestamp / 1000;
+	const to =
+		toTimestamp === Number.POSITIVE_INFINITY ? toTimestamp : (toTimestamp + 86_399_999) / 1000;
+	return edges.filter((edge) => {
+		const timestamp = Number(edge.firstTxTimestamp);
+		if (timestamp < from || timestamp > to || (filters.asset && assetKey(edge) !== filters.asset))
+			return false;
+		if (filters.transferKind && edge.transferKind !== filters.transferKind) return false;
+		if (filters.direction === 'inbound' && edge.target !== seedAddress) return false;
+		if (filters.direction === 'outbound' && edge.source !== seedAddress) return false;
+		if (!filters.minimumAmount) return true;
+		const minimum = minimumBaseUnits(filters.minimumAmount, edge.asset?.decimals ?? 0);
+		return minimum !== null && baseUnits(edge.amountBaseUnits) >= minimum;
+	});
+}
+
+const applyEvidenceStyles = (cy: cytoscape.Core, transferIDs: ReadonlySet<string>) => {
+	cy.edges().forEach((edge) => {
+		const relationship = edge.data('raw') as GraphRelationship;
+		const highlighted = relationship.transfers.some((transfer) => transferIDs.has(transfer.id));
+		edge.toggleClass('evidence-edge', highlighted);
+	});
+};
 
 const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 	const cleanTarget = targetNodeId?.toLowerCase();
@@ -148,19 +226,47 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	selectedNode: propSelectedNode,
 	onNodeSelect,
 	onEdgeSelect,
+	onRelationshipSelect,
 	onExpandNode,
 	canExpand = false,
 	expanding = false,
+	highlightedTransferIds = emptyTransferIDs,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
 	const [internalSelectedNode, setInternalSelectedNode] = useState<GraphNode | null>(null);
-	const [_selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
 	const [layoutName, setLayoutName] = useState<'cose' | 'concentric' | 'breadthfirst' | 'grid'>(
 		'breadthfirst',
 	);
+	const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
+	const seedAddress = graphData?.seedAddress || '';
+	const visibleEdges = useMemo(
+		() => filterGraphEdges(graphData?.edges || [], seedAddress, filters),
+		[filters, graphData?.edges, seedAddress],
+	);
+	const visibleNodes = useMemo(() => {
+		const addresses = new Set([seedAddress]);
+		for (const edge of visibleEdges) {
+			addresses.add(edge.source);
+			addresses.add(edge.target);
+		}
+		return (graphData?.nodes || []).filter((node) => addresses.has(node.id));
+	}, [graphData?.nodes, seedAddress, visibleEdges]);
+	const assets = useMemo(() => {
+		const unique = new Map<string, string>();
+		for (const edge of graphData?.edges || []) {
+			const asset = edge.asset;
+			unique.set(assetKey(edge), asset?.symbol || 'Unknown asset');
+		}
+		return [...unique.entries()];
+	}, [graphData?.edges]);
+	const transferKinds = useMemo(
+		() => [...new Set((graphData?.edges || []).map((edge) => edge.transferKind).filter(Boolean))],
+		[graphData?.edges],
+	);
+	const highlightedIDs = useMemo(() => new Set(highlightedTransferIds), [highlightedTransferIds]);
 
 	const onNodeSelectRef = useRef(onNodeSelect);
 	useEffect(() => {
@@ -170,6 +276,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	useEffect(() => {
 		onEdgeSelectRef.current = onEdgeSelect;
 	}, [onEdgeSelect]);
+	const onRelationshipSelectRef = useRef(onRelationshipSelect);
+	useEffect(() => {
+		onRelationshipSelectRef.current = onRelationshipSelect;
+	}, [onRelationshipSelect]);
 
 	useEffect(() => {
 		if (!cyRef.current) return;
@@ -177,11 +287,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	}, [selectedNode?.id, graphData]);
 
 	useEffect(() => {
+		if (cyRef.current) applyEvidenceStyles(cyRef.current, highlightedIDs);
+	}, [highlightedIDs]);
+
+	useEffect(() => {
 		if (!containerRef.current || !graphData) return;
 
 		const elements: cytoscape.ElementDefinition[] = [];
 
-		(graphData?.nodes || []).forEach((n) => {
+		visibleNodes.forEach((n) => {
 			let palette = NODE_COLORS.default;
 			let badge = entityLabel(n.entityType);
 
@@ -214,7 +328,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 		});
 
-		aggregateGraphEdges(graphData?.edges || []).forEach((relationship) => {
+		aggregateGraphEdges(visibleEdges).forEach((relationship) => {
 			elements.push({
 				group: 'edges',
 				data: {
@@ -223,31 +337,42 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					target: relationship.target,
 					label: relationship.label,
 					color: relationship.color,
-					raw: relationship.representative,
+					provisional: relationship.provisional,
+					raw: relationship,
 				},
 			});
 		});
 
 		const effectiveLayout =
-			layoutName === 'breadthfirst' && (graphData?.edges || []).length === 0 ? 'grid' : layoutName;
+			layoutName === 'breadthfirst' && visibleEdges.length === 0 ? 'grid' : layoutName;
 
 		if (cyRef.current) {
 			const cy = cyRef.current;
 			const currentElementIds = new Set(cy.elements().map((e) => e.id()));
+			const desiredElementIds = new Set(elements.map((element) => element.data.id as string));
+			const needsRemoval = [...currentElementIds].some((id) => !desiredElementIds.has(id));
 			const newElements = elements.filter(
-				(e) => Boolean(e.data.id) && !currentElementIds.has(e.data.id as string),
+				(element) => !currentElementIds.has(element.data.id as string),
 			);
+			cy.batch(() => {
+				for (const element of elements) {
+					const existing = cy.getElementById(element.data.id as string);
+					if (existing.length > 0) existing.data(element.data);
+				}
+			});
 
-			if (newElements.length === 0) {
+			if (newElements.length === 0 && !needsRemoval) {
 				applyNodeStyles(cy, selectedNode?.id);
+				applyEvidenceStyles(cy, highlightedIDs);
 				return;
 			}
 
-			if (newElements.length > 0 && cy.elements().length > 0) {
+			if (newElements.length > 0 && !needsRemoval && cy.elements().length > 0) {
 				cy.batch(() => {
 					cy.add(newElements);
 				});
 				applyNodeStyles(cy, selectedNode?.id);
+				applyEvidenceStyles(cy, highlightedIDs);
 				const layout = cy.layout({
 					name: effectiveLayout,
 					fit: false,
@@ -263,6 +388,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.add(elements);
 			});
 			applyNodeStyles(cy, selectedNode?.id);
+			applyEvidenceStyles(cy, highlightedIDs);
 			const layout = cy.layout({
 				name: effectiveLayout,
 				fit: true,
@@ -342,6 +468,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						opacity: 0.85,
 					},
 				},
+				{
+					selector: 'edge.evidence-edge',
+					style: {
+						width: 4,
+						'line-color': '#F59E0B',
+						'target-arrow-color': '#F59E0B',
+						opacity: 1,
+					},
+				},
+				{
+					selector: 'edge[?provisional]',
+					style: {
+						'line-style': 'dashed',
+					},
+				},
 			],
 			layout: {
 				name: effectiveLayout,
@@ -357,6 +498,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		}
 
 		applyNodeStyles(cy, selectedNode?.id);
+		applyEvidenceStyles(cy, highlightedIDs);
 
 		cy.minZoom(0.3);
 		cy.maxZoom(2.0);
@@ -373,23 +515,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			const nData = evt.target.data('raw');
 			if (!nData) return;
 			setInternalSelectedNode(nData);
-			setSelectedEdge(null);
 			onEdgeSelectRef.current?.(null);
+			onRelationshipSelectRef.current?.([]);
 			onNodeSelectRef.current(nData);
 			applyNodeStyles(cy, nData.id);
 		});
 
 		cy.on('tap', 'edge', (evt) => {
-			const edge = evt.target.data('raw') as GraphEdge;
-			setSelectedEdge(edge);
-			onEdgeSelectRef.current?.(edge);
+			const relationship = evt.target.data('raw') as GraphRelationship;
+			onEdgeSelectRef.current?.(relationship.representative);
+			onRelationshipSelectRef.current?.(relationship.transfers);
 		});
 
 		cy.on('tap', (evt) => {
 			if (evt.target === cy && !isPanningCanvas) {
 				setInternalSelectedNode(null);
-				setSelectedEdge(null);
 				onEdgeSelectRef.current?.(null);
+				onRelationshipSelectRef.current?.([]);
 				onNodeSelectRef.current(null);
 				applyNodeStyles(cy, undefined);
 			}
@@ -400,7 +542,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			cy.destroy();
 			cyRef.current = null;
 		};
-	}, [graphData, layoutName]);
+	}, [graphData, highlightedIDs, layoutName, visibleEdges, visibleNodes]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
@@ -415,6 +557,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 	const toolBtn =
 		'p-1.5 rounded-lg transition hover:bg-[var(--slate)] text-[var(--ink-3)] hover:text-[var(--ink)]';
+	const activeFilterCount = Object.values(filters).filter(
+		(value) => value && value !== 'both',
+	).length;
+	const updateFilter = <Key extends keyof GraphFilters>(key: Key, value: GraphFilters[Key]) =>
+		setFilters((current) => ({ ...current, [key]: value }));
+	const hasProvisionalEvidence = visibleEdges.some((edge) => edge.provisional);
 
 	return (
 		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
@@ -469,8 +617,117 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						</button>
 					</div>
 				</div>
+				{graphData?.sourceStatus?.source && (
+					<p className="hidden lg:block text-[10px]" style={{ color: 'var(--ink-3)' }}>
+						{graphData.sourceStatus.source} ·{' '}
+						{hasProvisionalEvidence
+							? 'contains provisional observations'
+							: 'finalized observations'}
+					</p>
+				)}
 
 				<div className="flex items-center gap-2">
+					<details className="relative">
+						<summary
+							className="list-none cursor-pointer rounded-lg px-2.5 py-1 text-xs"
+							style={{
+								background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
+							}}
+						>
+							<Filter className="mr-1 inline h-3.5 w-3.5" />
+							Filters{activeFilterCount ? ` · ${activeFilterCount}` : ''}
+						</summary>
+						<div
+							className="absolute right-0 top-8 z-30 w-72 space-y-2 rounded-xl p-3 shadow-lg"
+							style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
+						>
+							<div className="flex items-center justify-between">
+								<p
+									className="text-[10px] font-semibold uppercase tracking-wider"
+									style={{ color: 'var(--ink-3)' }}
+								>
+									Visible transfers: {visibleEdges.length}/{graphData?.edges.length || 0}
+								</p>
+								<button
+									type="button"
+									onClick={() => setFilters(emptyFilters)}
+									className="text-[10px]"
+									style={{ color: 'var(--accent)' }}
+								>
+									Clear
+								</button>
+							</div>
+							<div className="grid grid-cols-2 gap-2">
+								<input
+									aria-label="From date"
+									type="date"
+									value={filters.from}
+									onChange={(event) => updateFilter('from', event.target.value)}
+									className="prism-input text-[10px] px-2 py-1.5"
+								/>
+								<input
+									aria-label="To date"
+									type="date"
+									value={filters.to}
+									onChange={(event) => updateFilter('to', event.target.value)}
+									className="prism-input text-[10px] px-2 py-1.5"
+								/>
+								<select
+									aria-label="Transfer direction"
+									value={filters.direction}
+									onChange={(event) =>
+										updateFilter('direction', event.target.value as DirectionFilter)
+									}
+									className="prism-input text-[10px] px-2 py-1.5"
+								>
+									<option value="both">All directions</option>
+									<option value="inbound">Inbound to target</option>
+									<option value="outbound">Outbound from target</option>
+								</select>
+								<select
+									aria-label="Asset"
+									value={filters.asset}
+									onChange={(event) => updateFilter('asset', event.target.value)}
+									className="prism-input text-[10px] px-2 py-1.5"
+								>
+									<option value="">All assets</option>
+									{assets.map(([id, label]) => (
+										<option key={id} value={id}>
+											{label}
+										</option>
+									))}
+								</select>
+								<input
+									aria-label="Minimum amount"
+									type="text"
+									inputMode="decimal"
+									maxLength={30}
+									placeholder="Minimum amount"
+									value={filters.minimumAmount}
+									onChange={(event) => updateFilter('minimumAmount', event.target.value)}
+									className="prism-input text-[10px] px-2 py-1.5"
+								/>
+								<select
+									aria-label="Transfer type"
+									value={filters.transferKind}
+									onChange={(event) => updateFilter('transferKind', event.target.value)}
+									className="prism-input text-[10px] px-2 py-1.5"
+								>
+									<option value="">All types</option>
+									{transferKinds.map((kind) => (
+										<option key={kind} value={kind}>
+											{kind}
+										</option>
+									))}
+								</select>
+							</div>
+							<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
+								Amount uses the selected transfer’s asset units.
+							</p>
+						</div>
+					</details>
 					<select
 						value={layoutName}
 						onChange={(e) =>

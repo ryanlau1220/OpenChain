@@ -107,7 +107,7 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
-		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp})
+		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp, Provisional: edge.Provisional})
 	}
 	return nodes, edges
 }

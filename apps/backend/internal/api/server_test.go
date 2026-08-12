@@ -154,6 +154,13 @@ func TestTraceProtoCarriesNeutralInvestigationLead(t *testing.T) {
 	}
 }
 
+func TestGraphProtoCarriesFinalityState(t *testing.T) {
+	_, edges := toGraphProto(&tracing.GraphResult{Edges: []tracing.GraphEdge{{ID: "provisional", Provisional: true}}})
+	if len(edges) != 1 || !edges[0].GetProvisional() {
+		t.Fatalf("graph finality = %#v", edges)
+	}
+}
+
 func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
 		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test curated-label API flow")

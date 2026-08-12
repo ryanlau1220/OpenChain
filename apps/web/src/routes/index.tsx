@@ -4,6 +4,7 @@ import { CaseWorkspace } from '../components/CaseWorkspace';
 import { EvidencePaths } from '../components/EvidencePaths';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
+import { InvestigationLeads } from '../components/InvestigationLeads';
 import { TransferInspector } from '../components/TransferInspector';
 import { WalletLookup } from '../components/WalletLookup';
 import {
@@ -11,6 +12,7 @@ import {
 	type AddressSummary,
 	type GraphEdge,
 	type GraphNode,
+	type InvestigationLead,
 	Network,
 	type SupportedNetwork,
 	TraceGraphResponse,
@@ -43,6 +45,9 @@ function Index() {
 	const [loading, setLoading] = useState(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 	const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
+	const [selectedRelationship, setSelectedRelationship] = useState<readonly GraphEdge[]>([]);
+	const [selectedLead, setSelectedLead] = useState<InvestigationLead | null>(null);
+	const [highlightedTransferIds, setHighlightedTransferIds] = useState<readonly string[]>([]);
 	const [caseFile, setCaseFile] = useState<LocalCase>(createLocalCase);
 	const [caseLoaded, setCaseLoaded] = useState(false);
 	const [branchPages, setBranchPages] = useState<Record<string, BranchPage>>({});
@@ -73,6 +78,9 @@ function Index() {
 				setGraphData(null);
 				setSelectedNode(null);
 				setSelectedEdge(null);
+				setSelectedRelationship([]);
+				setSelectedLead(null);
+				setHighlightedTransferIds([]);
 				setSummary(null);
 				setLabels([]);
 				setBranchPages({});
@@ -126,6 +134,9 @@ function Index() {
 			setGraphData(null);
 			setSelectedNode(null);
 			setSelectedEdge(null);
+			setSelectedRelationship([]);
+			setSelectedLead(null);
+			setHighlightedTransferIds([]);
 			setSummary(null);
 			setLabels([]);
 			setBranchPages({});
@@ -158,6 +169,9 @@ function Index() {
 		async (node: GraphNode | null) => {
 			setSelectedNode(node);
 			setSelectedEdge(null);
+			setSelectedRelationship([]);
+			setSelectedLead(null);
+			setHighlightedTransferIds([]);
 			if (node)
 				setCaseFile((current) => ({
 					...current,
@@ -195,6 +209,7 @@ function Index() {
 					: await fetchTraceStatus(nodeAddress, network, page?.cursor).then((status) => ({
 							newNodes: status.nodes,
 							newEdges: status.edges,
+							leads: status.leads,
 							nextCursor: status.nextCursor,
 							hasMore: status.hasMore,
 							pending: status.pending,
@@ -217,10 +232,16 @@ function Index() {
 						...current.edges,
 						...expanded.newEdges.filter((edge) => !edgeIds.has(edge.id)),
 					];
+					const leadIds = new Set(current.leads.map((lead) => lead.id));
+					const leads = [
+						...current.leads,
+						...expanded.leads.filter((lead) => !leadIds.has(lead.id)),
+					];
 					return new TraceGraphResponse({
 						...current,
 						nodes,
 						edges,
+						leads,
 						totalNodes: nodes.length,
 						totalEdges: edges.length,
 					});
@@ -254,6 +275,42 @@ function Index() {
 	const activeAddress = selectedNode?.id || graphData?.seedAddress || '';
 	const activeBranch = branchPages[activeAddress.toLowerCase()];
 	const canExpand = Boolean(activeAddress) && (!activeBranch || activeBranch.hasMore);
+	const selectTransfer = useCallback((edge: GraphEdge) => {
+		setSelectedEdge(edge);
+		setSelectedLead(null);
+		setHighlightedTransferIds([edge.id]);
+		setCaseFile((current) => ({
+			...current,
+			selectedTransferIds: [...new Set([...current.selectedTransferIds, edge.id])],
+			updatedAt: new Date().toISOString(),
+		}));
+	}, []);
+	const selectLead = useCallback(
+		(lead: InvestigationLead) => {
+			if (!graphData) return;
+			const evidence = graphData.edges.filter((edge) => lead.transferIds.includes(edge.id));
+			const subject = graphData.nodes.find((node) => node.id === lead.subjectAddress) ?? null;
+			setSelectedLead(lead);
+			setSelectedRelationship(evidence);
+			setSelectedEdge(evidence[0] ?? null);
+			setSelectedNode(subject);
+			setHighlightedTransferIds(lead.transferIds);
+			setCaseFile((current) => ({
+				...current,
+				selectedAddressIds: subject
+					? [...new Set([...current.selectedAddressIds, subject.id])]
+					: current.selectedAddressIds,
+				selectedTransferIds: [...new Set([...current.selectedTransferIds, ...lead.transferIds])],
+				updatedAt: new Date().toISOString(),
+			}));
+			if (subject)
+				void lookupAddress(subject.id, network).then((lookup) => {
+					setSummary(lookup.summary ?? null);
+					setLabels(lookup.labels);
+				});
+		},
+		[graphData, network],
+	);
 
 	return (
 		<div className="h-dvh overflow-hidden flex flex-col" style={{ background: 'var(--snow)' }}>
@@ -278,14 +335,15 @@ function Index() {
 						selectedNode={selectedNode}
 						onNodeSelect={handleSelect}
 						onEdgeSelect={(edge) => {
-							setSelectedEdge(edge);
-							if (edge)
-								setCaseFile((current) => ({
-									...current,
-									selectedTransferIds: [...new Set([...current.selectedTransferIds, edge.id])],
-									updatedAt: new Date().toISOString(),
-								}));
+							if (edge) selectTransfer(edge);
+							else setSelectedEdge(null);
 						}}
+						onRelationshipSelect={(edges) => {
+							setSelectedRelationship(edges);
+							if (edges.length > 0) setHighlightedTransferIds(edges.map((edge) => edge.id));
+							else setHighlightedTransferIds([]);
+						}}
+						highlightedTransferIds={highlightedTransferIds}
 						onExpandNode={handleExpand}
 						canExpand={canExpand}
 						expanding={
@@ -343,7 +401,20 @@ function Index() {
 							void load(value);
 						}}
 					/>
-					<TransferInspector edge={selectedEdge} network={network} />
+					<TransferInspector
+						edge={selectedEdge}
+						edges={selectedRelationship}
+						network={network}
+						onSelect={selectTransfer}
+					/>
+					{graphData && (
+						<InvestigationLeads
+							leads={graphData.leads}
+							edges={graphData.edges}
+							selectedLeadId={selectedLead?.id}
+							onSelect={selectLead}
+						/>
+					)}
 					{graphData && (
 						<EvidencePaths nodes={graphData.nodes} edges={graphData.edges} network={network} />
 					)}

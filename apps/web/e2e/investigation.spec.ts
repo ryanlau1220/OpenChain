@@ -35,3 +35,13 @@ test('persists local investigation notes across a reload', async ({ page }) => {
 	await expect(page.getByLabel('Case title')).toHaveValue('E2E investigation');
 	await expect(page.getByLabel('Case notes')).toHaveValue('Verified in Chromium.');
 });
+
+test('provides focused graph filters without leaving the investigation workspace', async ({ page }) => {
+	await page.getByText('Filters', { exact: true }).click();
+	await expect(page.getByLabel('From date')).toBeVisible();
+	await expect(page.getByLabel('To date')).toBeVisible();
+	await expect(page.getByLabel('Transfer direction')).toBeVisible();
+	await expect(page.getByLabel('Asset')).toBeVisible();
+	await expect(page.getByLabel('Minimum amount')).toBeVisible();
+	await expect(page.getByLabel('Transfer type')).toBeVisible();
+});

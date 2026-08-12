@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphEdge } from '../services/api';
-import { aggregateGraphEdges } from './GraphCanvas';
+import { aggregateGraphEdges, filterGraphEdges } from './GraphCanvas';
 
 describe('aggregateGraphEdges', () => {
 	it('combines only transfers with the same direction and asset', () => {
@@ -38,5 +38,38 @@ describe('aggregateGraphEdges', () => {
 		expect(relationships).toHaveLength(2);
 		expect(relationships[0].label).toBe('2 transfers · 2 USDC');
 		expect(relationships[0].representative.id).toBe('2');
+		expect(relationships[0].transfers.map((edge) => edge.id)).toEqual(['1', '2']);
+	});
+
+	it('filters by target direction, asset amount, type, and inclusive date range', () => {
+		const edges = [
+			{
+				id: 'inbound',
+				source: 'from',
+				target: 'seed',
+				amountBaseUnits: '1500000',
+				asset: { kind: 'ERC20', contractAddress: 'usdc', symbol: 'USDC', decimals: 6 },
+				transferKind: 'ERC20',
+				firstTxTimestamp: 1_704_067_200n,
+			},
+			{
+				id: 'outbound',
+				source: 'seed',
+				target: 'to',
+				amountBaseUnits: '2',
+				asset: { kind: 'NATIVE', symbol: 'ETH', decimals: 0 },
+				transferKind: 'NATIVE',
+				firstTxTimestamp: 1_704_153_600n,
+			},
+		] as GraphEdge[];
+		const visible = filterGraphEdges(edges, 'seed', {
+			from: '2024-01-01',
+			to: '2024-01-01',
+			direction: 'inbound',
+			asset: 'ERC20:usdc:6',
+			minimumAmount: '1.5',
+			transferKind: 'ERC20',
+		});
+		expect(visible.map((edge) => edge.id)).toEqual(['inbound']);
 	});
 });

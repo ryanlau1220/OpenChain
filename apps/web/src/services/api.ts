@@ -9,6 +9,7 @@ import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
 	type GraphEdge,
 	type GraphNode,
+	type InvestigationLead,
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
 
@@ -22,7 +23,7 @@ export const lookupClient = createClient(LookupService, transport);
 export const labelClient = createClient(LabelService, transport);
 
 // Re-export generated proto types for consumer convenience
-export type { GraphNode, GraphEdge, AddressLabel, AddressSummary };
+export type { GraphNode, GraphEdge, InvestigationLead, AddressLabel, AddressSummary };
 export { EntityType, LabelVisibility, Network, TraceGraphResponse };
 
 export type SupportedNetwork =
