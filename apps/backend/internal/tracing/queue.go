@@ -124,6 +124,15 @@ func (q *Queue) Stats(ctx context.Context) (Stats, error) {
 	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed}, err
 }
 
+// Capacity is the durable queue limit for this network. It is exposed only to
+// operational health reporting; callers cannot change the queue policy.
+func (q *Queue) Capacity() int {
+	if q == nil {
+		return 0
+	}
+	return q.maxQueued
+}
+
 func (q *Queue) runOnce(ctx context.Context) {
 	if err := q.database.RecoverExpiredTraceJobs(ctx, q.engine.Network()); err != nil {
 		slog.Error("recover trace jobs", "error", err)

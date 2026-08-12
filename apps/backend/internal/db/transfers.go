@@ -145,9 +145,13 @@ func insertAcquisitions(ctx context.Context, tx *sql.Tx, transfers []Transfer, a
 		if acquisition.Provider == "" || acquisition.RequestIdentity == "" || acquisition.RetrievedAt.IsZero() {
 			return nil, fmt.Errorf("invalid acquisition")
 		}
-		hash := sha256.Sum256(acquisition.Response)
+		response := acquisition.Response
+		if response == nil {
+			response = []byte{}
+		}
+		hash := sha256.Sum256(response)
 		var id int64
-		if err := tx.QueryRowContext(ctx, insertAcquisitionSQL, network, acquisition.Provider, acquisition.RequestIdentity, fmt.Sprintf("%x", hash[:]), acquisition.Response, acquisition.RetrievedAt).Scan(&id); err != nil {
+		if err := tx.QueryRowContext(ctx, insertAcquisitionSQL, network, acquisition.Provider, acquisition.RequestIdentity, fmt.Sprintf("%x", hash[:]), response, acquisition.RetrievedAt).Scan(&id); err != nil {
 			return nil, fmt.Errorf("insert acquisition snapshot: %w", err)
 		}
 		ids = append(ids, id)

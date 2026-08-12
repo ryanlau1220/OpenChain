@@ -10,7 +10,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server
 
 FROM alpine:3.21.7
-RUN apk --no-cache add ca-certificates \
+RUN apk --no-cache add ca-certificates wget \
     && addgroup -S openchain \
     && adduser -S -G openchain openchain
 WORKDIR /app
