@@ -9,6 +9,7 @@ dist/
 build/
 bin/
 apps/web/test-results/
+infra/backups/
 
 # Environment variables
 .env
