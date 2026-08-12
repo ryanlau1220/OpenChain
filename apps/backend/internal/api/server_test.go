@@ -46,6 +46,19 @@ func TestPublicRequestLimitUsesConnectResourceExhausted(t *testing.T) {
 	}
 }
 
+func TestTraceStatusPollingDoesNotConsumePublicRequestBudget(t *testing.T) {
+	registry := labels.NewService(nil)
+	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 1, false).Handler())
+	defer server.Close()
+	client := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
+	request := connect.NewRequest(&pb.TraceStatusRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, Limit: 25})
+	for range 3 {
+		if _, err := client.GetTraceStatus(context.Background(), request); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("status polling code = %v", connect.CodeOf(err))
+		}
+	}
+}
+
 func TestHealthAPI(t *testing.T) {
 	handler, _ := setupTestServer()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
@@ -59,6 +72,13 @@ func TestHealthAPI(t *testing.T) {
 		Queue  struct {
 			Enabled bool `json:"enabled"`
 		} `json:"queue"`
+		Networks []struct {
+			Network   string `json:"network"`
+			Providers []struct {
+				MaxConcurrent     int `json:"max_concurrent"`
+				RequestsPerSecond int `json:"requests_per_second"`
+			} `json:"providers"`
+		} `json:"networks"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
@@ -68,6 +88,9 @@ func TestHealthAPI(t *testing.T) {
 	}
 	if body.Queue.Enabled {
 		t.Fatal("test server unexpectedly has a queue")
+	}
+	if len(body.Networks) != 1 || body.Networks[0].Network != "ethereum-mainnet" || len(body.Networks[0].Providers) != 1 || body.Networks[0].Providers[0].MaxConcurrent != 1 || body.Networks[0].Providers[0].RequestsPerSecond != 5 {
+		t.Fatalf("network health = %#v", body.Networks)
 	}
 }
 

@@ -57,6 +57,16 @@ message TraceGraphResponse {
   bool pending = 9;
 }
 
+// TraceStatusRequest only reads the durable job created by TraceGraph or
+// ExpandNode. It never creates work or retries a failed trace.
+message TraceStatusRequest {
+  string address = 1;
+  Network network = 2;
+  TraceDirection direction = 3;
+  uint32 limit = 4;
+  string cursor = 5;
+}
+
 message ExpandNodeRequest {
   string node_address = 1;
   Network network = 2;
@@ -77,6 +87,7 @@ message ExpandNodeResponse {
 
 service TracingService {
   rpc TraceGraph(TraceGraphRequest) returns (TraceGraphResponse);
+  rpc GetTraceStatus(TraceStatusRequest) returns (TraceGraphResponse);
   rpc ExpandNode(ExpandNodeRequest) returns (ExpandNodeResponse);
 }
 enum TraceDirection {

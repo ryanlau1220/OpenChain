@@ -30,11 +30,12 @@ type SolanaAdapter struct {
 	httpClient  *http.Client
 	requestMu   sync.Mutex
 	lastRequest time.Time
+	metrics     *providerMetrics
 }
 
 func NewSolanaAdapter(network, rpcURL string) *SolanaAdapter {
 	historyURL, historyKey := heliusHistoryConfig(rpcURL)
-	return &SolanaAdapter{network: network, rpcURL: rpcURL, historyURL: historyURL, historyKey: historyKey, httpClient: &http.Client{Timeout: 15 * time.Second}}
+	return &SolanaAdapter{network: network, rpcURL: rpcURL, historyURL: historyURL, historyKey: historyKey, httpClient: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(HeliusHistorySource, int(time.Second/solanaRequestGap))}
 }
 
 func heliusHistoryConfig(rpcURL string) (string, string) {
@@ -290,16 +291,20 @@ func (a *SolanaAdapter) historyRequest(ctx context.Context, method, endpoint str
 	}
 	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("Solana history request failed")
+		a.metrics.failure()
+		return NewProviderTransportError(HeliusHistorySource, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Solana history returned %s", response.Status)
+		a.metrics.failure()
+		return NewProviderHTTPError(HeliusHistorySource, response)
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(output); err != nil {
+		a.metrics.failure()
 		return fmt.Errorf("decode Solana history response: %w", err)
 	}
+	a.metrics.success()
 	return nil
 }
 
@@ -401,12 +406,14 @@ func (a *SolanaAdapter) call(ctx context.Context, method string, params []any, o
 	request.Header.Set("Content-Type", "application/json")
 	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("Solana RPC request failed")
+		a.metrics.failure()
+		return NewProviderTransportError(HeliusHistorySource, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Solana RPC returned %s", response.Status)
+		a.metrics.failure()
+		return NewProviderHTTPError(HeliusHistorySource, response)
 	}
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
@@ -417,21 +424,26 @@ func (a *SolanaAdapter) call(ctx context.Context, method string, params []any, o
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
 	if err := decoder.Decode(&envelope); err != nil {
+		a.metrics.failure()
 		return fmt.Errorf("decode Solana RPC response: %w", err)
 	}
 	if envelope.Error != nil {
+		a.metrics.failure()
 		return fmt.Errorf("Solana RPC error %d: %s", envelope.Error.Code, envelope.Error.Message)
 	}
 	if err := json.Unmarshal(envelope.Result, output); err != nil {
+		a.metrics.failure()
 		return fmt.Errorf("decode Solana RPC result: %w", err)
 	}
+	a.metrics.success()
 	return nil
 }
 
 func (a *SolanaAdapter) waitForRequest(ctx context.Context) error {
 	a.requestMu.Lock()
 	defer a.requestMu.Unlock()
-	if delay := time.Until(a.lastRequest.Add(solanaRequestGap)); delay > 0 {
+	delay := time.Until(a.lastRequest.Add(solanaRequestGap))
+	if delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -440,8 +452,13 @@ func (a *SolanaAdapter) waitForRequest(ctx context.Context) error {
 		case <-timer.C:
 		}
 	}
+	a.metrics.request(delay)
 	a.lastRequest = time.Now()
 	return nil
+}
+
+func (a *SolanaAdapter) ProviderHealth() []ProviderHealth {
+	return []ProviderHealth{a.metrics.snapshot()}
 }
 
 func decodeSolanaCursor(cursor string) (solanaCursor, error) {

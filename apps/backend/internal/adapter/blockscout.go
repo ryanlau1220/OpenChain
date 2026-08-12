@@ -30,10 +30,11 @@ type BlockscoutChainAdapter struct {
 	httpClient  *http.Client
 	requestMu   sync.Mutex
 	lastRequest time.Time
+	metrics     *providerMetrics
 }
 
 func NewBlockscoutChainAdapter(network, apiURL, apiKey string, evmClient *EVMClient) *BlockscoutChainAdapter {
-	return &BlockscoutChainAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), apiKey: apiKey, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}}
+	return &BlockscoutChainAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), apiKey: apiKey, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(BlockscoutSource, int(time.Second/blockscoutRequestGap))}
 }
 
 func (a *BlockscoutChainAdapter) Network() string { return a.network }
@@ -310,7 +311,8 @@ func (a *BlockscoutChainAdapter) SourceStatus() SourceStatus {
 func (a *BlockscoutChainAdapter) get(ctx context.Context, path string, query url.Values, output any) error {
 	a.requestMu.Lock()
 	defer a.requestMu.Unlock()
-	if delay := time.Until(a.lastRequest.Add(blockscoutRequestGap)); delay > 0 {
+	delay := time.Until(a.lastRequest.Add(blockscoutRequestGap))
+	if delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -319,6 +321,7 @@ func (a *BlockscoutChainAdapter) get(ctx context.Context, path string, query url
 		case <-timer.C:
 		}
 	}
+	a.metrics.request(delay)
 	a.lastRequest = time.Now()
 	requestURL, err := url.Parse(a.apiURL + path)
 	if err != nil {
@@ -332,18 +335,30 @@ func (a *BlockscoutChainAdapter) get(ctx context.Context, path string, query url
 	request.Header.Set("Authorization", "Bearer "+a.apiKey)
 	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("Blockscout request failed")
+		a.metrics.failure()
+		return NewProviderTransportError(BlockscoutSource, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Blockscout returned %s", response.Status)
+		a.metrics.failure()
+		return NewProviderHTTPError(BlockscoutSource, response)
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
 	if err := decoder.Decode(output); err != nil {
+		a.metrics.failure()
 		return fmt.Errorf("decode Blockscout response: %w", err)
 	}
+	a.metrics.success()
 	return nil
+}
+
+func (a *BlockscoutChainAdapter) ProviderHealth() []ProviderHealth {
+	health := []ProviderHealth{a.metrics.snapshot()}
+	if a.evmClient != nil {
+		health = append(health, a.evmClient.ProviderHealth())
+	}
+	return health
 }
 
 var _ ChainAdapter = (*BlockscoutChainAdapter)(nil)

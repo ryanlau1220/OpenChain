@@ -9,16 +9,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 )
 
 const (
-	traceWorkerPollInterval = time.Second
-	traceJobTimeout         = time.Minute
-	traceJobLease           = 2 * time.Minute
+	traceWorkerPollInterval  = time.Second
+	traceJobTimeout          = time.Minute
+	traceJobLease            = 2 * time.Minute
+	traceProviderMaxAttempts = 3
 )
 
 var ErrQueueFull = db.ErrTraceQueueFull
+var ErrTraceNotFound = db.ErrTraceJobNotFound
 
 type Queue struct {
 	engine    *Engine
@@ -35,6 +38,8 @@ func NewQueue(engine *Engine, database *db.DB, maxQueued int) *Queue {
 func (q *Queue) Start(ctx context.Context) {
 	q.start.Do(func() {
 		q.done = make(chan struct{})
+		// One worker per network is intentional: each adapter also permits one
+		// in-flight provider request, keeping unknown provider plans within quota.
 		go func() {
 			defer close(q.done)
 			if q.database == nil {
@@ -69,6 +74,23 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 	if err != nil {
 		return nil, fmt.Errorf("queue trace job: %w", err)
 	}
+	return q.resultForJob(address, job)
+}
+
+// TraceStatus reads an existing durable job. It is deliberately separate from
+// TraceGraph so client polling cannot create queue work or consume work budget.
+func (q *Queue) TraceStatus(ctx context.Context, address string, direction Direction, limit uint32, cursor string) (*GraphResult, error) {
+	if q.database == nil {
+		return nil, ErrTraceNotFound
+	}
+	job, err := q.database.TraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit})
+	if err != nil {
+		return nil, fmt.Errorf("get trace job: %w", err)
+	}
+	return q.resultForJob(address, job)
+}
+
+func (q *Queue) resultForJob(address string, job *db.TraceJob) (*GraphResult, error) {
 	switch job.Status {
 	case "succeeded":
 		var result GraphResult
@@ -117,7 +139,7 @@ func (q *Queue) runOnce(ctx context.Context) {
 	}
 
 	jobContext, cancel := context.WithTimeout(ctx, traceJobTimeout)
-	result, err := q.engine.ResolveGraph(jobContext, job.Query.Address, Direction(job.Query.Direction), job.Query.Limit, job.Query.Cursor)
+	result, err := q.resolveWithRetry(jobContext, job)
 	interrupted := errors.Is(jobContext.Err(), context.Canceled)
 	cancel()
 	if err != nil {
@@ -129,7 +151,7 @@ func (q *Queue) runOnce(ctx context.Context) {
 			}
 			return
 		}
-		slog.Warn("trace job failed", "job_id", job.ID, "error", err)
+		slog.Warn("trace_job_failed", "job_id", job.ID, "network", job.Query.Network, "error", err)
 		message := "Trace retrieval failed: " + err.Error()
 		if len(message) > 500 {
 			message = message[:500]
@@ -147,5 +169,29 @@ func (q *Queue) runOnce(ctx context.Context) {
 	}
 	if err := q.database.CompleteTraceJob(ctx, job.ID, encoded); err != nil {
 		slog.Error("complete trace job", "job_id", job.ID, "error", err)
+		return
 	}
+	slog.Info("trace_job_completed", "job_id", job.ID, "network", job.Query.Network, "nodes", result.TotalNodes, "edges", result.TotalEdges)
+}
+
+func (q *Queue) resolveWithRetry(ctx context.Context, job *db.TraceJob) (*GraphResult, error) {
+	for attempt := 1; attempt <= traceProviderMaxAttempts; attempt++ {
+		result, err := q.engine.ResolveGraph(ctx, job.Query.Address, Direction(job.Query.Direction), job.Query.Limit, job.Query.Cursor)
+		if err == nil {
+			return result, nil
+		}
+		delay, retry := adapter.RetryDelay(err, attempt)
+		if !retry || attempt == traceProviderMaxAttempts {
+			return nil, err
+		}
+		slog.Warn("trace_provider_retry", "job_id", job.ID, "network", job.Query.Network, "attempt", attempt, "delay", delay, "error", err)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, errors.New("trace provider retry attempts exhausted")
 }

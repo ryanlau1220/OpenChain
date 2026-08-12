@@ -146,6 +146,14 @@ export async function fetchTraceGraph(
 	return tracingClient.traceGraph({ seedAddress, network, limit: 25, retry });
 }
 
+export async function fetchTraceStatus(
+	address: string,
+	network: SupportedNetwork,
+	cursor = '',
+): Promise<TraceGraphResponse> {
+	return tracingClient.getTraceStatus({ address, network, limit: 25, cursor });
+}
+
 export async function lookupAddress(address: string, network: SupportedNetwork) {
 	const [lookupRes, labelsRes] = await Promise.allSettled([
 		lookupClient.lookupAddress({

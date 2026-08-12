@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { ExpandNodeRequest, ExpandNodeResponse, TraceGraphRequest, TraceGraphResponse } from "./tracing_pb.js";
+import { ExpandNodeRequest, ExpandNodeResponse, TraceGraphRequest, TraceGraphResponse, TraceStatusRequest } from "./tracing_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -18,6 +18,15 @@ export const TracingService = {
     traceGraph: {
       name: "TraceGraph",
       I: TraceGraphRequest,
+      O: TraceGraphResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc openchain.v1.TracingService.GetTraceStatus
+     */
+    getTraceStatus: {
+      name: "GetTraceStatus",
+      I: TraceStatusRequest,
       O: TraceGraphResponse,
       kind: MethodKind.Unary,
     },

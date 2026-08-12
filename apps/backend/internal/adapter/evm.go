@@ -20,6 +20,7 @@ type EVMClient struct {
 	httpClient  *http.Client
 	requestMu   sync.Mutex
 	lastRequest time.Time
+	metrics     *providerMetrics
 }
 
 func NewEVMClient(rpcURL string) *EVMClient {
@@ -28,6 +29,7 @@ func NewEVMClient(rpcURL string) *EVMClient {
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		metrics: newProviderMetrics("evm-rpc", int(time.Second/rpcRequestGap)),
 	}
 }
 
@@ -77,37 +79,44 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		c.metrics.failure()
+		return nil, NewProviderTransportError("evm-rpc", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("rpc returned %s", resp.Status)
+		c.metrics.failure()
+		return nil, NewProviderHTTPError("evm-rpc", resp)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
+		c.metrics.failure()
 		return nil, err
 	}
 
 	var rpcResp RPCResponse
 	if err := json.Unmarshal(body, &rpcResp); err != nil {
+		c.metrics.failure()
 		return nil, fmt.Errorf("rpc parse error: %w, raw: %s", err, string(body))
 	}
 
 	if rpcResp.Error != nil {
+		c.metrics.failure()
 		return nil, fmt.Errorf("rpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
 	}
 
+	c.metrics.success()
 	return rpcResp.Result, nil
 }
 
 func (c *EVMClient) waitForRequest(ctx context.Context) error {
 	c.requestMu.Lock()
 	defer c.requestMu.Unlock()
-	if delay := time.Until(c.lastRequest.Add(rpcRequestGap)); delay > 0 {
+	delay := time.Until(c.lastRequest.Add(rpcRequestGap))
+	if delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -116,10 +125,13 @@ func (c *EVMClient) waitForRequest(ctx context.Context) error {
 		case <-timer.C:
 		}
 	}
+	c.metrics.request(delay)
 	// ponytail: one shared RPC budget; split by configured network only when multi-network support exists.
 	c.lastRequest = time.Now()
 	return nil
 }
+
+func (c *EVMClient) ProviderHealth() ProviderHealth { return c.metrics.snapshot() }
 
 func (c *EVMClient) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
 	raw, err := c.callRPC(ctx, "eth_blockNumber", []interface{}{})

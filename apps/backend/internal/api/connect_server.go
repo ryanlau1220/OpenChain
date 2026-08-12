@@ -52,6 +52,26 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
 }
 
+func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect.Request[pb.TraceStatusRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
+	runtime, err := h.server.network(req.Msg.GetNetwork())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	address, err := runtime.Chain.NormalizeAddress(req.Msg.GetAddress())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	result, err := h.server.traceStatus(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor())
+	if err != nil {
+		if errors.Is(err, tracing.ErrTraceNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, errors.New("trace job was not found"))
+		}
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	nodes, edges := toGraphProto(result)
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
+}
+
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
 	runtime, err := h.server.network(req.Msg.GetNetwork())
 	if err != nil {
@@ -240,7 +260,7 @@ func (s *Server) RegisterConnectRPC(mux *http.ServeMux) {
 	mount := func(path string, handler http.Handler) { mux.Handle(path, withLogging(handler.ServeHTTP)) }
 	options := []connect.HandlerOption{connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
-			if !s.requestLimiter.Allow(clientKey(ctx)) {
+			if rateLimitProcedure(request.Spec().Procedure) && !s.requestLimiter.Allow(clientKey(ctx)) {
 				err := connect.NewError(connect.CodeResourceExhausted, errors.New("request limit reached; try again in one minute"))
 				err.Meta().Set("Retry-After", "60")
 				return nil, err
@@ -254,4 +274,16 @@ func (s *Server) RegisterConnectRPC(mux *http.ServeMux) {
 	mount(path, handler)
 	path, handler = openchainv1connect.NewLabelServiceHandler(&connectLabelHandler{server: s}, options...)
 	mount(path, handler)
+}
+
+func rateLimitProcedure(procedure string) bool {
+	switch procedure {
+	case openchainv1connect.TracingServiceTraceGraphProcedure,
+		openchainv1connect.TracingServiceExpandNodeProcedure,
+		openchainv1connect.LookupServiceLookupAddressProcedure,
+		openchainv1connect.LookupServiceLookupTransactionProcedure:
+		return true
+	default:
+		return false
+	}
 }

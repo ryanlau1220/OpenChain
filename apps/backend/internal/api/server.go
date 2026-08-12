@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -73,6 +74,17 @@ func (s *Server) traceGraph(ctx context.Context, network pb.Network, address str
 	return runtime.Engine.ResolveGraph(ctx, address, direction, limit, cursor)
 }
 
+func (s *Server) traceStatus(ctx context.Context, network pb.Network, address string, direction tracing.Direction, limit uint32, cursor string) (*tracing.GraphResult, error) {
+	runtime, err := s.network(network)
+	if err != nil {
+		return nil, err
+	}
+	if runtime.Queue != nil {
+		return runtime.Queue.TraceStatus(ctx, address, direction, limit, cursor)
+	}
+	return nil, tracing.ErrTraceNotFound
+}
+
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	s.RegisterConnectRPC(mux)
 	mux.HandleFunc("/api/v1/health", withLogging(s.handleHealth))
@@ -103,10 +115,17 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	queue := tracing.Stats{}
-	networks := make([]string, 0, len(s.networks))
+	type networkHealth struct {
+		Network   string                   `json:"network"`
+		Queue     tracing.Stats            `json:"queue"`
+		Providers []adapter.ProviderHealth `json:"providers"`
+	}
+	type providerHealthReporter interface {
+		ProviderHealth() []adapter.ProviderHealth
+	}
+	networks := make([]networkHealth, 0, len(s.networks))
 	var err error
-	for network, runtime := range s.networks {
-		networks = append(networks, network.String())
+	for _, runtime := range s.networks {
 		stats, statsErr := runtime.Queue.Stats(r.Context())
 		if statsErr != nil && err == nil {
 			err = statsErr
@@ -115,7 +134,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		queue.Queued += stats.Queued
 		queue.Running += stats.Running
 		queue.Failed += stats.Failed
+		item := networkHealth{Network: runtime.Engine.Network(), Queue: stats}
+		if reporter, ok := runtime.Chain.(providerHealthReporter); ok {
+			item.Providers = reporter.ProviderHealth()
+		}
+		networks = append(networks, item)
 	}
+	sort.Slice(networks, func(left, right int) bool { return networks[left].Network < networks[right].Network })
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		slog.Error("health queue stats", "error", err)
@@ -126,10 +151,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		status = "unhealthy"
 	}
 	_ = json.NewEncoder(w).Encode(struct {
-		Status   string        `json:"status"`
-		Service  string        `json:"service"`
-		Networks []string      `json:"networks"`
-		Queue    tracing.Stats `json:"queue"`
+		Status   string          `json:"status"`
+		Service  string          `json:"service"`
+		Networks []networkHealth `json:"networks"`
+		Queue    tracing.Stats   `json:"queue"`
 	}{Status: status, Service: "openchain-api", Networks: networks, Queue: queue})
 }
 

@@ -120,9 +120,16 @@ func TestTraceJobIntegration(t *testing.T) {
 	if other != nil {
 		t.Fatalf("claimed a job from another network: %#v", other)
 	}
+	otherNetwork, err := database.ClaimTraceJob(ctx, baseQuery.Network, time.Minute)
+	if err != nil || otherNetwork == nil || otherNetwork.ID == queued.ID {
+		t.Fatalf("concurrent per-network claim = %#v, err = %v", otherNetwork, err)
+	}
 
 	result := []byte(`{"seed_address":"trace-job-test-address","nodes":[],"edges":[]}`)
 	if err := database.CompleteTraceJob(ctx, claimed.ID, result); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CompleteTraceJob(ctx, otherNetwork.ID, result); err != nil {
 		t.Fatal(err)
 	}
 	completed, err := database.EnqueueTraceJob(ctx, query, false, 2)
@@ -132,6 +139,10 @@ func TestTraceJobIntegration(t *testing.T) {
 	var completedResult map[string]any
 	if err := json.Unmarshal(completed.Result, &completedResult); err != nil || completed.Status != "succeeded" || completedResult["seed_address"] != query.Address {
 		t.Fatalf("completed job = %#v", completed)
+	}
+	stored, err := database.TraceJob(ctx, query)
+	if err != nil || stored.ID != completed.ID || stored.Status != "succeeded" {
+		t.Fatalf("stored job = %#v, err = %v", stored, err)
 	}
 	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', result_json = NULL WHERE id = $1`, completed.ID); err != nil {
 		t.Fatal(err)

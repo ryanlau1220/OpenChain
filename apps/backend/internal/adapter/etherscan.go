@@ -31,10 +31,11 @@ type EVMChainAdapter struct {
 
 	requestMu   sync.Mutex
 	lastRequest time.Time
+	metrics     *providerMetrics
 }
 
 func NewEVMChainAdapter(network, chainID, apiURL, apiKey string, evmClient *EVMClient) *EVMChainAdapter {
-	return &EVMChainAdapter{network: network, chainID: chainID, apiURL: apiURL, apiKey: apiKey, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}}
+	return &EVMChainAdapter{network: network, chainID: chainID, apiURL: apiURL, apiKey: apiKey, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(EtherscanSource, int(time.Second/etherscanRequestGap))}
 }
 
 func (a *EVMChainAdapter) Network() string { return a.network }
@@ -169,6 +170,10 @@ func (a *EVMChainAdapter) listTransferSource(ctx context.Context, query url.Valu
 		return nil, false, err
 	}
 	if response.Status != "1" && !strings.EqualFold(response.Message, "No transactions found") {
+		if strings.Contains(strings.ToLower(response.Message), "rate limit") {
+			a.metrics.failure()
+			return nil, false, NewProviderRateLimitError(EtherscanSource)
+		}
 		return nil, false, fmt.Errorf("Etherscan transfer history: %s", response.Message)
 	}
 	var items []etherscanTxResult
@@ -384,7 +389,8 @@ func (a *EVMChainAdapter) SourceStatus() SourceStatus {
 func (a *EVMChainAdapter) get(ctx context.Context, query url.Values, output *etherscanResponse) error {
 	a.requestMu.Lock()
 	defer a.requestMu.Unlock()
-	if delay := time.Until(a.lastRequest.Add(etherscanRequestGap)); delay > 0 {
+	delay := time.Until(a.lastRequest.Add(etherscanRequestGap))
+	if delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -393,6 +399,7 @@ func (a *EVMChainAdapter) get(ctx context.Context, query url.Values, output *eth
 		case <-timer.C:
 		}
 	}
+	a.metrics.request(delay)
 	a.lastRequest = time.Now()
 	query.Set("apikey", a.apiKey)
 	requestURL, err := url.Parse(a.apiURL)
@@ -406,16 +413,28 @@ func (a *EVMChainAdapter) get(ctx context.Context, query url.Values, output *eth
 	}
 	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("Etherscan request failed")
+		a.metrics.failure()
+		return NewProviderTransportError(EtherscanSource, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Etherscan returned %s", response.Status)
+		a.metrics.failure()
+		return NewProviderHTTPError(EtherscanSource, response)
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
 	if err := decoder.Decode(output); err != nil {
+		a.metrics.failure()
 		return fmt.Errorf("decode Etherscan response: %w", err)
 	}
+	a.metrics.success()
 	return nil
+}
+
+func (a *EVMChainAdapter) ProviderHealth() []ProviderHealth {
+	health := []ProviderHealth{a.metrics.snapshot()}
+	if a.evmClient != nil {
+		health = append(health, a.evmClient.ProviderHealth())
+	}
+	return health
 }

@@ -399,6 +399,70 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
 }
 
 /**
+ * TraceStatusRequest only reads the durable job created by TraceGraph or
+ * ExpandNode. It never creates work or retries a failed trace.
+ *
+ * @generated from message openchain.v1.TraceStatusRequest
+ */
+export class TraceStatusRequest extends Message<TraceStatusRequest> {
+  /**
+   * @generated from field: string address = 1;
+   */
+  address = "";
+
+  /**
+   * @generated from field: openchain.v1.Network network = 2;
+   */
+  network = Network.UNSPECIFIED;
+
+  /**
+   * @generated from field: openchain.v1.TraceDirection direction = 3;
+   */
+  direction = TraceDirection.UNSPECIFIED;
+
+  /**
+   * @generated from field: uint32 limit = 4;
+   */
+  limit = 0;
+
+  /**
+   * @generated from field: string cursor = 5;
+   */
+  cursor = "";
+
+  constructor(data?: PartialMessage<TraceStatusRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.TraceStatusRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "network", kind: "enum", T: proto3.getEnumType(Network) },
+    { no: 3, name: "direction", kind: "enum", T: proto3.getEnumType(TraceDirection) },
+    { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceStatusRequest {
+    return new TraceStatusRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): TraceStatusRequest {
+    return new TraceStatusRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): TraceStatusRequest {
+    return new TraceStatusRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: TraceStatusRequest | PlainMessage<TraceStatusRequest> | undefined, b: TraceStatusRequest | PlainMessage<TraceStatusRequest> | undefined): boolean {
+    return proto3.util.equals(TraceStatusRequest, a, b);
+  }
+}
+
+/**
  * @generated from message openchain.v1.ExpandNodeRequest
  */
 export class ExpandNodeRequest extends Message<ExpandNodeRequest> {

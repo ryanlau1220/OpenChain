@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -18,6 +19,22 @@ func TestRequestLimiterExpiresClientWindow(t *testing.T) {
 	if !limiter.Allow("198.51.100.1") {
 		t.Fatal("request budget did not reset")
 	}
+}
+
+func TestRequestLimiterKeepsConcurrentClientBudgetsSeparate(t *testing.T) {
+	limiter := NewRequestLimiter(2)
+	clients := []string{"198.51.100.1", "198.51.100.2", "198.51.100.3"}
+	var wait sync.WaitGroup
+	for _, client := range clients {
+		wait.Add(1)
+		go func(client string) {
+			defer wait.Done()
+			if !limiter.Allow(client) || !limiter.Allow(client) || limiter.Allow(client) {
+				t.Errorf("budget was not isolated for %s", client)
+			}
+		}(client)
+	}
+	wait.Wait()
 }
 
 func TestClientKeyTrustsForwardedAddressOnlyWhenConfigured(t *testing.T) {

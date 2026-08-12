@@ -11,7 +11,10 @@ import (
 
 const traceResultCacheTTL = 5 * time.Minute
 
-var ErrTraceQueueFull = errors.New("trace queue is full")
+var (
+	ErrTraceQueueFull   = errors.New("trace queue is full")
+	ErrTraceJobNotFound = errors.New("trace job not found")
+)
 
 type TraceJobQuery struct {
 	Network, Address, Direction, Cursor string
@@ -77,6 +80,17 @@ RETURNING id, network, address, direction, cursor, page_size, status, result_jso
 		return nil, err
 	}
 	return job, nil
+}
+
+func (d *DB) TraceJob(ctx context.Context, query TraceJobQuery) (*TraceJob, error) {
+	const statement = `SELECT id, network, address, direction, cursor, page_size, status, result_json, COALESCE(error_message, '')
+FROM trace_jobs
+WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_size = $5`
+	job, err := scanTraceJob(d.SQL.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrTraceJobNotFound
+	}
+	return job, err
 }
 
 type TraceJobStats struct {

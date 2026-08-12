@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS public.trace_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS trace_jobs_queued_idx ON public.trace_jobs (created_at) WHERE status = 'queued';
-CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_one_running_idx ON public.trace_jobs (status) WHERE status = 'running';
+DROP INDEX IF EXISTS public.trace_jobs_one_running_idx;
+CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_one_running_per_network_idx ON public.trace_jobs (network) WHERE status = 'running';
 
 CREATE TABLE IF NOT EXISTS public.curated_labels (
   id TEXT PRIMARY KEY,

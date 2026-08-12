@@ -124,6 +124,10 @@ func TestEtherscanLimitsProviderCalls(t *testing.T) {
 	if second.Sub(first) < etherscanRequestGap-20*time.Millisecond {
 		t.Fatalf("provider calls were only %s apart", second.Sub(first))
 	}
+	health := client.ProviderHealth()[0]
+	if health.MaxConcurrent != 1 || health.RequestsPerSecond != 5 || health.Requests < 6 || health.Throttled == 0 {
+		t.Fatalf("provider health = %#v", health)
+	}
 }
 
 func TestEtherscanTransportErrorDoesNotExposeAPIKey(t *testing.T) {

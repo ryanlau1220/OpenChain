@@ -30,10 +30,11 @@ type TronAdapter struct {
 	httpClient  *http.Client
 	requestMu   sync.Mutex
 	lastRequest time.Time
+	metrics     *providerMetrics
 }
 
 func NewTronAdapter(network, apiURL, apiKey string) *TronAdapter {
-	return &TronAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), apiKey: apiKey, httpClient: &http.Client{Timeout: 15 * time.Second}}
+	return &TronAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), apiKey: apiKey, httpClient: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(TronGridSource, int(time.Second/tronGridRequestGap))}
 }
 
 func (a *TronAdapter) Network() string { return a.network }
@@ -415,7 +416,8 @@ func (a *TronAdapter) post(ctx context.Context, path string, payload any, output
 func (a *TronAdapter) do(ctx context.Context, request *http.Request, output any) error {
 	a.requestMu.Lock()
 	defer a.requestMu.Unlock()
-	if delay := time.Until(a.lastRequest.Add(tronGridRequestGap)); delay > 0 {
+	delay := time.Until(a.lastRequest.Add(tronGridRequestGap))
+	if delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -424,24 +426,33 @@ func (a *TronAdapter) do(ctx context.Context, request *http.Request, output any)
 		case <-timer.C:
 		}
 	}
+	a.metrics.request(delay)
 	a.lastRequest = time.Now()
 	request = request.WithContext(ctx)
 	request.Header.Set("TRON-PRO-API-KEY", a.apiKey)
 	response, err := a.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("TronGrid request failed")
+		a.metrics.failure()
+		return NewProviderTransportError(TronGridSource, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("TronGrid returned %s", response.Status)
+		a.metrics.failure()
+		return NewProviderHTTPError(TronGridSource, response)
 	}
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
 	decoder.UseNumber()
 	if err := decoder.Decode(output); err != nil {
+		a.metrics.failure()
 		return fmt.Errorf("decode TronGrid response: %w", err)
 	}
+	a.metrics.success()
 	return nil
+}
+
+func (a *TronAdapter) ProviderHealth() []ProviderHealth {
+	return []ProviderHealth{a.metrics.snapshot()}
 }
 
 func tronAddressFromHex(value string) (string, error) {

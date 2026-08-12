@@ -16,6 +16,7 @@ import {
 	TraceGraphResponse,
 	expandNode,
 	fetchTraceGraph,
+	fetchTraceStatus,
 	lookupAddress,
 	networkDetails,
 	networkFromSlug,
@@ -79,7 +80,9 @@ function Index() {
 				setPendingExpansion(null);
 			}
 			try {
-				const graph = await fetchTraceGraph(target, targetNetwork, !preserveCurrentGraph);
+				const graph = preserveCurrentGraph
+					? await fetchTraceStatus(target, targetNetwork)
+					: await fetchTraceGraph(target, targetNetwork, false);
 				if (investigation !== investigationRef.current) return;
 				setErrorMessage('');
 				setGraphData(graph);
@@ -187,7 +190,15 @@ function Index() {
 			const investigation = investigationRef.current;
 			setExpandingAddress(key);
 			try {
-				const expanded = await expandNode(nodeAddress, network, page?.cursor, retry);
+				const expanded = retry
+					? await expandNode(nodeAddress, network, page?.cursor, false)
+					: await fetchTraceStatus(nodeAddress, network, page?.cursor).then((status) => ({
+						newNodes: status.nodes,
+						newEdges: status.edges,
+						nextCursor: status.nextCursor,
+						hasMore: status.hasMore,
+						pending: status.pending,
+					}));
 				if (investigation !== investigationRef.current) return;
 				if (expanded.pending) {
 					setPendingExpansion(key);
@@ -233,7 +244,7 @@ function Index() {
 
 	useEffect(() => {
 		if (!pendingExpansion) return;
-		const timer = window.setTimeout(() => void handleExpand(pendingExpansion, false), 2000);
+		const timer = window.setTimeout(() => void handleExpand(pendingExpansion, false), tracePollInterval);
 		return () => window.clearTimeout(timer);
 	}, [handleExpand, pendingExpansion]);
 

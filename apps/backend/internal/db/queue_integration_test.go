@@ -82,7 +82,7 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		result, err := queue.TraceGraph(ctx, from, tracing.DirectionBoth, 1, "", false)
+		result, err := queue.TraceStatus(ctx, from, tracing.DirectionBoth, 1, "")
 		if err != nil {
 			t.Fatal(err)
 		}
