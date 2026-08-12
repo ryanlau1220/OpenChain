@@ -98,7 +98,7 @@ function Index() {
 			try {
 				const graph = preserveCurrentGraph
 					? await fetchTraceStatus(target, targetNetwork)
-					: await fetchTraceGraph(target, targetNetwork, false);
+					: await fetchTraceGraph(target, targetNetwork, true);
 				if (investigation !== investigationRef.current) return;
 				setErrorMessage('');
 				setGraphData(graph);
@@ -214,7 +214,7 @@ function Index() {
 			setExpandingAddress(key);
 			try {
 				const expanded = retry
-					? await expandNode(nodeAddress, network, page?.cursor, false)
+					? await expandNode(nodeAddress, network, page?.cursor, true)
 					: await fetchTraceStatus(nodeAddress, network, page?.cursor).then((status) => ({
 							newNodes: status.nodes,
 							newEdges: status.edges,
@@ -372,6 +372,8 @@ function Index() {
 					<GraphCanvas
 						key={`${network}:${graphData?.seedAddress ?? 'empty'}`}
 						graphData={graphData}
+						loading={loading}
+						emptyMessage={`Search a ${networkDetails(network).name} address to start an investigation.`}
 						selectedNode={selectedNode}
 						onNodeSelect={handleSelect}
 						onEdgeSelect={(edge) => {
@@ -391,14 +393,6 @@ function Index() {
 							pendingExpansion === activeAddress.toLowerCase()
 						}
 					/>
-					{!graphData && !loading && (
-						<div
-							className="absolute inset-0 grid place-items-center pointer-events-none text-sm"
-							style={{ color: 'var(--ink-3)' }}
-						>
-							Search a {networkDetails(network).name} address to start an investigation.
-						</div>
-					)}
 					{(errorMessage || graphData?.sourceStatus?.warning) && (
 						<div className="absolute bottom-5 right-5 z-10 max-w-md space-y-2 text-xs pointer-events-none">
 							{errorMessage && (
