@@ -92,7 +92,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
 	registry := labels.NewService(database)
 	engine := tracing.NewEngine(chain, database, registry)
-	queue := tracing.NewQueue(engine, database, 2)
+	queue := tracing.NewQueue(engine, database, 2, 1)
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)
 	defer func() {
@@ -101,7 +101,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	}()
 	server := httptest.NewServer(api.NewServer(map[pb.Network]api.NetworkRuntime{
 		pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine, Queue: queue},
-	}, registry, "http://localhost:3000", 100, false).Handler())
+	}, registry, "http://localhost:3000", 100, false, "test-key").Handler())
 	defer server.Close()
 	tracingClient := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
 	evidenceClient := openchainv1connect.NewEvidenceServiceClient(server.Client(), server.URL)

@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS public.trace_jobs (
   direction TEXT NOT NULL,
   cursor TEXT NOT NULL,
   page_size INTEGER NOT NULL,
+  client_key TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
   result_json JSONB,
   error_message TEXT,
@@ -124,7 +125,10 @@ CREATE TABLE IF NOT EXISTS public.trace_jobs (
   UNIQUE (network, address, direction, cursor, page_size)
 );
 
+ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS client_key TEXT NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS trace_jobs_queued_idx ON public.trace_jobs (created_at) WHERE status = 'queued';
+CREATE INDEX IF NOT EXISTS trace_jobs_client_queued_idx ON public.trace_jobs (client_key) WHERE status = 'queued';
 DROP INDEX IF EXISTS public.trace_jobs_one_running_idx;
 CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_one_running_per_network_idx ON public.trace_jobs (network) WHERE status = 'running';
 

@@ -47,6 +47,9 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 		if errors.Is(err, tracing.ErrQueueFull) {
 			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
 		}
+		if errors.Is(err, tracing.ErrClientQueueFull) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("your trace queue is full; wait for a queued trace to start"))
+		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
@@ -90,6 +93,9 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 		if errors.Is(err, tracing.ErrQueueFull) {
 			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
 		}
+		if errors.Is(err, tracing.ErrClientQueueFull) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("your trace queue is full; wait for a queued trace to start"))
+		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
@@ -107,7 +113,7 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
-		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp, Provisional: edge.Provisional})
+		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, BlockHash: edge.BlockHash, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp, Provisional: edge.Provisional})
 	}
 	return nodes, edges
 }

@@ -113,16 +113,16 @@ func TestTraceJobIntegration(t *testing.T) {
 	}()
 	query := TraceJobQuery{Network: "test", Address: "trace-job-test-address", Direction: "both", Limit: 1}
 
-	queued, err := database.EnqueueTraceJob(ctx, query, false, 2)
+	queued, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	baseQuery := query
 	baseQuery.Network = "base-mainnet"
-	if _, err := database.EnqueueTraceJob(ctx, baseQuery, false, 2); err != nil {
+	if _, err := database.EnqueueTraceJob(ctx, baseQuery, false, 2, 2); err != nil {
 		t.Fatal(err)
 	}
-	duplicate, err := database.EnqueueTraceJob(ctx, query, false, 2)
+	duplicate, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestTraceJobIntegration(t *testing.T) {
 	if err := database.CompleteTraceJob(ctx, otherNetwork.ID, result); err != nil {
 		t.Fatal(err)
 	}
-	completed, err := database.EnqueueTraceJob(ctx, query, false, 2)
+	completed, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,21 +178,21 @@ func TestTraceJobIntegration(t *testing.T) {
 	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', result_json = NULL WHERE id = $1`, completed.ID); err != nil {
 		t.Fatal(err)
 	}
-	failed, err := database.EnqueueTraceJob(ctx, query, false, 2)
+	failed, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if failed.Status != "failed" {
 		t.Fatalf("polling a failed job requeued it: %#v", failed)
 	}
-	retried, err := database.EnqueueTraceJob(ctx, query, true, 2)
+	retried, err := database.EnqueueTraceJob(ctx, query, true, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retried.Status != "queued" {
 		t.Fatalf("explicit retry = %#v", retried)
 	}
-	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "test", Address: "other-trace-job", Direction: "both", Limit: 1}, false, 1); !errors.Is(err, ErrTraceQueueFull) {
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "test", Address: "other-trace-job", Direction: "both", Limit: 1}, false, 1, 2); !errors.Is(err, ErrTraceQueueFull) {
 		t.Fatalf("queue capacity error = %v", err)
 	}
 }
@@ -242,7 +242,7 @@ func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			<-start
-			job, err := database.EnqueueTraceJob(ctx, query, false, callers)
+			job, err := database.EnqueueTraceJob(ctx, query, false, callers, callers)
 			if err != nil {
 				errs <- err
 				return
@@ -284,7 +284,7 @@ func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
 		go func(address string) {
 			defer workers.Done()
 			<-start
-			_, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: query.Network, Address: address, Direction: query.Direction, Limit: query.Limit}, false, 1)
+			_, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: query.Network, Address: address, Direction: query.Direction, Limit: query.Limit}, false, 1, 2)
 			errs <- err
 		}(address)
 	}
@@ -303,6 +303,20 @@ func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
 	}
 	if accepted != 1 || rejected != 1 {
 		t.Fatalf("queue capacity accepted=%d rejected=%d", accepted, rejected)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM trace_jobs`); err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range []string{"client-capacity-a", "client-capacity-b"} {
+		if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: query.Network, Address: address, Direction: query.Direction, Limit: query.Limit, ClientKey: "client-a"}, false, callers, 2); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: query.Network, Address: "client-capacity-c", Direction: query.Direction, Limit: query.Limit, ClientKey: "client-a"}, false, callers, 2); !errors.Is(err, ErrTraceClientQueueFull) {
+		t.Fatalf("client queue capacity error = %v", err)
+	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: query.Network, Address: "client-capacity-c", Direction: query.Direction, Limit: query.Limit, ClientKey: "client-b"}, false, callers, 2); err != nil {
+		t.Fatalf("separate client queue budget = %v", err)
 	}
 }
 

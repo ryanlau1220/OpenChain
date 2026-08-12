@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ const testAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
 
 func setupTestServer() (http.Handler, *Server) {
 	registry := labels.NewService(nil)
-	server := NewServer(testNetworks(registry), registry, "http://localhost:3000", 30, false)
+	server := NewServer(testNetworks(registry), registry, "http://localhost:3000", 30, false, "test-key")
 	return server.Handler(), server
 }
 
@@ -35,7 +36,7 @@ func testNetworks(registry *labels.Service) map[pb.Network]NetworkRuntime {
 
 func TestPublicRequestLimitUsesConnectResourceExhausted(t *testing.T) {
 	registry := labels.NewService(nil)
-	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 1, false).Handler())
+	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 1, false, "test-key").Handler())
 	defer server.Close()
 	client := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
 	request := connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET})
@@ -47,9 +48,50 @@ func TestPublicRequestLimitUsesConnectResourceExhausted(t *testing.T) {
 	}
 }
 
+func TestPublicRequestLimitSharesIPBudgetDuringConcurrentBurst(t *testing.T) {
+	registry := labels.NewService(nil)
+	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 2, true, "test-key").Handler())
+	defer server.Close()
+	client := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
+	const callers = 8
+	codes := make(chan connect.Code, callers)
+	var workers sync.WaitGroup
+	for range callers {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			request := connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: "invalid", Network: pb.Network_NETWORK_ETHEREUM_MAINNET})
+			request.Header().Set("X-Forwarded-For", "198.51.100.7")
+			_, err := client.TraceGraph(context.Background(), request)
+			codes <- connect.CodeOf(err)
+		}()
+	}
+	workers.Wait()
+	close(codes)
+	var allowed, limited int
+	for code := range codes {
+		switch code {
+		case connect.CodeInvalidArgument:
+			allowed++
+		case connect.CodeResourceExhausted:
+			limited++
+		default:
+			t.Fatalf("concurrent request code = %v", code)
+		}
+	}
+	if allowed != 2 || limited != callers-2 {
+		t.Fatalf("shared IP budget allowed=%d limited=%d", allowed, limited)
+	}
+	request := connect.NewRequest(&pb.TraceGraphRequest{SeedAddress: "invalid", Network: pb.Network_NETWORK_ETHEREUM_MAINNET})
+	request.Header().Set("X-Forwarded-For", "198.51.100.8")
+	if _, err := client.TraceGraph(context.Background(), request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("separate IP code = %v", connect.CodeOf(err))
+	}
+}
+
 func TestTraceStatusPollingDoesNotConsumePublicRequestBudget(t *testing.T) {
 	registry := labels.NewService(nil)
-	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 1, false).Handler())
+	server := httptest.NewServer(NewServer(testNetworks(registry), registry, "http://localhost:3000", 1, false, "test-key").Handler())
 	defer server.Close()
 	client := openchainv1connect.NewTracingServiceClient(server.Client(), server.URL)
 	request := connect.NewRequest(&pb.TraceStatusRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET, Limit: 25})
@@ -99,7 +141,7 @@ func TestHealthAlertsExposeQueueAndProviderThresholds(t *testing.T) {
 	registry := labels.NewService(nil)
 	runtimes := testNetworks(registry)
 	runtime := runtimes[pb.Network_NETWORK_ETHEREUM_MAINNET]
-	runtime.Queue = tracing.NewQueue(runtime.Engine, nil, 10)
+	runtime.Queue = tracing.NewQueue(runtime.Engine, nil, 10, 1)
 	runtimes[pb.Network_NETWORK_ETHEREUM_MAINNET] = runtime
 	failedAt := time.Now().UTC()
 	alerts := healthAlerts([]healthNetwork{{
@@ -112,6 +154,19 @@ func TestHealthAlertsExposeQueueAndProviderThresholds(t *testing.T) {
 	}}, runtimes)
 	if len(alerts) != 3 || alerts[0].Code != "trace_queue_full" || alerts[0].Severity != "critical" || alerts[1].Code != "trace_jobs_failed" || alerts[2].Code != "provider_unhealthy" {
 		t.Fatalf("alerts = %#v", alerts)
+	}
+}
+
+func TestHealthAlertsUseSharedQueueCapacity(t *testing.T) {
+	registry := labels.NewService(nil)
+	runtime := testNetworks(registry)[pb.Network_NETWORK_ETHEREUM_MAINNET]
+	runtime.Queue = tracing.NewQueue(runtime.Engine, nil, 10, 1)
+	alerts := healthAlerts([]healthNetwork{
+		{Network: "ethereum-mainnet", Queue: tracing.Stats{Enabled: true, Queued: 5}},
+		{Network: "base-mainnet", Queue: tracing.Stats{Enabled: true, Queued: 5}},
+	}, map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: runtime})
+	if len(alerts) != 1 || alerts[0].Code != "trace_queue_full" || alerts[0].Network != "" {
+		t.Fatalf("shared queue alerts = %#v", alerts)
 	}
 }
 
@@ -181,6 +236,13 @@ func TestGraphProtoCarriesFinalityState(t *testing.T) {
 	}
 }
 
+func TestGraphProtoCarriesBlockHash(t *testing.T) {
+	_, edges := toGraphProto(&tracing.GraphResult{Edges: []tracing.GraphEdge{{ID: "block", BlockHash: "0xblock"}}})
+	if len(edges) != 1 || edges[0].GetBlockHash() != "0xblock" {
+		t.Fatalf("edge block hash = %#v", edges)
+	}
+}
+
 func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
 		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test curated-label API flow")
@@ -201,7 +263,7 @@ func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	}
 	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil)
 	engine := tracing.NewEngine(chain, database, service)
-	server := NewServer(map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine}}, service, "http://localhost:3000", 30, false)
+	server := NewServer(map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine}}, service, "http://localhost:3000", 30, false, "test-key")
 	labelsResponse, err := (&connectLabelHandler{server: server}).GetLabels(ctx, connect.NewRequest(&pb.GetLabelsRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
 	if err != nil {
 		t.Fatal(err)

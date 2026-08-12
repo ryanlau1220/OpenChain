@@ -35,6 +35,7 @@ message GraphEdge {
   string source_name = 14;
   int64 retrieved_at = 15;
   bool provisional = 16;
+  string block_hash = 17;
 }
 
 // A reproducible, neutral observation made by a versioned deterministic rule.

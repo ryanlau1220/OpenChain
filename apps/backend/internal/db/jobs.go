@@ -12,12 +12,14 @@ import (
 const traceResultCacheTTL = 5 * time.Minute
 
 var (
-	ErrTraceQueueFull   = errors.New("trace queue is full")
-	ErrTraceJobNotFound = errors.New("trace job not found")
+	ErrTraceQueueFull       = errors.New("trace queue is full")
+	ErrTraceClientQueueFull = errors.New("client trace queue is full")
+	ErrTraceJobNotFound     = errors.New("trace job not found")
 )
 
 type TraceJobQuery struct {
 	Network, Address, Direction, Cursor string
+	ClientKey                           string
 	Limit                               uint32
 }
 
@@ -29,7 +31,7 @@ type TraceJob struct {
 	ErrorMessage string
 }
 
-func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry bool, maxQueued int) (*TraceJob, error) {
+func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry bool, maxQueued, maxQueuedPerClient int) (*TraceJob, error) {
 	tx, err := d.SQL.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -50,29 +52,36 @@ func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry boo
 		if queued >= maxQueued {
 			return nil, ErrTraceQueueFull
 		}
+		var clientQueued int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs WHERE status = 'queued' AND client_key = $1`, query.ClientKey).Scan(&clientQueued); err != nil {
+			return nil, err
+		}
+		if clientQueued >= maxQueuedPerClient {
+			return nil, ErrTraceClientQueueFull
+		}
 	}
-	const statement = `INSERT INTO trace_jobs (network, address, direction, cursor, page_size, status)
-VALUES ($1, $2, $3, $4, $5, 'queued')
+	const statement = `INSERT INTO trace_jobs (network, address, direction, cursor, page_size, client_key, status)
+VALUES ($1, $2, $3, $4, $5, $6, 'queued')
 ON CONFLICT (network, address, direction, cursor, page_size) DO UPDATE
 SET status = CASE
-  WHEN ($7 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $6::interval) THEN 'queued'
+  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN 'queued'
   ELSE trace_jobs.status
 END,
 result_json = CASE
-  WHEN ($7 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $6::interval) THEN NULL
+  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN NULL
   ELSE trace_jobs.result_json
 END,
 error_message = CASE
-  WHEN ($7 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $6::interval) THEN NULL
+  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN NULL
   ELSE trace_jobs.error_message
 END,
 completed_at = CASE
-  WHEN ($7 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $6::interval) THEN NULL
+  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN NULL
   ELSE trace_jobs.completed_at
 END,
 updated_at = now()
 RETURNING id, network, address, direction, cursor, page_size, status, result_json, COALESCE(error_message, '')`
-	job, err := scanTraceJob(tx.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, traceResultCacheTTL.String(), retry))
+	job, err := scanTraceJob(tx.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, query.ClientKey, traceResultCacheTTL.String(), retry))
 	if err != nil {
 		return nil, err
 	}

@@ -69,7 +69,7 @@ func main() {
 			chainAdapter = adapter.NewEVMChainAdapter(network.name, network.chainID, adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
 		}
 		engine := tracing.NewEngine(chainAdapter, database, registry)
-		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs)
+		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)
 	}
@@ -87,7 +87,7 @@ func main() {
 			chainAdapter = adapter.NewTronAdapter(network.name, adapter.TronGridAPIURL, cfg.TronGridAPIKey)
 		}
 		engine := tracing.NewEngine(chainAdapter, database, registry)
-		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs)
+		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)
 	}
@@ -95,7 +95,7 @@ func main() {
 	for _, queue := range queues {
 		queue.Start(workerContext)
 	}
-	server := api.NewServer(runtimes, registry, cfg.WebOrigin, cfg.PublicRequestsPerMinute, cfg.TrustProxy)
+	server := api.NewServer(runtimes, registry, cfg.WebOrigin, cfg.PublicRequestsPerMinute, cfg.TrustProxy, cfg.EtherscanAPIKey)
 	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 
 	stop := make(chan os.Signal, 1)

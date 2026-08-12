@@ -26,6 +26,7 @@ export function TransferInspector({
 		['Decimals', String(asset?.decimals ?? 0)],
 		['Event ID', edge.eventId],
 		['Block', String(edge.blockNumber)],
+		['Block hash', edge.blockHash || 'Unavailable from source'],
 		['Finality', edge.provisional ? 'Provisional observation' : 'Finalized observation'],
 		['Source', edge.sourceName],
 		[

@@ -20,6 +20,7 @@ type Config struct {
 	WebOrigin               string
 	PublicRequestsPerMinute int
 	MaxQueuedTraceJobs      int
+	MaxQueuedJobsPerClient  int
 	TrustProxy              bool
 	validationError         error
 }
@@ -48,10 +49,14 @@ func LoadConfig() *Config {
 	}
 	publicRequestsPerMinute, requestLimitError := positiveEnv("PUBLIC_REQUESTS_PER_MINUTE", 30)
 	maxQueuedTraceJobs, queueLimitError := positiveEnv("MAX_QUEUED_TRACE_JOBS", 25)
+	maxQueuedJobsPerClient, clientQueueLimitError := positiveEnv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT", 3)
 	trustProxy, trustProxyError := boolEnv("TRUST_PROXY", false)
 	validationError := requestLimitError
 	if validationError == nil {
 		validationError = queueLimitError
+	}
+	if validationError == nil {
+		validationError = clientQueueLimitError
 	}
 	if validationError == nil {
 		validationError = trustProxyError
@@ -69,6 +74,7 @@ func LoadConfig() *Config {
 		WebOrigin:               webOrigin,
 		PublicRequestsPerMinute: publicRequestsPerMinute,
 		MaxQueuedTraceJobs:      maxQueuedTraceJobs,
+		MaxQueuedJobsPerClient:  maxQueuedJobsPerClient,
 		TrustProxy:              trustProxy,
 		validationError:         validationError,
 	}

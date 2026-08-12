@@ -183,6 +183,44 @@ case "$1" in
         echo -e "${GREEN}✓ Live backend and web end-to-end checks passed.${RESET}"
         ;;
 
+    smoke)
+        if [ -n "${OPENCHAIN_SMOKE_URL:-}" ]; then
+            smoke_web_url="${OPENCHAIN_SMOKE_URL%/}"
+            smoke_health_url="${smoke_web_url}/api/v1/health"
+        else
+            smoke_web_url="${WEB_ORIGIN:-http://localhost:3000}"
+            smoke_health_url="http://localhost:${PORT:-8081}/api/v1/health"
+        fi
+        echo -e "${CYAN}Checking public web and API routes...${RESET}"
+        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error "${smoke_web_url}" | rg -q '<title>OpenChain'; then
+            echo -e "${RED}Public web smoke check failed at ${smoke_web_url}.${RESET}"
+            exit 1
+        fi
+        smoke_health_file="$(mktemp)"
+        trap 'rm -f "${smoke_health_file}"' EXIT
+        if ! smoke_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error --output "${smoke_health_file}" --write-out '%{http_code}' "${smoke_health_url}")"; then
+            rm -f "${smoke_health_file}"
+            trap - EXIT
+            echo -e "${RED}Public API smoke check failed at ${smoke_health_url}.${RESET}"
+            exit 1
+        fi
+        if [ "${smoke_status}" != "200" ] && [ "${smoke_status}" != "503" ]; then
+            rm -f "${smoke_health_file}"
+            trap - EXIT
+            echo -e "${RED}Public API smoke check failed at ${smoke_health_url} (HTTP ${smoke_status}).${RESET}"
+            exit 1
+        fi
+        if ! rg -q '"service":"openchain-api"' "${smoke_health_file}"; then
+            rm -f "${smoke_health_file}"
+            trap - EXIT
+            echo -e "${RED}Public API returned an invalid health response.${RESET}"
+            exit 1
+        fi
+        rm -f "${smoke_health_file}"
+        trap - EXIT
+        echo -e "${GREEN}✓ Public routes are reachable; a degraded health response remains observable to monitoring.${RESET}"
+        ;;
+
     clean)
         echo -e "${YELLOW}Cleaning build assets and cache...${RESET}"
         rm -rf apps/web/dist .turbo apps/backend/bin apps/backend/tmp
@@ -190,7 +228,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|build|lint|check|test|test:e2e|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|build|lint|check|test|test:e2e|smoke|clean}"
         exit 1
         ;;
 esac

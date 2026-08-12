@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -51,5 +52,14 @@ func TestClientKeyTrustsForwardedAddressOnlyWhenConfigured(t *testing.T) {
 	withClientKey(handler, true).ServeHTTP(response, request)
 	if response.Body.String() != "198.51.100.4" {
 		t.Fatalf("trusted client key = %q", response.Body.String())
+	}
+}
+
+func TestQueueClientKeyIsPseudonymousAndStable(t *testing.T) {
+	server := NewServer(nil, nil, "http://localhost:3000", 1, false, "test-key")
+	ctx := context.WithValue(context.Background(), clientKeyContext{}, "198.51.100.7")
+	key := server.queueClientKey(ctx)
+	if key == "198.51.100.7" || len(key) != 64 || key != server.queueClientKey(ctx) {
+		t.Fatalf("queue client key = %q", key)
 	}
 }

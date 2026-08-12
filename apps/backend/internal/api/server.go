@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -36,11 +39,12 @@ func withLogging(next http.HandlerFunc) http.HandlerFunc {
 }
 
 type Server struct {
-	networks       map[pb.Network]NetworkRuntime
-	labels         *labels.Service
-	webOrigin      string
-	requestLimiter *RequestLimiter
-	trustProxy     bool
+	networks          map[pb.Network]NetworkRuntime
+	labels            *labels.Service
+	webOrigin         string
+	requestLimiter    *RequestLimiter
+	trustProxy        bool
+	queueClientSecret []byte
 }
 
 var errUnsupportedNetwork = errors.New("unsupported network")
@@ -68,8 +72,15 @@ type HealthAlert struct {
 	Message  string `json:"message"`
 }
 
-func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service, webOrigin string, publicRequestsPerMinute int, trustProxy bool) *Server {
-	return &Server{networks: networks, labels: registry, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy}
+func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service, webOrigin string, publicRequestsPerMinute int, trustProxy bool, queueClientSecret string) *Server {
+	return &Server{networks: networks, labels: registry, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy, queueClientSecret: []byte(queueClientSecret)}
+}
+
+func (s *Server) queueClientKey(ctx context.Context) string {
+	// ponytail: reuses the required server-only provider key; rotating it only resets the five-minute queue accounting window.
+	mac := hmac.New(sha256.New, s.queueClientSecret)
+	_, _ = mac.Write([]byte(clientKey(ctx)))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func (s *Server) network(network pb.Network) (NetworkRuntime, error) {
@@ -86,7 +97,7 @@ func (s *Server) traceGraph(ctx context.Context, network pb.Network, address str
 		return nil, err
 	}
 	if runtime.Queue != nil {
-		return runtime.Queue.TraceGraph(ctx, address, direction, limit, cursor, retry)
+		return runtime.Queue.TraceGraph(ctx, address, direction, limit, cursor, retry, s.queueClientKey(ctx))
 	}
 	return runtime.Engine.ResolveGraph(ctx, address, direction, limit, cursor)
 }
@@ -180,19 +191,23 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func healthAlerts(networks []healthNetwork, runtimes map[pb.Network]NetworkRuntime) []HealthAlert {
 	alerts := make([]HealthAlert, 0)
-	for _, network := range networks {
-		for _, runtime := range runtimes {
-			if runtime.Engine == nil || runtime.Engine.Network() != network.Network {
-				continue
-			}
-			capacity := runtime.Queue.Capacity()
-			if capacity > 0 && network.Queue.Queued >= int64(capacity) {
-				alerts = append(alerts, HealthAlert{Code: "trace_queue_full", Severity: "critical", Network: network.Network, Message: "Trace queue is at capacity; new investigations are rejected."})
-			} else if capacity > 0 && network.Queue.Queued*100 >= int64(capacity*80) {
-				alerts = append(alerts, HealthAlert{Code: "trace_queue_near_capacity", Severity: "warning", Network: network.Network, Message: "Trace queue is at least 80% full."})
-			}
+	capacity := 0
+	var queued int64
+	for _, runtime := range runtimes {
+		if runtime.Queue != nil && runtime.Queue.Capacity() > 0 {
+			capacity = runtime.Queue.Capacity()
 			break
 		}
+	}
+	for _, network := range networks {
+		queued += network.Queue.Queued
+	}
+	if capacity > 0 && queued >= int64(capacity) {
+		alerts = append(alerts, HealthAlert{Code: "trace_queue_full", Severity: "critical", Message: "Trace queue is at capacity; new investigations are rejected."})
+	} else if capacity > 0 && queued*100 >= int64(capacity*80) {
+		alerts = append(alerts, HealthAlert{Code: "trace_queue_near_capacity", Severity: "warning", Message: "Trace queue is at least 80% full."})
+	}
+	for _, network := range networks {
 		if network.Queue.Failed > 0 {
 			alerts = append(alerts, HealthAlert{Code: "trace_jobs_failed", Severity: "warning", Network: network.Network, Message: "One or more trace jobs require a user retry."})
 		}

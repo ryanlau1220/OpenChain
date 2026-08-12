@@ -16,6 +16,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	_ = os.Unsetenv("TRONGRID_API_KEY")
 	_ = os.Unsetenv("PUBLIC_REQUESTS_PER_MINUTE")
 	_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS")
+	_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT")
 	_ = os.Unsetenv("TRUST_PROXY")
 
 	cfg := LoadConfig()
@@ -38,6 +39,7 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 	_ = os.Setenv("TRONGRID_API_KEY", "test-key")
 	_ = os.Setenv("PUBLIC_REQUESTS_PER_MINUTE", "12")
 	_ = os.Setenv("MAX_QUEUED_TRACE_JOBS", "7")
+	_ = os.Setenv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT", "2")
 	_ = os.Setenv("TRUST_PROXY", "true")
 	defer func() {
 		_ = os.Unsetenv("PORT")
@@ -49,6 +51,7 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 		_ = os.Unsetenv("TRONGRID_API_KEY")
 		_ = os.Unsetenv("PUBLIC_REQUESTS_PER_MINUTE")
 		_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS")
+		_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT")
 		_ = os.Unsetenv("TRUST_PROXY")
 	}()
 
@@ -63,7 +66,7 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("expected valid config, got %v", err)
 	}
-	if cfg.PublicRequestsPerMinute != 12 || cfg.MaxQueuedTraceJobs != 7 || !cfg.TrustProxy {
+	if cfg.PublicRequestsPerMinute != 12 || cfg.MaxQueuedTraceJobs != 7 || cfg.MaxQueuedJobsPerClient != 2 || !cfg.TrustProxy {
 		t.Fatalf("public config = %#v", cfg)
 	}
 }

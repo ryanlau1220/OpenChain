@@ -46,7 +46,7 @@ func TestFinalityWindowsMarkRecentObservationsProvisional(t *testing.T) {
 
 func TestTraceJobRetriesTemporaryProviderFailure(t *testing.T) {
 	chain := &retryChain{}
-	queue := NewQueue(NewEngine(chain, nil, labels.NewService(nil)), nil, 1)
+	queue := NewQueue(NewEngine(chain, nil, labels.NewService(nil)), nil, 1, 1)
 	result, err := queue.resolveWithRetry(context.Background(), &db.TraceJob{Query: db.TraceJobQuery{Network: chain.Network(), Address: testTraceAddress, Direction: string(DirectionBoth), Limit: 1}})
 	if err != nil || result == nil || chain.attempts != 2 {
 		t.Fatalf("result = %#v, attempts = %d, err = %v", result, chain.attempts, err)

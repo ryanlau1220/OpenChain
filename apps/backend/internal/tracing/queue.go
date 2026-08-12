@@ -21,18 +21,20 @@ const (
 )
 
 var ErrQueueFull = db.ErrTraceQueueFull
+var ErrClientQueueFull = db.ErrTraceClientQueueFull
 var ErrTraceNotFound = db.ErrTraceJobNotFound
 
 type Queue struct {
-	engine    *Engine
-	database  *db.DB
-	maxQueued int
-	done      chan struct{}
-	start     sync.Once
+	engine             *Engine
+	database           *db.DB
+	maxQueued          int
+	maxQueuedPerClient int
+	done               chan struct{}
+	start              sync.Once
 }
 
-func NewQueue(engine *Engine, database *db.DB, maxQueued int) *Queue {
-	return &Queue{engine: engine, database: database, maxQueued: maxQueued}
+func NewQueue(engine *Engine, database *db.DB, maxQueued, maxQueuedPerClient int) *Queue {
+	return &Queue{engine: engine, database: database, maxQueued: maxQueued, maxQueuedPerClient: maxQueuedPerClient}
 }
 
 func (q *Queue) Start(ctx context.Context) {
@@ -66,11 +68,11 @@ func (q *Queue) Wait() {
 	}
 }
 
-func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, retry bool) (*GraphResult, error) {
+func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, retry bool, clientKey string) (*GraphResult, error) {
 	if q.database == nil {
 		return q.engine.ResolveGraph(ctx, address, direction, limit, cursor)
 	}
-	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit}, retry, q.maxQueued)
+	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit, ClientKey: clientKey}, retry, q.maxQueued, q.maxQueuedPerClient)
 	if err != nil {
 		return nil, fmt.Errorf("queue trace job: %w", err)
 	}
@@ -124,7 +126,7 @@ func (q *Queue) Stats(ctx context.Context) (Stats, error) {
 	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed}, err
 }
 
-// Capacity is the durable queue limit for this network. It is exposed only to
+// Capacity is the durable shared queue limit. It is exposed only to
 // operational health reporting; callers cannot change the queue policy.
 func (q *Queue) Capacity() int {
 	if q == nil {

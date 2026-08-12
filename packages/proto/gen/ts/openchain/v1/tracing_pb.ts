@@ -209,6 +209,11 @@ export class GraphEdge extends Message<GraphEdge> {
    */
   provisional = false;
 
+  /**
+   * @generated from field: string block_hash = 17;
+   */
+  blockHash = "";
+
   constructor(data?: PartialMessage<GraphEdge>) {
     super();
     proto3.util.initPartial(data, this);
@@ -233,6 +238,7 @@ export class GraphEdge extends Message<GraphEdge> {
     { no: 14, name: "source_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 15, name: "retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 16, name: "provisional", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 17, name: "block_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GraphEdge {
