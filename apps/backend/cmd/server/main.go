@@ -16,6 +16,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/config"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
+	"github.com/openchain/openchain/apps/backend/internal/rules"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
@@ -36,6 +37,12 @@ func main() {
 	if err != nil {
 		_ = database.Close()
 		log.Fatalf("Database schema unavailable: %v", err)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	err = database.ImportRuleCatalog(ctx, rules.CatalogEntries())
+	cancel()
+	if err != nil {
+		log.Fatalf("Rule catalog import failed: %v", err)
 	}
 
 	registry := labels.NewService(database)

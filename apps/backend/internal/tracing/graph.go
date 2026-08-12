@@ -11,6 +11,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
+	"github.com/openchain/openchain/apps/backend/internal/rules"
 )
 
 const maxPageSize = 50
@@ -46,6 +47,7 @@ type GraphResult struct {
 	HasMore                bool
 	Pending                bool
 	SourceStatus           adapter.SourceStatus
+	Leads                  []rules.Lead
 }
 
 type Engine struct {
@@ -82,8 +84,14 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	}
 	transfers := filterTransfers(page.Transfers, address, direction)
 	result := e.graph(ctx, address, transfers, page)
+	persistedTransfers := e.toTransfers(transfers, page.SourceStatus)
+	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, time.Now().UTC())
+	result.Leads = leads
 	if e.database != nil {
-		if err := e.database.SaveEvidenceGraph(ctx, e.toAddresses(result.Nodes), e.toTransfers(transfers, page.SourceStatus), recorder.Items()); err != nil {
+		if err := e.database.SaveEvidenceGraph(ctx, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items()); err != nil {
+			return nil, err
+		}
+		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
 			return nil, err
 		}
 	}

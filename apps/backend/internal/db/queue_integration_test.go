@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
+	"github.com/openchain/openchain/apps/backend/internal/rules"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
@@ -60,13 +62,18 @@ CREATE TABLE %s.transfers (LIKE public.transfers INCLUDING ALL);
 CREATE TABLE %s.assets (LIKE public.assets INCLUDING ALL);
 CREATE TABLE %s.acquisition_snapshots (LIKE public.acquisition_snapshots INCLUDING ALL);
 CREATE TABLE %s.transfer_acquisitions (transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (transfer_id, acquisition_id));
+CREATE TABLE %s.rule_catalog (LIKE public.rule_catalog INCLUDING ALL);
+CREATE TABLE %s.rule_runs (LIKE public.rule_runs INCLUDING ALL);
 CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
-SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
+SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 	}()
+	if err := database.ImportRuleCatalog(ctx, rules.CatalogEntries()); err != nil {
+		t.Fatal(err)
+	}
 
 	client := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
 	queue := tracing.NewQueue(tracing.NewEngine(client, database, labels.NewService(database)), database, 2)
@@ -104,6 +111,16 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 			}
 			if snapshots != 3 || links != 3 {
 				t.Fatalf("snapshots = %d, links = %d", snapshots, links)
+			}
+			var ruleRuns int
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, "ethereum-mainnet").Scan(&ruleRuns); err != nil || ruleRuns != 3 {
+				t.Fatalf("rule runs = %d err = %v", ruleRuns, err)
+			}
+			var version string
+			var parameters, inputIDs, ruleResult []byte
+			var startedAt, completedAt time.Time
+			if err := database.SQL.QueryRowContext(ctx, `SELECT rule_version, parameters, input_transfer_ids, result, started_at, completed_at FROM rule_runs WHERE rule_id = $1`, "fan-in-consolidation").Scan(&version, &parameters, &inputIDs, &ruleResult, &startedAt, &completedAt); err != nil || version != "1.0.0" || !json.Valid(parameters) || !json.Valid(inputIDs) || !json.Valid(ruleResult) || startedAt.IsZero() || completedAt.IsZero() {
+				t.Fatalf("rule run provenance version=%q parameters=%q inputs=%q result=%q started=%v completed=%v err=%v", version, parameters, inputIDs, ruleResult, startedAt, completedAt, err)
 			}
 			return
 		}

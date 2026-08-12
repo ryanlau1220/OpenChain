@@ -15,6 +15,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
+	"github.com/openchain/openchain/apps/backend/internal/rules"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
@@ -142,6 +143,14 @@ func TestGraphProtoCarriesDirectLabelEvidence(t *testing.T) {
 	nodes, _ := toGraphProto(&tracing.GraphResult{Nodes: []tracing.GraphNode{{ID: testAddress, Labels: []labels.LabelItem{{ID: "router", Address: testAddress, Network: "ethereum-mainnet", Label: "Uniswap V2 Router", Category: "DeFi", EvidenceURL: "https://example.test/proof", Source: "test source", SourceVersion: "v1", Visibility: "public", TrustTier: 1}}}}})
 	if len(nodes) != 1 || len(nodes[0].GetLabels()) != 1 || nodes[0].GetLabels()[0].GetEvidenceUrl() != "https://example.test/proof" || nodes[0].GetLabels()[0].GetVisibility() != pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC {
 		t.Fatalf("graph labels = %#v", nodes)
+	}
+}
+
+func TestTraceProtoCarriesNeutralInvestigationLead(t *testing.T) {
+	lead := rules.Lead{ID: "fan-in-consolidation:test", RuleID: "fan-in-consolidation", RuleVersion: "1.0.0", Title: "Fan-in / consolidation lead", SubjectAddress: testAddress, TransferIDs: []string{"transfer-1"}, Rationale: "Observed transfers.", Limitations: "This is an investigative lead.", Parameters: []byte(`{"window_seconds":86400}`)}
+	converted := toLeadProto([]rules.Lead{lead})
+	if len(converted) != 1 || converted[0].GetRuleVersion() != "1.0.0" || converted[0].GetParametersJson() != `{"window_seconds":86400}` || converted[0].GetLimitations() == "" {
+		t.Fatalf("lead proto = %#v", converted)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1/openchainv1connect"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
+	"github.com/openchain/openchain/apps/backend/internal/rules"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
 )
 
@@ -49,7 +50,7 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads)}), nil
 }
 
 func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect.Request[pb.TraceStatusRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
@@ -69,7 +70,7 @@ func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads)}), nil
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
@@ -92,7 +93,7 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending}), nil
+	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads)}), nil
 }
 
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {
@@ -109,6 +110,14 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp})
 	}
 	return nodes, edges
+}
+
+func toLeadProto(leads []rules.Lead) []*pb.InvestigationLead {
+	result := make([]*pb.InvestigationLead, 0, len(leads))
+	for _, lead := range leads {
+		result = append(result, &pb.InvestigationLead{Id: lead.ID, RuleId: lead.RuleID, RuleVersion: lead.RuleVersion, Title: lead.Title, SubjectAddress: lead.SubjectAddress, TransferIds: lead.TransferIDs, Rationale: lead.Rationale, Limitations: lead.Limitations, ParametersJson: string(lead.Parameters)})
+	}
+	return result
 }
 
 type connectLookupHandler struct{ server *Server }

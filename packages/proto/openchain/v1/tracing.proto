@@ -36,6 +36,20 @@ message GraphEdge {
   int64 retrieved_at = 15;
 }
 
+// A reproducible, neutral observation made by a versioned deterministic rule.
+// It is an investigative lead, not an attribution or a risk assessment.
+message InvestigationLead {
+  string id = 1;
+  string rule_id = 2;
+  string rule_version = 3;
+  string title = 4;
+  string subject_address = 5;
+  repeated string transfer_ids = 6;
+  string rationale = 7;
+  string limitations = 8;
+  string parameters_json = 9;
+}
+
 message TraceGraphRequest {
   string seed_address = 1;
   Network network = 2;
@@ -55,6 +69,7 @@ message TraceGraphResponse {
   bool has_more = 7;
   SourceStatus source_status = 8;
   bool pending = 9;
+  repeated InvestigationLead leads = 10;
 }
 
 // TraceStatusRequest only reads the durable job created by TraceGraph or
@@ -83,6 +98,7 @@ message ExpandNodeResponse {
   bool has_more = 4;
   SourceStatus source_status = 5;
   bool pending = 6;
+  repeated InvestigationLead leads = 7;
 }
 
 service TracingService {

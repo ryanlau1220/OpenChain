@@ -82,6 +82,31 @@ CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON public
 DROP TRIGGER IF EXISTS transfer_acquisitions_immutable ON public.transfer_acquisitions;
 CREATE TRIGGER transfer_acquisitions_immutable BEFORE UPDATE OR DELETE ON public.transfer_acquisitions FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
 
+CREATE TABLE IF NOT EXISTS public.rule_catalog (
+  rule_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  name TEXT NOT NULL,
+  parameter_schema JSONB NOT NULL,
+  default_parameters JSONB NOT NULL,
+  limitations TEXT NOT NULL,
+  PRIMARY KEY (rule_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS public.rule_runs (
+  id BIGSERIAL PRIMARY KEY,
+  network TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  rule_version TEXT NOT NULL,
+  parameters JSONB NOT NULL,
+  input_transfer_ids JSONB NOT NULL,
+  result JSONB NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ NOT NULL,
+  FOREIGN KEY (rule_id, rule_version) REFERENCES public.rule_catalog (rule_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS rule_runs_network_completed_idx ON public.rule_runs (network, completed_at DESC);
+
 CREATE TABLE IF NOT EXISTS public.trace_jobs (
   id BIGSERIAL PRIMARY KEY,
   network TEXT NOT NULL,

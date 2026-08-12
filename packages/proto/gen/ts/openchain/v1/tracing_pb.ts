@@ -247,6 +247,94 @@ export class GraphEdge extends Message<GraphEdge> {
 }
 
 /**
+ * A reproducible, neutral observation made by a versioned deterministic rule.
+ * It is an investigative lead, not an attribution or a risk assessment.
+ *
+ * @generated from message openchain.v1.InvestigationLead
+ */
+export class InvestigationLead extends Message<InvestigationLead> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string rule_id = 2;
+   */
+  ruleId = "";
+
+  /**
+   * @generated from field: string rule_version = 3;
+   */
+  ruleVersion = "";
+
+  /**
+   * @generated from field: string title = 4;
+   */
+  title = "";
+
+  /**
+   * @generated from field: string subject_address = 5;
+   */
+  subjectAddress = "";
+
+  /**
+   * @generated from field: repeated string transfer_ids = 6;
+   */
+  transferIds: string[] = [];
+
+  /**
+   * @generated from field: string rationale = 7;
+   */
+  rationale = "";
+
+  /**
+   * @generated from field: string limitations = 8;
+   */
+  limitations = "";
+
+  /**
+   * @generated from field: string parameters_json = 9;
+   */
+  parametersJson = "";
+
+  constructor(data?: PartialMessage<InvestigationLead>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.InvestigationLead";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "rule_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "rule_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "subject_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "transfer_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 7, name: "rationale", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "limitations", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "parameters_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InvestigationLead {
+    return new InvestigationLead().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): InvestigationLead {
+    return new InvestigationLead().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): InvestigationLead {
+    return new InvestigationLead().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: InvestigationLead | PlainMessage<InvestigationLead> | undefined, b: InvestigationLead | PlainMessage<InvestigationLead> | undefined): boolean {
+    return proto3.util.equals(InvestigationLead, a, b);
+  }
+}
+
+/**
  * @generated from message openchain.v1.TraceGraphRequest
  */
 export class TraceGraphRequest extends Message<TraceGraphRequest> {
@@ -362,6 +450,11 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
    */
   pending = false;
 
+  /**
+   * @generated from field: repeated openchain.v1.InvestigationLead leads = 10;
+   */
+  leads: InvestigationLead[] = [];
+
   constructor(data?: PartialMessage<TraceGraphResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -379,6 +472,7 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
     { no: 7, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 8, name: "source_status", kind: "message", T: SourceStatus },
     { no: 9, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 10, name: "leads", kind: "message", T: InvestigationLead, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphResponse {
@@ -563,6 +657,11 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
    */
   pending = false;
 
+  /**
+   * @generated from field: repeated openchain.v1.InvestigationLead leads = 7;
+   */
+  leads: InvestigationLead[] = [];
+
   constructor(data?: PartialMessage<ExpandNodeResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -577,6 +676,7 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
     { no: 4, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 5, name: "source_status", kind: "message", T: SourceStatus },
     { no: 6, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "leads", kind: "message", T: InvestigationLead, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeResponse {
