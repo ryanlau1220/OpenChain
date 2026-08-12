@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -192,6 +194,115 @@ func TestTraceJobIntegration(t *testing.T) {
 	}
 	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "test", Address: "other-trace-job", Direction: "both", Limit: 1}, false, 1); !errors.Is(err, ErrTraceQueueFull) {
 		t.Fatalf("queue capacity error = %v", err)
+	}
+}
+
+func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
+	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
+		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test concurrent durable trace jobs")
+	}
+	root, err := NewDB(DefaultConfig(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := root.InitSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	schema := "openchain_concurrent_jobs_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if _, err := root.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s; CREATE TABLE %s.trace_jobs (LIKE public.trace_jobs INCLUDING ALL)`, schema, schema)); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = root.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
+	}()
+	parsed, err := url.Parse(root.DSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := parsed.Query()
+	values.Set("search_path", schema+",public")
+	parsed.RawQuery = values.Encode()
+	database, err := NewDB(DefaultConfig(parsed.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	query := TraceJobQuery{Network: "ethereum-mainnet", Address: "concurrent-trace-job", Direction: "both", Limit: 1}
+	const callers = 8
+	start := make(chan struct{})
+	jobs := make(chan *TraceJob, callers)
+	errs := make(chan error, callers)
+	var workers sync.WaitGroup
+	for range callers {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			job, err := database.EnqueueTraceJob(ctx, query, false, callers)
+			if err != nil {
+				errs <- err
+				return
+			}
+			jobs <- job
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(jobs)
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	var jobID int64
+	for job := range jobs {
+		if jobID == 0 {
+			jobID = job.ID
+		}
+		if job.ID != jobID || job.Status != "queued" {
+			t.Fatalf("concurrent enqueue returned %#v, want queued job %d", job, jobID)
+		}
+	}
+	if jobID == 0 {
+		t.Fatal("concurrent enqueue returned no job")
+	}
+	var count int
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("deduplicated trace jobs = %d err=%v", count, err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM trace_jobs`); err != nil {
+		t.Fatal(err)
+	}
+
+	start = make(chan struct{})
+	errs = make(chan error, 2)
+	for _, address := range []string{"capacity-a", "capacity-b"} {
+		workers.Add(1)
+		go func(address string) {
+			defer workers.Done()
+			<-start
+			_, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: query.Network, Address: address, Direction: query.Direction, Limit: query.Limit}, false, 1)
+			errs <- err
+		}(address)
+	}
+	close(start)
+	workers.Wait()
+	close(errs)
+	var accepted, rejected int
+	for err := range errs {
+		if err == nil {
+			accepted++
+		} else if errors.Is(err, ErrTraceQueueFull) {
+			rejected++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if accepted != 1 || rejected != 1 {
+		t.Fatalf("queue capacity accepted=%d rejected=%d", accepted, rejected)
 	}
 }
 
