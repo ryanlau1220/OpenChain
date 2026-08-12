@@ -328,22 +328,24 @@ func transfersForHeliusTransaction(transaction *heliusTransaction, address strin
 	timestamp := time.Unix(transaction.Timestamp, 0).UTC()
 	transfers := make([]TransferItem, 0, len(transaction.NativeTransfers)+len(transaction.TokenTransfers))
 	for index, transfer := range transaction.NativeTransfers {
+		if transfer.FromUserAccount != address && transfer.ToUserAccount != address {
+			continue
+		}
 		amount, err := rawInteger(transfer.Amount)
 		if err != nil || transfer.FromUserAccount == "" || transfer.ToUserAccount == "" {
-			return nil, fmt.Errorf("parse Solana native transfer")
+			continue
 		}
-		if transfer.FromUserAccount == address || transfer.ToUserAccount == address {
-			transfers = append(transfers, TransferItem{Hash: transaction.Signature, EventID: fmt.Sprintf("native:%d", index), TransferKind: "NATIVE", From: transfer.FromUserAccount, To: transfer.ToUserAccount, AmountBaseUnits: amount, Asset: Asset{Kind: "NATIVE", Symbol: "SOL", Decimals: 9}, BlockNumber: transaction.Slot, Timestamp: timestamp})
-		}
+		transfers = append(transfers, TransferItem{Hash: transaction.Signature, EventID: fmt.Sprintf("native:%d", index), TransferKind: "NATIVE", From: transfer.FromUserAccount, To: transfer.ToUserAccount, AmountBaseUnits: amount, Asset: Asset{Kind: "NATIVE", Symbol: "SOL", Decimals: 9}, BlockNumber: transaction.Slot, Timestamp: timestamp})
 	}
 	for index, transfer := range transaction.TokenTransfers {
+		if transfer.FromUserAccount != address && transfer.ToUserAccount != address {
+			continue
+		}
 		amount, err := rawInteger(transfer.TokenAmount)
 		if err != nil || transfer.FromUserAccount == "" || transfer.ToUserAccount == "" || transfer.Mint == "" {
-			return nil, fmt.Errorf("parse Solana SPL transfer")
+			continue
 		}
-		if transfer.FromUserAccount == address || transfer.ToUserAccount == address {
-			transfers = append(transfers, TransferItem{Hash: transaction.Signature, EventID: fmt.Sprintf("spl:%d", index), TransferKind: "SPL", From: transfer.FromUserAccount, To: transfer.ToUserAccount, AmountBaseUnits: amount, Asset: Asset{Kind: "SPL", ContractAddress: transfer.Mint, Decimals: decimalsByMint[transfer.Mint]}, BlockNumber: transaction.Slot, Timestamp: timestamp})
-		}
+		transfers = append(transfers, TransferItem{Hash: transaction.Signature, EventID: fmt.Sprintf("spl:%d", index), TransferKind: "SPL", From: transfer.FromUserAccount, To: transfer.ToUserAccount, AmountBaseUnits: amount, Asset: Asset{Kind: "SPL", ContractAddress: transfer.Mint, Decimals: decimalsByMint[transfer.Mint]}, BlockNumber: transaction.Slot, Timestamp: timestamp})
 	}
 	return transfers, nil
 }
