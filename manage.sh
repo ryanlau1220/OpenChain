@@ -3,6 +3,7 @@
 # OpenChain Platform Management Script
 
 set -e
+set -o pipefail
 
 # ANSI Color Tokens
 CYAN='\033[36m'
@@ -27,6 +28,29 @@ if [ -f .env ]; then
     source .env
     set +a
 fi
+
+backup_database() {
+    local compose_file="$1"
+    local retention_days="${BACKUP_RETENTION_DAYS:-14}"
+    if ! [[ "${retention_days}" =~ ^[0-9]+$ ]] || [ "${retention_days}" -lt 1 ]; then
+        echo -e "${RED}BACKUP_RETENTION_DAYS must be a positive integer.${RESET}"
+        exit 1
+    fi
+    local backup_dir="${BACKUP_DIR:-infra/backups}"
+    mkdir -p "${backup_dir}"
+    local timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    local backup_file="${backup_dir}/openchain-${timestamp}.sql.gz"
+    local partial_file="${backup_file}.partial"
+    echo -e "${CYAN}Creating PostgreSQL logical backup...${RESET}"
+    if ! docker compose --env-file .env -f "${compose_file}" exec -T postgres pg_dump -U "${POSTGRES_USER:-openchain}" -d "${POSTGRES_DB:-openchain}" | gzip -c > "${partial_file}"; then
+        rm -f "${partial_file}"
+        echo -e "${RED}Backup failed; no partial backup was retained.${RESET}"
+        exit 1
+    fi
+    mv "${partial_file}" "${backup_file}"
+    find "${backup_dir}" -maxdepth 1 -type f -name 'openchain-*.sql.gz' -mtime +"${retention_days}" -delete
+    echo -e "${GREEN}✓ Backup created at ${backup_file}; backups older than ${retention_days} days were removed.${RESET}"
+}
 
 case "$1" in
     dev)
@@ -92,6 +116,14 @@ case "$1" in
         echo -e "${GREEN}✓ [OK] Production containers stopped. Persistent volumes were kept.${RESET}"
         ;;
 
+    backup)
+        backup_database infra/docker-compose.yml
+        ;;
+
+    backup:prod)
+        backup_database infra/docker-compose.production.yml
+        ;;
+
     build)
         echo -e "${CYAN}Building Go backend binary...${RESET}"
         (cd apps/backend && go build -o bin/server ./cmd/server)
@@ -102,7 +134,7 @@ case "$1" in
 
     lint)
         echo -e "${CYAN}Running Biome code formatting...${RESET}"
-        npx biome check --write apps/web
+        npx biome check apps/web
         echo -e "${CYAN}Running golangci-lint on Go backend...${RESET}"
         if command -v golangci-lint >/dev/null 2>&1; then
             (cd apps/backend && golangci-lint run)
@@ -151,7 +183,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|build|lint|check|test|test:e2e|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|build|lint|check|test|test:e2e|clean}"
         exit 1
         ;;
 esac
