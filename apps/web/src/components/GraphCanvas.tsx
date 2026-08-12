@@ -3,6 +3,7 @@ import {
 	ArrowLeftRight,
 	Filter,
 	Layers,
+	LoaderCircle,
 	Maximize2,
 	PlusCircle,
 	RotateCcw,
@@ -29,6 +30,8 @@ interface GraphCanvasProps {
 	canExpand?: boolean;
 	expanding?: boolean;
 	highlightedTransferIds?: readonly string[];
+	loading?: boolean;
+	emptyMessage?: string;
 }
 
 // PRISM node palette (light mode)
@@ -231,6 +234,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	canExpand = false,
 	expanding = false,
 	highlightedTransferIds = emptyTransferIDs,
+	loading = false,
+	emptyMessage = 'Enter a target address above to start tracing',
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
@@ -239,6 +244,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		'breadthfirst',
 	);
 	const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
+	const [filterOpen, setFilterOpen] = useState(false);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
 	const seedAddress = graphData?.seedAddress || '';
@@ -511,7 +517,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			isPanningCanvas = false;
 		});
 
-		cy.on('tap select click', 'node', (evt) => {
+		cy.on('tap', 'node', (evt) => {
 			const nData = evt.target.data('raw');
 			if (!nData) return;
 			setInternalSelectedNode(nData);
@@ -542,7 +548,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			cy.destroy();
 			cyRef.current = null;
 		};
-	}, [graphData, highlightedIDs, layoutName, visibleEdges, visibleNodes]);
+	}, [graphData, layoutName, visibleEdges, visibleNodes]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
@@ -562,7 +568,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	).length;
 	const updateFilter = <Key extends keyof GraphFilters>(key: Key, value: GraphFilters[Key]) =>
 		setFilters((current) => ({ ...current, [key]: value }));
-	const hasProvisionalEvidence = visibleEdges.some((edge) => edge.provisional);
+	const showLoading = loading || Boolean(graphData?.pending);
 
 	return (
 		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
@@ -617,117 +623,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						</button>
 					</div>
 				</div>
-				{graphData?.sourceStatus?.source && (
-					<p className="hidden lg:block text-[10px]" style={{ color: 'var(--ink-3)' }}>
-						{graphData.sourceStatus.source} ·{' '}
-						{hasProvisionalEvidence
-							? 'contains provisional observations'
-							: 'finalized observations'}
-					</p>
-				)}
-
 				<div className="flex items-center gap-2">
-					<details className="relative">
-						<summary
-							className="list-none cursor-pointer rounded-lg px-2.5 py-1 text-xs"
-							style={{
-								background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
-								border: '1px solid var(--border)',
-								color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
-							}}
-						>
-							<Filter className="mr-1 inline h-3.5 w-3.5" />
-							Filters{activeFilterCount ? ` · ${activeFilterCount}` : ''}
-						</summary>
-						<div
-							className="absolute right-0 top-8 z-30 w-72 space-y-2 rounded-xl p-3 shadow-lg"
-							style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
-						>
-							<div className="flex items-center justify-between">
-								<p
-									className="text-[10px] font-semibold uppercase tracking-wider"
-									style={{ color: 'var(--ink-3)' }}
-								>
-									Visible transfers: {visibleEdges.length}/{graphData?.edges.length || 0}
-								</p>
-								<button
-									type="button"
-									onClick={() => setFilters(emptyFilters)}
-									className="text-[10px]"
-									style={{ color: 'var(--accent)' }}
-								>
-									Clear
-								</button>
-							</div>
-							<div className="grid grid-cols-2 gap-2">
-								<input
-									aria-label="From date"
-									type="date"
-									value={filters.from}
-									onChange={(event) => updateFilter('from', event.target.value)}
-									className="prism-input text-[10px] px-2 py-1.5"
-								/>
-								<input
-									aria-label="To date"
-									type="date"
-									value={filters.to}
-									onChange={(event) => updateFilter('to', event.target.value)}
-									className="prism-input text-[10px] px-2 py-1.5"
-								/>
-								<select
-									aria-label="Transfer direction"
-									value={filters.direction}
-									onChange={(event) =>
-										updateFilter('direction', event.target.value as DirectionFilter)
-									}
-									className="prism-input text-[10px] px-2 py-1.5"
-								>
-									<option value="both">All directions</option>
-									<option value="inbound">Inbound to target</option>
-									<option value="outbound">Outbound from target</option>
-								</select>
-								<select
-									aria-label="Asset"
-									value={filters.asset}
-									onChange={(event) => updateFilter('asset', event.target.value)}
-									className="prism-input text-[10px] px-2 py-1.5"
-								>
-									<option value="">All assets</option>
-									{assets.map(([id, label]) => (
-										<option key={id} value={id}>
-											{label}
-										</option>
-									))}
-								</select>
-								<input
-									aria-label="Minimum amount"
-									type="text"
-									inputMode="decimal"
-									maxLength={30}
-									placeholder="Minimum amount"
-									value={filters.minimumAmount}
-									onChange={(event) => updateFilter('minimumAmount', event.target.value)}
-									className="prism-input text-[10px] px-2 py-1.5"
-								/>
-								<select
-									aria-label="Transfer type"
-									value={filters.transferKind}
-									onChange={(event) => updateFilter('transferKind', event.target.value)}
-									className="prism-input text-[10px] px-2 py-1.5"
-								>
-									<option value="">All types</option>
-									{transferKinds.map((kind) => (
-										<option key={kind} value={kind}>
-											{kind}
-										</option>
-									))}
-								</select>
-							</div>
-							<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
-								Amount uses the selected transfer’s asset units.
-							</p>
-						</div>
-					</details>
+					<button
+						type="button"
+						aria-expanded={filterOpen}
+						onClick={() => setFilterOpen((open) => !open)}
+						className="list-none cursor-pointer rounded-lg px-2.5 py-1 text-xs"
+						style={{
+							background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
+							border: '1px solid var(--border)',
+							color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
+						}}
+					>
+						<Filter className="mr-1 inline h-3.5 w-3.5" />
+						Filters{activeFilterCount ? ` · ${activeFilterCount}` : ''}
+					</button>
 					<select
 						value={layoutName}
 						onChange={(e) =>
@@ -747,6 +657,98 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					</select>
 				</div>
 			</div>
+			{filterOpen && (
+				<div
+					className="shrink-0 border-b px-4 py-3"
+					style={{ borderColor: 'var(--border)', background: 'var(--white)' }}
+				>
+					<div className="ml-auto max-w-xl space-y-2">
+						<div className="flex items-center justify-between">
+							<p
+								className="text-[10px] font-semibold uppercase tracking-wider"
+								style={{ color: 'var(--ink-3)' }}
+							>
+								Visible transfers: {visibleEdges.length}/{graphData?.edges.length || 0}
+							</p>
+							<button
+								type="button"
+								onClick={() => setFilters(emptyFilters)}
+								className="text-[10px]"
+								style={{ color: 'var(--accent)' }}
+							>
+								Clear
+							</button>
+						</div>
+						<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+							<input
+								aria-label="From date"
+								type="date"
+								value={filters.from}
+								onChange={(event) => updateFilter('from', event.target.value)}
+								className="prism-input text-[10px] px-2 py-1.5"
+							/>
+							<input
+								aria-label="To date"
+								type="date"
+								value={filters.to}
+								onChange={(event) => updateFilter('to', event.target.value)}
+								className="prism-input text-[10px] px-2 py-1.5"
+							/>
+							<select
+								aria-label="Transfer direction"
+								value={filters.direction}
+								onChange={(event) =>
+									updateFilter('direction', event.target.value as DirectionFilter)
+								}
+								className="prism-input text-[10px] px-2 py-1.5"
+							>
+								<option value="both">All directions</option>
+								<option value="inbound">Inbound to target</option>
+								<option value="outbound">Outbound from target</option>
+							</select>
+							<select
+								aria-label="Asset"
+								value={filters.asset}
+								onChange={(event) => updateFilter('asset', event.target.value)}
+								className="prism-input text-[10px] px-2 py-1.5"
+							>
+								<option value="">All assets</option>
+								{assets.map(([id, label]) => (
+									<option key={id} value={id}>
+										{label}
+									</option>
+								))}
+							</select>
+							<input
+								aria-label="Minimum amount"
+								type="text"
+								inputMode="decimal"
+								maxLength={30}
+								placeholder="Minimum amount"
+								value={filters.minimumAmount}
+								onChange={(event) => updateFilter('minimumAmount', event.target.value)}
+								className="prism-input text-[10px] px-2 py-1.5"
+							/>
+							<select
+								aria-label="Transfer type"
+								value={filters.transferKind}
+								onChange={(event) => updateFilter('transferKind', event.target.value)}
+								className="prism-input text-[10px] px-2 py-1.5"
+							>
+								<option value="">All types</option>
+								{transferKinds.map((kind) => (
+									<option key={kind} value={kind}>
+										{kind}
+									</option>
+								))}
+							</select>
+						</div>
+						<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
+							Amount uses the selected transfer’s asset units.
+						</p>
+					</div>
+				</div>
+			)}
 
 			{/* Cytoscape canvas */}
 			<div ref={containerRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing" />
@@ -774,7 +776,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			</div>
 
 			{/* Empty state */}
-			{(!graphData || (graphData.nodes || []).length === 0) && (
+			{!showLoading && (!graphData || (graphData.nodes || []).length === 0) && (
 				<div
 					className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
 					style={{ background: 'rgba(250,250,252,0.85)' }}
@@ -792,8 +794,24 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						No Address Flow Rendered
 					</h3>
 					<p className="text-xs" style={{ color: 'var(--ink-3)' }}>
-						Enter a target address above to start tracing
+						{emptyMessage}
 					</p>
+				</div>
+			)}
+			{showLoading && (
+				<div
+					className="absolute inset-0 z-20 grid place-items-center pointer-events-none"
+					style={{ background: 'rgba(250,250,252,0.82)' }}
+				>
+					<div
+						className="flex flex-col items-center gap-3 rounded-2xl px-6 py-5"
+						style={{ background: 'rgba(255,255,255,0.94)', border: '1px solid var(--border)' }}
+					>
+						<LoaderCircle className="h-7 w-7 animate-spin" style={{ color: 'var(--accent)' }} />
+						<p className="text-sm font-medium" style={{ color: 'var(--ink-2)' }}>
+							Retrieving address flow…
+						</p>
+					</div>
 				</div>
 			)}
 		</div>
