@@ -91,30 +91,3 @@ export function parseCaseFile(value: string): LocalCase {
 		throw new Error('Unsupported case file.');
 	return item as LocalCase;
 }
-
-export function caseCSV(caseFile: LocalCase): string {
-	const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
-	return [
-		'target_kind,target_id,note,created_at',
-		...caseFile.annotations.map((item) =>
-			[item.target.kind, item.target.id, item.note, item.createdAt].map(quote).join(','),
-		),
-	].join('\n');
-}
-
-export function casePrintHTML(caseFile: LocalCase): string {
-	const escapeHTML = (value: string) =>
-		value
-			.replaceAll('&', '&amp;')
-			.replaceAll('<', '&lt;')
-			.replaceAll('>', '&gt;')
-			.replaceAll('"', '&quot;');
-	const networkName =
-		{
-			'ethereum-mainnet': 'Ethereum mainnet',
-			'base-mainnet': 'Base mainnet',
-			'solana-mainnet': 'Solana mainnet',
-			'tron-mainnet': 'TRON mainnet',
-		}[caseFile.network] ?? caseFile.network;
-	return `<!doctype html><title>${escapeHTML(caseFile.title)}</title><style>body{font:14px system-ui;margin:40px;color:#1a1d23}h1{margin-bottom:4px}small{color:#666}article{margin-top:24px;white-space:pre-wrap}li{margin:10px 0}</style><h1>${escapeHTML(caseFile.title)}</h1><small>${networkName} · ${escapeHTML(caseFile.rootAddress || 'No target selected')} · exported ${escapeHTML(caseFile.updatedAt)}</small><article>${escapeHTML(caseFile.notes)}</article><h2>Annotations</h2><ul>${caseFile.annotations.map((item) => `<li><strong>${escapeHTML(item.target.kind)}:</strong> ${escapeHTML(item.target.id)}<br>${escapeHTML(item.note)}</li>`).join('')}</ul>`;
-}

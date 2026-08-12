@@ -2,14 +2,15 @@ import { Code, ConnectError, createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
 import { EntityType, Network } from '@openchain/proto/openchain/v1/common_pb';
+import { EvidenceService } from '@openchain/proto/openchain/v1/evidence_connect';
 import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
-import { type AddressLabel, LabelVisibility } from '@openchain/proto/openchain/v1/labels_pb';
+import { AddressLabel, LabelVisibility } from '@openchain/proto/openchain/v1/labels_pb';
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
-	type GraphEdge,
-	type GraphNode,
-	type InvestigationLead,
+	GraphEdge,
+	GraphNode,
+	InvestigationLead,
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
 
@@ -21,10 +22,20 @@ const transport = createConnectTransport({ baseUrl: API_BASE });
 export const tracingClient = createClient(TracingService, transport);
 export const lookupClient = createClient(LookupService, transport);
 export const labelClient = createClient(LabelService, transport);
+export const evidenceClient = createClient(EvidenceService, transport);
 
 // Re-export generated proto types for consumer convenience
-export type { GraphNode, GraphEdge, InvestigationLead, AddressLabel, AddressSummary };
-export { EntityType, LabelVisibility, Network, TraceGraphResponse };
+export type { AddressSummary };
+export {
+	AddressLabel,
+	EntityType,
+	GraphEdge,
+	GraphNode,
+	InvestigationLead,
+	LabelVisibility,
+	Network,
+	TraceGraphResponse,
+};
 
 export type SupportedNetwork =
 	| Network.ETHEREUM_MAINNET
@@ -176,6 +187,19 @@ export async function expandNode(
 	retry = false,
 ) {
 	return tracingClient.expandNode({ nodeAddress: address, network, limit: 25, cursor, retry });
+}
+
+export async function exportEvidencePackage(
+	network: SupportedNetwork,
+	transferIds: readonly string[],
+	caseJSON: string,
+): Promise<string> {
+	const response = await evidenceClient.exportEvidencePackage({
+		network,
+		transferIds: [...transferIds],
+		caseJson: caseJSON,
+	});
+	return response.packageJson;
 }
 
 export function requestErrorMessage(error: unknown, fallback: string): string {

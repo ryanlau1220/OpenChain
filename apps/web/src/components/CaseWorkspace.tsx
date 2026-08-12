@@ -1,12 +1,20 @@
-import { Download, FileDown, FileUp, Printer, Save } from 'lucide-react';
+import { Download, FileUp, Printer, Save } from 'lucide-react';
 import type React from 'react';
 import { useRef, useState } from 'react';
-import { type LocalCase, caseCSV, casePrintHTML, parseCaseFile } from '../services/case-file';
+import type { LocalCase } from '../services/case-file';
+import {
+	type EvidencePackage,
+	evidencePrintHTML,
+	parseEvidencePackage,
+} from '../services/evidence-package';
 
 type Props = {
 	caseFile: LocalCase;
 	activeTarget: { kind: 'address' | 'transfer'; id: string } | null;
 	onChange: (caseFile: LocalCase) => void;
+	onExportEvidence: () => Promise<string>;
+	onImportEvidence: (packageFile: EvidencePackage) => void;
+	frozenEvidence: EvidencePackage | null;
 };
 
 const download = (name: string, content: string, type: string) => {
@@ -17,10 +25,18 @@ const download = (name: string, content: string, type: string) => {
 	URL.revokeObjectURL(link.href);
 };
 
-export const CaseWorkspace: React.FC<Props> = ({ caseFile, activeTarget, onChange }) => {
+export const CaseWorkspace: React.FC<Props> = ({
+	caseFile,
+	activeTarget,
+	onChange,
+	onExportEvidence,
+	onImportEvidence,
+	frozenEvidence,
+}) => {
 	const fileInput = useRef<HTMLInputElement>(null);
 	const [annotation, setAnnotation] = useState('');
 	const [error, setError] = useState('');
+	const [exporting, setExporting] = useState(false);
 	const update = (change: Partial<LocalCase>) =>
 		onChange({ ...caseFile, ...change, updatedAt: new Date().toISOString() });
 	const addAnnotation = () => {
@@ -38,23 +54,37 @@ export const CaseWorkspace: React.FC<Props> = ({ caseFile, activeTarget, onChang
 		});
 		setAnnotation('');
 	};
+	const exportPackage = async () => {
+		setExporting(true);
+		try {
+			const content = await onExportEvidence();
+			await parseEvidencePackage(content);
+			download('openchain-evidence-package.json', content, 'application/json');
+			setError('');
+		} catch (cause) {
+			setError(cause instanceof Error ? cause.message : 'Unable to create an evidence package.');
+		} finally {
+			setExporting(false);
+		}
+	};
 	const importFile = async (file: File | undefined) => {
 		if (!file) return;
-		if (file.size > 1_000_000) {
-			setError('Case files must be smaller than 1 MB.');
+		if (file.size > 8 << 20) {
+			setError('Evidence packages must be smaller than 8 MB.');
 			return;
 		}
 		try {
-			onChange(parseCaseFile(await file.text()));
+			onImportEvidence(await parseEvidencePackage(await file.text()));
 			setError('');
 		} catch {
-			setError('This is not a supported OpenChain case file.');
+			setError('This evidence package is invalid or has been altered.');
 		}
 	};
 	const printable = () => {
+		if (!frozenEvidence) return;
 		const page = window.open('', '_blank');
 		if (!page) return;
-		page.document.write(casePrintHTML(caseFile));
+		page.document.write(evidencePrintHTML(frozenEvidence));
 		page.document.close();
 		page.focus();
 		page.print();
@@ -116,24 +146,15 @@ export const CaseWorkspace: React.FC<Props> = ({ caseFile, activeTarget, onChang
 					{caseFile.annotations.length === 1 ? '' : 's'}
 				</p>
 			)}
-			<div className="grid grid-cols-2 gap-2">
+			<div className="grid grid-cols-3 gap-2">
 				<button
 					type="button"
-					onClick={() =>
-						download('openchain-case.json', JSON.stringify(caseFile, null, 2), 'application/json')
-					}
+					onClick={() => void exportPackage()}
+					disabled={exporting}
 					className="btn-outline text-[11px] py-1.5"
 				>
 					<Download className="w-3.5 h-3.5" />
-					JSON
-				</button>
-				<button
-					type="button"
-					onClick={() => download('openchain-case.csv', caseCSV(caseFile), 'text/csv')}
-					className="btn-outline text-[11px] py-1.5"
-				>
-					<FileDown className="w-3.5 h-3.5" />
-					CSV
+					{exporting ? 'Freezing…' : 'Package'}
 				</button>
 				<button
 					type="button"
@@ -143,7 +164,12 @@ export const CaseWorkspace: React.FC<Props> = ({ caseFile, activeTarget, onChang
 					<FileUp className="w-3.5 h-3.5" />
 					Import
 				</button>
-				<button type="button" onClick={printable} className="btn-outline text-[11px] py-1.5">
+				<button
+					type="button"
+					onClick={printable}
+					disabled={!frozenEvidence}
+					className="btn-outline text-[11px] py-1.5 disabled:opacity-50"
+				>
 					<Printer className="w-3.5 h-3.5" />
 					Print
 				</button>
