@@ -193,12 +193,12 @@ function Index() {
 				const expanded = retry
 					? await expandNode(nodeAddress, network, page?.cursor, false)
 					: await fetchTraceStatus(nodeAddress, network, page?.cursor).then((status) => ({
-						newNodes: status.nodes,
-						newEdges: status.edges,
-						nextCursor: status.nextCursor,
-						hasMore: status.hasMore,
-						pending: status.pending,
-					}));
+							newNodes: status.nodes,
+							newEdges: status.edges,
+							nextCursor: status.nextCursor,
+							hasMore: status.hasMore,
+							pending: status.pending,
+						}));
 				if (investigation !== investigationRef.current) return;
 				if (expanded.pending) {
 					setPendingExpansion(key);
@@ -244,7 +244,10 @@ function Index() {
 
 	useEffect(() => {
 		if (!pendingExpansion) return;
-		const timer = window.setTimeout(() => void handleExpand(pendingExpansion, false), tracePollInterval);
+		const timer = window.setTimeout(
+			() => void handleExpand(pendingExpansion, false),
+			tracePollInterval,
+		);
 		return () => window.clearTimeout(timer);
 	}, [handleExpand, pendingExpansion]);
 
