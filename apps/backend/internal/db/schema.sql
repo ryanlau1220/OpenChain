@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS public.transfers (
   asset_decimals INTEGER NOT NULL,
   amount_base_units TEXT NOT NULL,
   block_number BIGINT NOT NULL,
+  block_hash TEXT,
   block_timestamp TIMESTAMPTZ NOT NULL,
+  provisional BOOLEAN NOT NULL DEFAULT TRUE,
   source TEXT NOT NULL,
   retrieved_at TIMESTAMPTZ NOT NULL
 );
@@ -44,9 +46,41 @@ ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS transfer_kind TEXT;
 ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS asset_kind TEXT;
 ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS asset_contract_address TEXT;
 ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS asset_decimals INTEGER;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS block_hash TEXT;
+ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS provisional BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE INDEX IF NOT EXISTS transfers_from_network_idx ON public.transfers (network, from_address, block_number DESC);
 CREATE INDEX IF NOT EXISTS transfers_to_network_idx ON public.transfers (network, to_address, block_number DESC);
+
+CREATE TABLE IF NOT EXISTS public.acquisition_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  network TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  request_identity TEXT NOT NULL,
+  response_sha256 TEXT NOT NULL CHECK (length(response_sha256) = 64),
+  response_body BYTEA NOT NULL,
+  retrieved_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS acquisition_snapshots_network_retrieved_idx ON public.acquisition_snapshots (network, retrieved_at DESC);
+CREATE INDEX IF NOT EXISTS acquisition_snapshots_response_hash_idx ON public.acquisition_snapshots (response_sha256);
+
+CREATE TABLE IF NOT EXISTS public.transfer_acquisitions (
+  transfer_id TEXT NOT NULL REFERENCES public.transfers(id),
+  acquisition_id BIGINT NOT NULL REFERENCES public.acquisition_snapshots(id),
+  PRIMARY KEY (transfer_id, acquisition_id)
+);
+
+CREATE OR REPLACE FUNCTION public.reject_evidence_mutation() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'evidence acquisition records are immutable';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS acquisition_snapshots_immutable ON public.acquisition_snapshots;
+CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON public.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS transfer_acquisitions_immutable ON public.transfer_acquisitions;
+CREATE TRIGGER transfer_acquisitions_immutable BEFORE UPDATE OR DELETE ON public.transfer_acquisitions FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
 
 CREATE TABLE IF NOT EXISTS public.trace_jobs (
   id BIGSERIAL PRIMARY KEY,
