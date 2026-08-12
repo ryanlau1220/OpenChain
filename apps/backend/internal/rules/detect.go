@@ -13,9 +13,15 @@ import (
 )
 
 type Lead struct {
-	ID, RuleID, RuleVersion, Title, SubjectAddress, Rationale, Limitations string
-	Parameters                                                             json.RawMessage
-	TransferIDs                                                            []string
+	ID             string          `json:"id"`
+	RuleID         string          `json:"rule_id"`
+	RuleVersion    string          `json:"rule_version"`
+	Title          string          `json:"title"`
+	SubjectAddress string          `json:"subject_address"`
+	TransferIDs    []string        `json:"transfer_ids"`
+	Rationale      string          `json:"rationale"`
+	Limitations    string          `json:"limitations"`
+	Parameters     json.RawMessage `json:"parameters"`
 }
 
 type Run = db.RuleRun

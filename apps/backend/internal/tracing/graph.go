@@ -140,6 +140,13 @@ func (e *Engine) SourceStatus(ctx context.Context) adapter.SourceStatus {
 	return e.chainAdapter.SourceStatus()
 }
 
+func (e *Engine) ExportEvidence(ctx context.Context, transferIDs []string) (*db.EvidenceExport, error) {
+	if e.database == nil {
+		return nil, fmt.Errorf("evidence storage is not configured")
+	}
+	return e.database.ExportEvidence(ctx, e.Network(), transferIDs)
+}
+
 func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.TransferItem, page *adapter.TransferPage) *GraphResult {
 	seed = e.normalizeAddress(seed)
 	nodes := map[string]GraphNode{seed: e.node(ctx, seed, true)}

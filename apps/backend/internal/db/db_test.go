@@ -76,6 +76,10 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	if _, err := database.SQL.ExecContext(ctx, `UPDATE acquisition_snapshots SET provider = 'changed' WHERE id = $1`, acquisitionID); err == nil {
 		t.Fatal("immutable acquisition snapshot was updated")
 	}
+	exported, err := database.ExportEvidence(ctx, transfer.Network, []string{transfer.ID})
+	if err != nil || len(exported.Transfers) != 1 || len(exported.Snapshots) != 1 || len(exported.Provenance) != 1 || exported.Snapshots[0].Hash != responseHash {
+		t.Fatalf("evidence export = %#v err=%v", exported, err)
+	}
 	var assetCount int
 	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM assets WHERE network = $1 AND contract_address = $2`, transfer.Network, "").Scan(&assetCount); err != nil || assetCount != 1 {
 		t.Fatalf("asset was not persisted: count=%d err=%v", assetCount, err)

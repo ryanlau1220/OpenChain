@@ -283,6 +283,8 @@ func (s *Server) RegisterConnectRPC(mux *http.ServeMux) {
 	mount(path, handler)
 	path, handler = openchainv1connect.NewLabelServiceHandler(&connectLabelHandler{server: s}, options...)
 	mount(path, handler)
+	path, handler = openchainv1connect.NewEvidenceServiceHandler(&connectEvidenceHandler{server: s}, options...)
+	mount(path, handler)
 }
 
 func rateLimitProcedure(procedure string) bool {
@@ -290,7 +292,8 @@ func rateLimitProcedure(procedure string) bool {
 	case openchainv1connect.TracingServiceTraceGraphProcedure,
 		openchainv1connect.TracingServiceExpandNodeProcedure,
 		openchainv1connect.LookupServiceLookupAddressProcedure,
-		openchainv1connect.LookupServiceLookupTransactionProcedure:
+		openchainv1connect.LookupServiceLookupTransactionProcedure,
+		openchainv1connect.EvidenceServiceExportEvidencePackageProcedure:
 		return true
 	default:
 		return false
