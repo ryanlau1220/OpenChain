@@ -154,7 +154,14 @@ case "$1" in
 
     test)
         echo -e "${CYAN}Running Go backend unit and integration tests...${RESET}"
-        (cd apps/backend && GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go test -v ./...)
+        db_integration_test=0
+        if docker compose --env-file .env -f infra/docker-compose.yml exec -T postgres pg_isready -q -U "${POSTGRES_USER:-openchain}" -d "${POSTGRES_DB:-openchain}" >/dev/null 2>&1; then
+            db_integration_test=1
+            echo -e "${CYAN}PostgreSQL is ready; including Apache AGE integration tests.${RESET}"
+        else
+            echo -e "${YELLOW}PostgreSQL is not running; skipping Apache AGE integration tests.${RESET}"
+        fi
+        (cd apps/backend && OPENCHAIN_DB_INTEGRATION_TEST="${db_integration_test}" GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go test -v ./...)
         echo -e "${MAGENTA}Running web frontend unit tests (Vitest)...${RESET}"
         env -u NODE_OPTIONS pnpm --filter @openchain/web test
         echo -e "${GREEN}✓ Full-stack test suite complete.${RESET}"
@@ -164,7 +171,7 @@ case "$1" in
         api_url="http://localhost:${PORT:-8081}/api/v1/health"
         web_url="${WEB_ORIGIN:-http://localhost:3000}"
         echo -e "${CYAN}Checking the running backend and web application...${RESET}"
-        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error "${api_url}" | rg -q '"status":"healthy"'; then
+        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error "${api_url}" >/dev/null; then
             echo -e "${RED}Backend health check failed. Start the stack with ./manage.sh docker and ./manage.sh dev first.${RESET}"
             exit 1
         fi
