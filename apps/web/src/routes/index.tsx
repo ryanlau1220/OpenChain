@@ -236,7 +236,7 @@ function Index() {
 	const canExpand = Boolean(activeAddress) && (!activeBranch || activeBranch.hasMore);
 
 	return (
-		<div className="min-h-screen flex flex-col" style={{ background: 'var(--snow)' }}>
+		<div className="h-dvh overflow-hidden flex flex-col" style={{ background: 'var(--snow)' }}>
 			{caseLoaded && (
 				<Header
 					currentAddress={address}
@@ -250,8 +250,8 @@ function Index() {
 					onNetworkChange={changeNetwork}
 				/>
 			)}
-			<div className="flex-1 flex overflow-hidden">
-				<div className="flex-1 relative">
+			<div className="min-h-0 flex-1 flex flex-col md:flex-row overflow-hidden">
+				<div className="min-h-0 min-w-0 flex-1 relative">
 					<GraphCanvas
 						key={`${network}:${graphData?.seedAddress ?? 'empty'}`}
 						graphData={graphData}
@@ -281,25 +281,29 @@ function Index() {
 							Search a {networkDetails(network).name} address to start an investigation.
 						</div>
 					)}
-					{errorMessage && (
-						<div
-							className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs"
-							style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}
-						>
-							{errorMessage}
-						</div>
-					)}
-					{graphData?.sourceStatus?.warning && (
-						<div
-							className="absolute bottom-5 left-5 max-w-md rounded-lg px-3 py-2 text-xs"
-							style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}
-						>
-							{graphData.sourceStatus.warning}
+					{(errorMessage || graphData?.sourceStatus?.warning) && (
+						<div className="absolute bottom-5 right-5 z-10 max-w-md space-y-2 text-xs pointer-events-none">
+							{errorMessage && (
+								<div
+									className="rounded-lg px-3 py-2"
+									style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}
+								>
+									{errorMessage}
+								</div>
+							)}
+							{graphData?.sourceStatus?.warning && (
+								<div
+									className="rounded-lg px-3 py-2"
+									style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}
+								>
+									{graphData.sourceStatus.warning}
+								</div>
+							)}
 						</div>
 					)}
 				</div>
 				<div
-					className="w-80 overflow-y-auto p-4"
+					className="w-full max-h-[42dvh] md:max-h-none md:w-80 shrink-0 overflow-y-auto p-4"
 					style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}
 				>
 					<h3

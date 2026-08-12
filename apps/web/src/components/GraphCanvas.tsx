@@ -36,6 +36,72 @@ const NODE_COLORS = {
 	default: { bg: '#4B5068', border: '#C8CADC', text: '#fff' },
 };
 
+export type GraphRelationship = {
+	id: string;
+	source: string;
+	target: string;
+	label: string;
+	color: string;
+	representative: GraphEdge;
+};
+
+const baseUnits = (value: string) => {
+	try {
+		return BigInt(value);
+	} catch {
+		return 0n;
+	}
+};
+
+const formatRelationshipAmount = (amount: bigint, edge: GraphEdge) => {
+	const asset = edge.asset;
+	if (!asset?.symbol) return `${amount.toString()} units`;
+	const decimals = Math.min(asset.decimals, 30);
+	const divisor = 10n ** BigInt(decimals);
+	const whole = amount / divisor;
+	const fraction = (amount % divisor).toString().padStart(decimals, '0').slice(0, 4);
+	return `${whole}${fraction.replace(/0+$/, '') ? `.${fraction.replace(/0+$/, '')}` : ''} ${asset.symbol}`;
+};
+
+export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelationship[] {
+	const relationships = new Map<
+		string,
+		{ count: number; amount: bigint; representative: GraphEdge }
+	>();
+	for (const edge of edges) {
+		const asset = edge.asset;
+		const assetKey = [asset?.kind, asset?.contractAddress || asset?.symbol, asset?.decimals].join(
+			':',
+		);
+		const id = `relationship:${edge.source}:${edge.target}:${assetKey}`;
+		const relationship = relationships.get(id);
+		if (!relationship) {
+			relationships.set(id, {
+				count: edge.txCount || 1,
+				amount: baseUnits(edge.amountBaseUnits),
+				representative: edge,
+			});
+			continue;
+		}
+		relationship.count += edge.txCount || 1;
+		relationship.amount += baseUnits(edge.amountBaseUnits);
+		if (Number(edge.lastTxTimestamp) > Number(relationship.representative.lastTxTimestamp))
+			relationship.representative = edge;
+	}
+	return [...relationships].map(([id, relationship]) => {
+		const edge = relationship.representative;
+		const stable = edge.asset?.symbol === 'USDT' || edge.asset?.symbol === 'USDC';
+		return {
+			id,
+			source: edge.source,
+			target: edge.target,
+			label: `${relationship.count} ${relationship.count === 1 ? 'transfer' : 'transfers'} · ${formatRelationshipAmount(relationship.amount, edge)}`,
+			color: stable ? '#34D399' : '#887DFF',
+			representative: edge,
+		};
+	});
+}
+
 const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 	const cleanTarget = targetNodeId?.toLowerCase();
 	cy.batch(() => {
@@ -130,9 +196,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				badge = 'Contract';
 			}
 
-			const inCount = n.inTxCount ?? 0;
-			const outCount = n.outTxCount ?? 0;
-			const displayLabel = `${outCount}↑ ${inCount}↓\n${n.label || n.id.substring(0, 8)}`;
+			const displayLabel = n.label || n.id.substring(0, 8);
 
 			elements.push({
 				group: 'nodes',
@@ -150,18 +214,16 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 		});
 
-		(graphData?.edges || []).forEach((e) => {
-			const isStable = e.asset?.symbol === 'USDT' || e.asset?.symbol === 'USDC';
-			const lineColor = isStable ? '#34D399' : '#887DFF';
+		aggregateGraphEdges(graphData?.edges || []).forEach((relationship) => {
 			elements.push({
 				group: 'edges',
 				data: {
-					id: e.id,
-					source: e.source,
-					target: e.target,
-					label: `${e.txCount} Tx`,
-					color: lineColor,
-					raw: e,
+					id: relationship.id,
+					source: relationship.source,
+					target: relationship.target,
+					label: relationship.label,
+					color: relationship.color,
+					raw: relationship.representative,
 				},
 			});
 		});
@@ -231,7 +293,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'text-valign': 'top',
 						'text-margin-y': -8,
 						'text-wrap': 'wrap',
-						'text-max-width': '120px',
+						'text-max-width': '96px',
 						'text-outline-width': 2,
 						'text-outline-color': 'data(bg)',
 						width: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
@@ -268,7 +330,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'target-arrow-shape': 'triangle',
 						'curve-style': 'bezier',
 						label: 'data(label)',
-						'font-size': '9px',
+						'font-size': '8px',
 						color: '#4B5068',
 						'text-background-opacity': 1,
 						'text-background-color': '#FFFFFF',
