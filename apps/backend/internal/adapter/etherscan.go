@@ -87,6 +87,7 @@ type etherscanTxResult struct {
 	To              string `json:"to"`
 	Value           string `json:"value"`
 	BlockNumber     string `json:"blockNumber"`
+	BlockHash       string `json:"blockHash"`
 	TimeStamp       string `json:"timeStamp"`
 	TraceID         string `json:"traceId"`
 	ContractAddress string `json:"contractAddress"`
@@ -200,7 +201,7 @@ func nativeTransfer(item etherscanTxResult, eventID, kind string) (TransferItem,
 	if _, ok := new(big.Int).SetString(item.Value, 10); !ok {
 		return TransferItem{}, fmt.Errorf("parse Etherscan %s transfer value", strings.ToLower(kind))
 	}
-	return TransferItem{Hash: strings.ToLower(item.Hash), EventID: eventID, TransferKind: kind, From: strings.ToLower(item.From), To: strings.ToLower(item.To), AmountBaseUnits: item.Value, Asset: Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, BlockNumber: block, Timestamp: time.Unix(timestamp, 0)}, nil
+	return TransferItem{Hash: strings.ToLower(item.Hash), EventID: eventID, TransferKind: kind, From: strings.ToLower(item.From), To: strings.ToLower(item.To), AmountBaseUnits: item.Value, Asset: Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, BlockNumber: block, BlockHash: strings.ToLower(item.BlockHash), Timestamp: time.Unix(timestamp, 0)}, nil
 }
 
 func (a *EVMChainAdapter) tokenTransfers(ctx context.Context, items []etherscanTxResult) ([]TransferItem, error) {
@@ -231,7 +232,7 @@ func tokenTransfer(item etherscanTxResult, eventID string) (TransferItem, error)
 	if _, ok := new(big.Int).SetString(item.Value, 10); !ok {
 		return TransferItem{}, fmt.Errorf("parse Etherscan ERC-20 transfer value")
 	}
-	return TransferItem{Hash: strings.ToLower(item.Hash), EventID: eventID, TransferKind: "ERC20", From: strings.ToLower(item.From), To: strings.ToLower(item.To), AmountBaseUnits: item.Value, Asset: Asset{Kind: "ERC20", ContractAddress: strings.ToLower(item.ContractAddress), Symbol: item.TokenSymbol, Decimals: uint32(decimals)}, BlockNumber: block, Timestamp: time.Unix(timestamp, 0)}, nil
+	return TransferItem{Hash: strings.ToLower(item.Hash), EventID: eventID, TransferKind: "ERC20", From: strings.ToLower(item.From), To: strings.ToLower(item.To), AmountBaseUnits: item.Value, Asset: Asset{Kind: "ERC20", ContractAddress: strings.ToLower(item.ContractAddress), Symbol: item.TokenSymbol, Decimals: uint32(decimals)}, BlockNumber: block, BlockHash: strings.ToLower(item.BlockHash), Timestamp: time.Unix(timestamp, 0)}, nil
 }
 
 func (a *EVMChainAdapter) tokenEventIDs(ctx context.Context, items []etherscanTxResult) []string {
@@ -417,13 +418,17 @@ func (a *EVMChainAdapter) get(ctx context.Context, query url.Values, output *eth
 		return NewProviderTransportError(EtherscanSource, err)
 	}
 	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		a.metrics.failure()
+		return fmt.Errorf("read Etherscan response: %w", err)
+	}
+	recordAcquisition(ctx, EtherscanSource, request, body)
 	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		a.metrics.failure()
 		return NewProviderHTTPError(EtherscanSource, response)
 	}
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
-	if err := decoder.Decode(output); err != nil {
+	if err := json.Unmarshal(body, output); err != nil {
 		a.metrics.failure()
 		return fmt.Errorf("decode Etherscan response: %w", err)
 	}

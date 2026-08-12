@@ -436,12 +436,17 @@ func (a *TronAdapter) do(ctx context.Context, request *http.Request, output any)
 		return NewProviderTransportError(TronGridSource, err)
 	}
 	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		a.metrics.failure()
+		return fmt.Errorf("read TronGrid response: %w", err)
+	}
+	recordAcquisition(ctx, TronGridSource, request, body)
 	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		a.metrics.failure()
 		return NewProviderHTTPError(TronGridSource, response)
 	}
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	if err := decoder.Decode(output); err != nil {
 		a.metrics.failure()

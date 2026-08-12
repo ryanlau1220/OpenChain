@@ -85,6 +85,7 @@ type blockscoutTransaction struct {
 	To              blockscoutAddress `json:"to"`
 	Value           string            `json:"value"`
 	BlockNumber     uint64            `json:"block_number"`
+	BlockHash       string            `json:"block_hash"`
 	Timestamp       string            `json:"timestamp"`
 	Index           uint64            `json:"index"`
 }
@@ -106,6 +107,7 @@ type blockscoutTokenTransfer struct {
 	TokenType   string `json:"token_type"`
 	LogIndex    uint64 `json:"log_index"`
 	BlockNumber uint64 `json:"block_number"`
+	BlockHash   string `json:"block_hash"`
 	Timestamp   string `json:"timestamp"`
 }
 
@@ -217,7 +219,7 @@ func (a *BlockscoutChainAdapter) tokenTransfers(ctx context.Context, address str
 		if err != nil {
 			return nil, nil, err
 		}
-		transfers = append(transfers, TransferItem{Hash: strings.ToLower(item.TransactionHash), EventID: "log:" + strconv.FormatUint(item.LogIndex, 10), TransferKind: "ERC20", From: strings.ToLower(item.From.Hash), To: strings.ToLower(item.To.Hash), AmountBaseUnits: item.Total.Value, Asset: Asset{Kind: "ERC20", ContractAddress: strings.ToLower(item.Token.AddressHash), Symbol: item.Token.Symbol, Decimals: uint32(decimals)}, BlockNumber: int64(item.BlockNumber), Timestamp: timestamp})
+		transfers = append(transfers, TransferItem{Hash: strings.ToLower(item.TransactionHash), EventID: "log:" + strconv.FormatUint(item.LogIndex, 10), TransferKind: "ERC20", From: strings.ToLower(item.From.Hash), To: strings.ToLower(item.To.Hash), AmountBaseUnits: item.Total.Value, Asset: Asset{Kind: "ERC20", ContractAddress: strings.ToLower(item.Token.AddressHash), Symbol: item.Token.Symbol, Decimals: uint32(decimals)}, BlockNumber: int64(item.BlockNumber), BlockHash: strings.ToLower(item.BlockHash), Timestamp: timestamp})
 	}
 	return transfers, response.NextPageParams, nil
 }
@@ -270,7 +272,7 @@ func blockscoutNativeTransfer(item blockscoutTransaction, eventID, kind string) 
 	if err != nil {
 		return TransferItem{}, err
 	}
-	return TransferItem{Hash: strings.ToLower(hash), EventID: eventID, TransferKind: kind, From: strings.ToLower(item.From.Hash), To: strings.ToLower(item.To.Hash), AmountBaseUnits: item.Value, Asset: Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, BlockNumber: int64(item.BlockNumber), Timestamp: timestamp}, nil
+	return TransferItem{Hash: strings.ToLower(hash), EventID: eventID, TransferKind: kind, From: strings.ToLower(item.From.Hash), To: strings.ToLower(item.To.Hash), AmountBaseUnits: item.Value, Asset: Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, BlockNumber: int64(item.BlockNumber), BlockHash: strings.ToLower(item.BlockHash), Timestamp: timestamp}, nil
 }
 
 func blockscoutTimestamp(value string) (time.Time, error) {
@@ -339,13 +341,17 @@ func (a *BlockscoutChainAdapter) get(ctx context.Context, path string, query url
 		return NewProviderTransportError(BlockscoutSource, err)
 	}
 	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		a.metrics.failure()
+		return fmt.Errorf("read Blockscout response: %w", err)
+	}
+	recordAcquisition(ctx, BlockscoutSource, request, body)
 	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		a.metrics.failure()
 		return NewProviderHTTPError(BlockscoutSource, response)
 	}
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
-	if err := decoder.Decode(output); err != nil {
+	if err := json.Unmarshal(body, output); err != nil {
 		a.metrics.failure()
 		return fmt.Errorf("decode Blockscout response: %w", err)
 	}

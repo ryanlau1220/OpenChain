@@ -70,14 +70,20 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	if limit == 0 || limit > maxPageSize {
 		limit = maxPageSize
 	}
-	page, err := e.chainAdapter.ListTransfers(ctx, address, limit, cursor)
+	acquisitionContext, recorder := adapter.WithAcquisitionRecorder(ctx)
+	page, err := e.chainAdapter.ListTransfers(acquisitionContext, address, limit, cursor)
 	if err != nil {
+		if e.database != nil {
+			if persistErr := e.database.SaveAcquisitions(ctx, e.Network(), recorder.Items()); persistErr != nil {
+				return nil, persistErr
+			}
+		}
 		return nil, err
 	}
 	transfers := filterTransfers(page.Transfers, address, direction)
 	result := e.graph(ctx, address, transfers, page)
 	if e.database != nil {
-		if err := e.database.SaveGraph(ctx, e.toAddresses(result.Nodes), e.toTransfers(transfers, page.SourceStatus)); err != nil {
+		if err := e.database.SaveEvidenceGraph(ctx, e.toAddresses(result.Nodes), e.toTransfers(transfers, page.SourceStatus), recorder.Items()); err != nil {
 			return nil, err
 		}
 	}
@@ -195,9 +201,20 @@ func filterTransfers(transfers []adapter.TransferItem, address string, direction
 func (e *Engine) toTransfers(items []adapter.TransferItem, source adapter.SourceStatus) []db.Transfer {
 	transfers := make([]db.Transfer, 0, len(items))
 	for _, item := range items {
-		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: e.normalizeAddress(item.From), ToAddress: e.normalizeAddress(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockTimestamp: item.Timestamp, Source: source.Source, RetrievedAt: source.RetrievedAt})
+		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: e.normalizeAddress(item.From), ToAddress: e.normalizeAddress(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockHash: item.BlockHash, BlockTimestamp: item.Timestamp, Provisional: isProvisional(e.Network(), item.Timestamp, source.RetrievedAt), Source: source.Source, RetrievedAt: source.RetrievedAt})
 	}
 	return transfers
+}
+
+func isProvisional(network string, blockTimestamp, retrievedAt time.Time) bool {
+	if blockTimestamp.IsZero() {
+		return true
+	}
+	window := 15 * time.Minute
+	if network == "solana-mainnet" || network == "tron-mainnet" {
+		window = time.Minute
+	}
+	return retrievedAt.Before(blockTimestamp.Add(window))
 }
 
 func (e *Engine) toAddresses(nodes []GraphNode) []db.Address {

@@ -295,12 +295,17 @@ func (a *SolanaAdapter) historyRequest(ctx context.Context, method, endpoint str
 		return NewProviderTransportError(HeliusHistorySource, err)
 	}
 	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if err != nil {
+		a.metrics.failure()
+		return fmt.Errorf("read Solana history response: %w", err)
+	}
+	recordAcquisition(ctx, HeliusHistorySource, request, responseBody)
 	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		a.metrics.failure()
 		return NewProviderHTTPError(HeliusHistorySource, response)
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 8<<20)).Decode(output); err != nil {
+	if err := json.Unmarshal(responseBody, output); err != nil {
 		a.metrics.failure()
 		return fmt.Errorf("decode Solana history response: %w", err)
 	}
@@ -410,8 +415,13 @@ func (a *SolanaAdapter) call(ctx context.Context, method string, params []any, o
 		return NewProviderTransportError(HeliusHistorySource, err)
 	}
 	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		a.metrics.failure()
+		return fmt.Errorf("read Solana RPC response: %w", err)
+	}
+	recordAcquisition(ctx, HeliusHistorySource, request, responseBody)
 	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		a.metrics.failure()
 		return NewProviderHTTPError(HeliusHistorySource, response)
 	}
@@ -422,8 +432,7 @@ func (a *SolanaAdapter) call(ctx context.Context, method string, params []any, o
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(response.Body, 4<<20))
-	if err := decoder.Decode(&envelope); err != nil {
+	if err := json.Unmarshal(responseBody, &envelope); err != nil {
 		a.metrics.failure()
 		return fmt.Errorf("decode Solana RPC response: %w", err)
 	}

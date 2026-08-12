@@ -54,13 +54,18 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 	database.SQL.SetMaxOpenConns(1)
 	database.SQL.SetMaxIdleConns(1)
 	schema := "openchain_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s; CREATE TABLE %s.trace_jobs (LIKE public.trace_jobs INCLUDING ALL); SET search_path = %s, public`, schema, schema, schema)); err != nil {
+	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s;
+CREATE TABLE %s.trace_jobs (LIKE public.trace_jobs INCLUDING ALL);
+CREATE TABLE %s.transfers (LIKE public.transfers INCLUDING ALL);
+CREATE TABLE %s.assets (LIKE public.assets INCLUDING ALL);
+CREATE TABLE %s.acquisition_snapshots (LIKE public.acquisition_snapshots INCLUDING ALL);
+CREATE TABLE %s.transfer_acquisitions (transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (transfer_id, acquisition_id));
+CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM trace_jobs WHERE network = 'ethereum-mainnet' AND address = $1`, from)
 		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
-		_, _ = database.SQL.ExecContext(context.Background(), `DELETE FROM transfers WHERE id = $1`, "ethereum-mainnet:"+hash+":tx")
 	}()
 
 	client := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
@@ -89,6 +94,16 @@ func TestQueueIntegrationReturnsCompletedTrace(t *testing.T) {
 		if !result.Pending {
 			if len(result.Nodes) != 2 || len(result.Edges) != 1 || result.Edges[0].TransactionHash != hash {
 				t.Fatalf("completed trace = %#v", result)
+			}
+			var snapshots, links int
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_snapshots`).Scan(&snapshots); err != nil {
+				t.Fatal(err)
+			}
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM transfer_acquisitions WHERE transfer_id = $1`, "ethereum-mainnet:"+hash+":tx").Scan(&links); err != nil {
+				t.Fatal(err)
+			}
+			if snapshots != 3 || links != 3 {
+				t.Fatalf("snapshots = %d, links = %d", snapshots, links)
 			}
 			return
 		}

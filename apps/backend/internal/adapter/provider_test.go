@@ -1,8 +1,12 @@
 package adapter
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -29,6 +33,19 @@ func TestRetryDelayOnlyRetriesTemporaryProviderFailures(t *testing.T) {
 				t.Fatalf("delay = %s", delay)
 			}
 		})
+	}
+}
+
+func TestAcquisitionIdentityRedactsCredentials(t *testing.T) {
+	ctx, recorder := WithAcquisitionRecorder(context.Background())
+	request, err := http.NewRequest(http.MethodPost, (&url.URL{Scheme: "https", Host: "provider.test", Path: "/history", RawQuery: "address=test&api-key=secret&token=private"}).String(), bytes.NewReader([]byte(`{"address":"test"}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordAcquisition(ctx, "test", request, []byte(`{"result":[]}`))
+	items := recorder.Items()
+	if len(items) != 1 || strings.Contains(items[0].RequestIdentity, "secret") || strings.Contains(items[0].RequestIdentity, "private") || !strings.Contains(items[0].RequestIdentity, "redacted") || !strings.Contains(items[0].RequestIdentity, "body-sha256=") {
+		t.Fatalf("acquisition identity = %#v", items)
 	}
 }
 

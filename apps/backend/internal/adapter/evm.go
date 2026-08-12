@@ -85,16 +85,15 @@ func (c *EVMClient) callRPC(ctx context.Context, method string, params []interfa
 	defer func() {
 		_ = resp.Body.Close()
 	}()
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		c.metrics.failure()
-		return nil, NewProviderHTTPError("evm-rpc", resp)
-	}
-
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		c.metrics.failure()
 		return nil, err
+	}
+	recordAcquisition(ctx, "evm-rpc", req, body)
+	if resp.StatusCode != http.StatusOK {
+		c.metrics.failure()
+		return nil, NewProviderHTTPError("evm-rpc", resp)
 	}
 
 	var rpcResp RPCResponse

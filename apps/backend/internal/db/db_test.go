@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,14 +35,28 @@ func TestSaveGraphIntegration(t *testing.T) {
 	if err := database.InitSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
+	database.SQL.SetMaxOpenConns(1)
+	database.SQL.SetMaxIdleConns(1)
+	schema := "openchain_evidence_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s;
+CREATE TABLE %s.transfers (LIKE public.transfers INCLUDING ALL);
+CREATE TABLE %s.assets (LIKE public.assets INCLUDING ALL);
+CREATE TABLE %s.acquisition_snapshots (LIKE public.acquisition_snapshots INCLUDING ALL);
+CREATE TABLE %s.transfer_acquisitions (transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (transfer_id, acquisition_id));
+CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
+		t.Fatal(err)
+	}
 	from := "0x1000000000000000000000000000000000000001"
 	to := "0x2000000000000000000000000000000000000002"
-	transfer := Transfer{ID: "ethereum-mainnet:test-graph:tx", Network: "ethereum-mainnet", TransactionHash: "0xtest-graph", EventID: "tx", TransferKind: "NATIVE", FromAddress: from, ToAddress: to, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, AmountBaseUnits: "42", BlockNumber: 1, BlockTimestamp: time.Unix(1, 0), Source: "test", RetrievedAt: time.Now().UTC()}
+	transfer := Transfer{ID: "ethereum-mainnet:test-graph:tx", Network: "ethereum-mainnet", TransactionHash: "0xtest-graph", EventID: "tx", TransferKind: "NATIVE", FromAddress: from, ToAddress: to, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, AmountBaseUnits: "42", BlockNumber: 1, BlockHash: "0xblock", BlockTimestamp: time.Unix(1, 0), Provisional: false, Source: "test", RetrievedAt: time.Now().UTC()}
+	rawResponse := []byte(`{"status":"1","result":["evidence"]}`)
+	acquisition := adapter.RawAcquisition{Provider: "test-provider", RequestIdentity: "GET https://provider.test/account?address=test", Response: rawResponse, RetrievedAt: time.Now().UTC()}
 	defer func() {
 		cleanupGraph(t, database, transfer.ID, transfer.Network, from, to)
-		_, _ = database.SQL.Exec(`DELETE FROM transfers WHERE id = $1`, transfer.ID)
+		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 	}()
-	if err := database.SaveGraph(ctx, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}); err != nil {
+	if err := database.SaveEvidenceGraph(ctx, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}, []adapter.RawAcquisition{acquisition}); err != nil {
 		t.Fatal(err)
 	}
 	var relationalCount int
@@ -50,6 +65,16 @@ func TestSaveGraphIntegration(t *testing.T) {
 	}
 	if relationalCount != 1 || graphFundFlowCount(t, database, transfer.ID) != 1 {
 		t.Fatalf("transfer was not persisted to both stores")
+	}
+	expectedHash := sha256.Sum256(rawResponse)
+	var acquisitionID int64
+	var responseHash string
+	var provisional bool
+	if err := database.SQL.QueryRowContext(ctx, `SELECT snapshot.id, snapshot.response_sha256, transfer.provisional FROM acquisition_snapshots snapshot JOIN transfer_acquisitions link ON link.acquisition_id = snapshot.id JOIN transfers transfer ON transfer.id = link.transfer_id WHERE transfer.id = $1`, transfer.ID).Scan(&acquisitionID, &responseHash, &provisional); err != nil || responseHash != fmt.Sprintf("%x", expectedHash[:]) || provisional {
+		t.Fatalf("transfer provenance = id:%d hash:%q provisional:%v err:%v", acquisitionID, responseHash, provisional, err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE acquisition_snapshots SET provider = 'changed' WHERE id = $1`, acquisitionID); err == nil {
+		t.Fatal("immutable acquisition snapshot was updated")
 	}
 	var assetCount int
 	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM assets WHERE network = $1 AND contract_address = $2`, transfer.Network, "").Scan(&assetCount); err != nil || assetCount != 1 {

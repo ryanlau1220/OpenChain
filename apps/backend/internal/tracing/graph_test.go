@@ -34,6 +34,16 @@ func TestTransferIDIncludesNetwork(t *testing.T) {
 	}
 }
 
+func TestFinalityWindowsMarkRecentObservationsProvisional(t *testing.T) {
+	now := time.Now().UTC()
+	if !isProvisional("ethereum-mainnet", now, now) || isProvisional("ethereum-mainnet", now.Add(-16*time.Minute), now) {
+		t.Fatal("Ethereum finality window was not applied")
+	}
+	if !isProvisional("solana-mainnet", now, now) || isProvisional("solana-mainnet", now.Add(-2*time.Minute), now) {
+		t.Fatal("Solana finality window was not applied")
+	}
+}
+
 func TestTraceJobRetriesTemporaryProviderFailure(t *testing.T) {
 	chain := &retryChain{}
 	queue := NewQueue(NewEngine(chain, nil, labels.NewService(nil)), nil, 1)

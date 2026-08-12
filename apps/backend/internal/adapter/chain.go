@@ -17,6 +17,7 @@ type TransferItem struct {
 	Hash, EventID, TransferKind, From, To, AmountBaseUnits string
 	Asset                                                  Asset
 	BlockNumber                                            int64
+	BlockHash                                              string
 	Timestamp                                              time.Time
 }
 
