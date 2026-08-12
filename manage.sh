@@ -197,43 +197,83 @@ case "$1" in
             exit 1
         fi
         smoke_health_file="$(mktemp)"
-        trap 'rm -f "${smoke_health_file}"' EXIT
         if ! smoke_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error --output "${smoke_health_file}" --write-out '%{http_code}' "${smoke_health_url}")"; then
             rm -f "${smoke_health_file}"
-            trap - EXIT
             echo -e "${RED}Public API smoke check failed at ${smoke_health_url}.${RESET}"
             exit 1
         fi
         if [ "${smoke_status}" != "200" ] && [ "${smoke_status}" != "503" ]; then
             rm -f "${smoke_health_file}"
-            trap - EXIT
             echo -e "${RED}Public API smoke check failed at ${smoke_health_url} (HTTP ${smoke_status}).${RESET}"
             exit 1
         fi
         if ! rg -q '"service":"openchain-api"' "${smoke_health_file}"; then
             rm -f "${smoke_health_file}"
-            trap - EXIT
             echo -e "${RED}Public API returned an invalid health response.${RESET}"
             exit 1
         fi
         rm -f "${smoke_health_file}"
-        trap - EXIT
-        k6_vus="${OPENCHAIN_K6_VUS:-2}"
-        k6_iterations="${OPENCHAIN_K6_ITERATIONS:-4}"
-        if ! [[ "${k6_vus}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${k6_iterations}" =~ ^[1-9][0-9]*$ ]]; then
-            echo -e "${RED}OPENCHAIN_K6_VUS and OPENCHAIN_K6_ITERATIONS must be positive integers.${RESET}"
+
+        if ! command -v k6 >/dev/null 2>&1; then
+            echo -e "${RED}k6 is required for smoke tests. Install k6 locally, then rerun ./manage.sh smoke.${RESET}"
             exit 1
         fi
-        case "${smoke_web_url}" in
-            http://localhost*|http://127.0.0.1*)
-                echo -e "${YELLOW}k6 is skipped for a local dev URL; run OPENCHAIN_SMOKE_URL=https://<staging-host> ./manage.sh smoke to load-test a Docker-reachable deployment.${RESET}"
-                ;;
-            *)
-                echo -e "${CYAN}Running k6 public-route smoke (${k6_vus} VUs, ${k6_iterations} iterations)...${RESET}"
-                docker run --rm -v "${PWD}/infra/k6:/scripts:ro" -e "OPENCHAIN_K6_BASE_URL=${smoke_web_url}" -e "OPENCHAIN_K6_VUS=${k6_vus}" -e "OPENCHAIN_K6_ITERATIONS=${k6_iterations}" grafana/k6:0.52.0 run /scripts/smoke.js
-                ;;
-        esac
-        echo -e "${GREEN}✓ Public routes are reachable; a degraded health response remains observable to monitoring.${RESET}"
+
+        if ! docker compose --env-file .env -f infra/docker-compose.yml exec -T postgres pg_isready -q -U "${POSTGRES_USER:-openchain}" -d "${POSTGRES_DB:-openchain}" >/dev/null 2>&1; then
+            echo -e "${RED}PostgreSQL is required for controlled queue smoke tests. Start it with ./manage.sh docker first.${RESET}"
+            exit 1
+        fi
+
+        load_test_port="${OPENCHAIN_LOAD_TEST_PORT:-18091}"
+        load_vus="${OPENCHAIN_K6_LOAD_VUS:-5}"
+        if ! [[ "${load_test_port}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${load_vus}" =~ ^[1-9][0-9]*$ ]]; then
+            echo -e "${RED}OPENCHAIN_LOAD_TEST_PORT and OPENCHAIN_K6_LOAD_VUS must be positive integers.${RESET}"
+            exit 1
+        fi
+        load_test_binary="$(mktemp /tmp/openchain-loadtest.XXXXXX)"
+        load_test_pid=""
+        cleanup_smoke() {
+            if [ -n "${load_test_pid}" ] && kill -0 "${load_test_pid}" 2>/dev/null; then
+                kill "${load_test_pid}" 2>/dev/null || true
+                wait "${load_test_pid}" 2>/dev/null || true
+            fi
+            rm -f "${load_test_binary}"
+        }
+        trap cleanup_smoke EXIT INT TERM
+
+        echo -e "${CYAN}Building isolated controlled-provider test server...${RESET}"
+        GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go build -o "${load_test_binary}" ./apps/backend/cmd/loadtest
+        OPENCHAIN_LOAD_TEST_PORT="${load_test_port}" \
+            OPENCHAIN_LOAD_TEST_REQUESTS_PER_MINUTE=8 \
+            OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS=4 \
+            OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_CLIENT=2 \
+            OPENCHAIN_LOAD_TEST_PROVIDER_DELAY_MS=250 \
+            "${load_test_binary}" >/tmp/openchain-loadtest.log 2>&1 &
+        load_test_pid="$!"
+        for _ in {1..50}; do
+            if curl --connect-timeout 1 --max-time 1 --fail --silent "http://127.0.0.1:${load_test_port}/api/v1/health" >/dev/null 2>&1; then
+                break
+            fi
+            sleep 0.1
+        done
+        if ! curl --connect-timeout 1 --max-time 1 --fail --silent "http://127.0.0.1:${load_test_port}/api/v1/health" >/dev/null 2>&1; then
+            echo -e "${RED}Controlled provider test server did not start. See /tmp/openchain-loadtest.log.${RESET}"
+            exit 1
+        fi
+
+        echo -e "${CYAN}Running deterministic k6 queue, limiter, polling, API, and UI smoke...${RESET}"
+        OPENCHAIN_K6_WEB_URL="${smoke_web_url}" \
+            OPENCHAIN_K6_API_URL="http://127.0.0.1:${load_test_port}" \
+            OPENCHAIN_K6_REQUEST_LIMIT=8 \
+            OPENCHAIN_K6_PER_CLIENT_QUEUE_LIMIT=2 \
+            k6 run infra/k6/smoke.js
+        echo -e "${CYAN}Running controlled k6 latency profile (${load_vus} VUs; ${OPENCHAIN_K6_LOAD_DURATION:-10s})...${RESET}"
+        OPENCHAIN_K6_WEB_URL="${smoke_web_url}" \
+            OPENCHAIN_K6_API_URL="http://127.0.0.1:${load_test_port}" \
+            OPENCHAIN_K6_LOAD_VUS="${load_vus}" \
+            OPENCHAIN_K6_LOAD_DURATION="${OPENCHAIN_K6_LOAD_DURATION:-10s}" \
+            k6 run infra/k6/load.js
+        echo -e "${GREEN}✓ Native k6 checks passed: UI/API latency, error rate, shared-IP limits, queue fairness, saturation, polling, and provider-stub traces.${RESET}"
         ;;
 
     clean)
