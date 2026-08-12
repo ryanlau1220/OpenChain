@@ -51,6 +51,23 @@ type NetworkRuntime struct {
 	Queue  *tracing.Queue
 }
 
+type healthNetwork struct {
+	Network   string                   `json:"network"`
+	Queue     tracing.Stats            `json:"queue"`
+	Providers []adapter.ProviderHealth `json:"providers"`
+}
+
+// HealthAlert is a stable, machine-readable operational signal. A degraded
+// service remains reachable so monitoring can collect the cause and operators
+// can drain or retry durable jobs.
+type HealthAlert struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"`
+	Network  string `json:"network,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Message  string `json:"message"`
+}
+
 func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service, webOrigin string, publicRequestsPerMinute int, trustProxy bool) *Server {
 	return &Server{networks: networks, labels: registry, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy}
 }
@@ -115,32 +132,32 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	queue := tracing.Stats{}
-	type networkHealth struct {
-		Network   string                   `json:"network"`
-		Queue     tracing.Stats            `json:"queue"`
-		Providers []adapter.ProviderHealth `json:"providers"`
-	}
 	type providerHealthReporter interface {
 		ProviderHealth() []adapter.ProviderHealth
 	}
-	networks := make([]networkHealth, 0, len(s.networks))
+	networks := make([]healthNetwork, 0, len(s.networks))
 	var err error
 	for _, runtime := range s.networks {
-		stats, statsErr := runtime.Queue.Stats(r.Context())
-		if statsErr != nil && err == nil {
-			err = statsErr
+		stats := tracing.Stats{}
+		if runtime.Queue != nil {
+			var statsErr error
+			stats, statsErr = runtime.Queue.Stats(r.Context())
+			if statsErr != nil && err == nil {
+				err = statsErr
+			}
 		}
 		queue.Enabled = queue.Enabled || stats.Enabled
 		queue.Queued += stats.Queued
 		queue.Running += stats.Running
 		queue.Failed += stats.Failed
-		item := networkHealth{Network: runtime.Engine.Network(), Queue: stats}
+		item := healthNetwork{Network: runtime.Engine.Network(), Queue: stats}
 		if reporter, ok := runtime.Chain.(providerHealthReporter); ok {
 			item.Providers = reporter.ProviderHealth()
 		}
 		networks = append(networks, item)
 	}
 	sort.Slice(networks, func(left, right int) bool { return networks[left].Network < networks[right].Network })
+	alerts := healthAlerts(networks, s.networks)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		slog.Error("health queue stats", "error", err)
@@ -149,13 +166,43 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	status := "healthy"
 	if err != nil {
 		status = "unhealthy"
+	} else if len(alerts) > 0 {
+		status = "degraded"
 	}
 	_ = json.NewEncoder(w).Encode(struct {
 		Status   string          `json:"status"`
 		Service  string          `json:"service"`
-		Networks []networkHealth `json:"networks"`
+		Networks []healthNetwork `json:"networks"`
 		Queue    tracing.Stats   `json:"queue"`
-	}{Status: status, Service: "openchain-api", Networks: networks, Queue: queue})
+		Alerts   []HealthAlert   `json:"alerts"`
+	}{Status: status, Service: "openchain-api", Networks: networks, Queue: queue, Alerts: alerts})
+}
+
+func healthAlerts(networks []healthNetwork, runtimes map[pb.Network]NetworkRuntime) []HealthAlert {
+	alerts := make([]HealthAlert, 0)
+	for _, network := range networks {
+		for _, runtime := range runtimes {
+			if runtime.Engine == nil || runtime.Engine.Network() != network.Network {
+				continue
+			}
+			capacity := runtime.Queue.Capacity()
+			if capacity > 0 && network.Queue.Queued >= int64(capacity) {
+				alerts = append(alerts, HealthAlert{Code: "trace_queue_full", Severity: "critical", Network: network.Network, Message: "Trace queue is at capacity; new investigations are rejected."})
+			} else if capacity > 0 && network.Queue.Queued*100 >= int64(capacity*80) {
+				alerts = append(alerts, HealthAlert{Code: "trace_queue_near_capacity", Severity: "warning", Network: network.Network, Message: "Trace queue is at least 80% full."})
+			}
+			break
+		}
+		if network.Queue.Failed > 0 {
+			alerts = append(alerts, HealthAlert{Code: "trace_jobs_failed", Severity: "warning", Network: network.Network, Message: "One or more trace jobs require a user retry."})
+		}
+		for _, provider := range network.Providers {
+			if provider.LastFailureAt != nil && (provider.LastSuccessAt == nil || provider.LastFailureAt.After(*provider.LastSuccessAt)) {
+				alerts = append(alerts, HealthAlert{Code: "provider_unhealthy", Severity: "warning", Network: network.Network, Provider: provider.Provider, Message: "The most recent provider request failed."})
+			}
+		}
+	}
+	return alerts
 }
 
 func shortAddress(address string) string {
