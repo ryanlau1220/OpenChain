@@ -112,17 +112,15 @@ function decodedBase58Length(value: string): number {
 	return bytes + (value.length - value.replace(/^1+/, '').length);
 }
 
-// EVM address text is intentionally ambiguous between Ethereum and Base.
 export function detectAddressNetwork(value: string): SupportedNetwork | undefined {
 	const address = value.trim();
+	// An EVM address cannot identify a specific EVM chain. Default to Ethereum,
+	// while leaving the network control available for an investigator to choose Base.
+	if (/^0x[\da-fA-F]{40}$/.test(address)) return Network.ETHEREUM_MAINNET;
 	if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address) && decodedBase58Length(address) === 25)
 		return Network.TRON_MAINNET;
 	if (decodedBase58Length(address) === 32) return Network.SOLANA_MAINNET;
 	return undefined;
-}
-
-export function isEVMAddress(value: string): boolean {
-	return /^0x[\da-fA-F]{40}$/.test(value.trim());
 }
 
 export function explorerURL(network: SupportedNetwork, resource: 'address' | 'tx', value: string) {
