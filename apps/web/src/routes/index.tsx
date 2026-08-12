@@ -31,6 +31,7 @@ import {
 export const Route = createFileRoute('/')({ component: Index });
 
 type BranchPage = { cursor: string; hasMore: boolean };
+const tracePollInterval = 5_000;
 
 function Index() {
 	const [address, setAddress] = useState('');
@@ -80,6 +81,7 @@ function Index() {
 			try {
 				const graph = await fetchTraceGraph(target, targetNetwork, !preserveCurrentGraph);
 				if (investigation !== investigationRef.current) return;
+				setErrorMessage('');
 				setGraphData(graph);
 				setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
 				setCaseFile((current) => ({
@@ -91,11 +93,12 @@ function Index() {
 				setBranchPages({
 					[graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore },
 				});
-				void lookupAddress(target, targetNetwork).then((lookup) => {
-					if (investigation !== investigationRef.current) return;
-					setSummary(lookup.summary ?? null);
-					setLabels(lookup.labels);
-				});
+				if (!preserveCurrentGraph)
+					void lookupAddress(target, targetNetwork).then((lookup) => {
+						if (investigation !== investigationRef.current) return;
+						setSummary(lookup.summary ?? null);
+						setLabels(lookup.labels);
+					});
 			} catch (error) {
 				console.error(error);
 				if (investigation === investigationRef.current)
@@ -141,7 +144,10 @@ function Index() {
 
 	useEffect(() => {
 		if (!graphData?.pending) return;
-		const timer = window.setTimeout(() => void load(graphData.seedAddress, true), 2000);
+		const timer = window.setTimeout(
+			() => void load(graphData.seedAddress, true),
+			tracePollInterval,
+		);
 		return () => window.clearTimeout(timer);
 	}, [graphData, load]);
 
