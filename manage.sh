@@ -218,6 +218,21 @@ case "$1" in
         fi
         rm -f "${smoke_health_file}"
         trap - EXIT
+        k6_vus="${OPENCHAIN_K6_VUS:-2}"
+        k6_iterations="${OPENCHAIN_K6_ITERATIONS:-4}"
+        if ! [[ "${k6_vus}" =~ ^[1-9][0-9]*$ ]] || ! [[ "${k6_iterations}" =~ ^[1-9][0-9]*$ ]]; then
+            echo -e "${RED}OPENCHAIN_K6_VUS and OPENCHAIN_K6_ITERATIONS must be positive integers.${RESET}"
+            exit 1
+        fi
+        case "${smoke_web_url}" in
+            http://localhost*|http://127.0.0.1*)
+                echo -e "${YELLOW}k6 is skipped for a local dev URL; run OPENCHAIN_SMOKE_URL=https://<staging-host> ./manage.sh smoke to load-test a Docker-reachable deployment.${RESET}"
+                ;;
+            *)
+                echo -e "${CYAN}Running k6 public-route smoke (${k6_vus} VUs, ${k6_iterations} iterations)...${RESET}"
+                docker run --rm -v "${PWD}/infra/k6:/scripts:ro" -e "OPENCHAIN_K6_BASE_URL=${smoke_web_url}" -e "OPENCHAIN_K6_VUS=${k6_vus}" -e "OPENCHAIN_K6_ITERATIONS=${k6_iterations}" grafana/k6:0.52.0 run /scripts/smoke.js
+                ;;
+        esac
         echo -e "${GREEN}✓ Public routes are reachable; a degraded health response remains observable to monitoring.${RESET}"
         ;;
 
