@@ -6,20 +6,30 @@ test.beforeEach(async ({ page }) => {
 	await expect(page.getByLabel('Case title')).toBeVisible();
 });
 
-test('keeps EVM chain selection explicit and detects unique address formats', async ({ page }) => {
+async function selectNetwork(page: import('@playwright/test').Page, name: string) {
+	await page.getByLabel('Network').click();
+	await page.getByRole('button', { name }).click();
+}
+
+test('preserves an explicit EVM choice and detects address families', async ({ page }) => {
 	const network = page.getByLabel('Network');
 	const address = page.getByPlaceholder('Search target address');
 
-	await network.selectOption({ label: 'Base Mainnet' });
+	await selectNetwork(page, 'Base Mainnet');
+	await expect(network).toContainText('Base Mainnet');
 	await address.fill('0x7a250d5630b4cf539739df2c5dacb4c659f2488d');
-	await expect(network).toHaveValue('2');
-	await expect(page.getByText('EVM address — choose its network')).toBeVisible();
+	await expect(network).toContainText('Base Mainnet');
+
+	await selectNetwork(page, 'Solana Mainnet');
+	await address.fill('');
+	await address.fill('0x7a250d5630b4cf539739df2c5dacb4c659f2488d');
+	await expect(network).toContainText('Ethereum Mainnet');
 
 	await address.fill('11111111111111111111111111111111');
-	await expect(network).toHaveValue('3');
+	await expect(network).toContainText('Solana Mainnet');
 
 	await address.fill('TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj');
-	await expect(network).toHaveValue('4');
+	await expect(network).toContainText('TRON Mainnet');
 });
 
 test('persists local investigation notes across a reload', async ({ page }) => {

@@ -29,7 +29,7 @@ func TestSolanaListsBoundedNativeAndSPLTransfersWithoutSkippingEvents(t *testing
 				_, _ = writer.Write([]byte(`[]`))
 				return
 			}
-			_, _ = writer.Write([]byte(`[{"signature":"` + signature + `","slot":9,"timestamp":100,"nativeTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":42},{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":"7"}],"tokenTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","mint":"` + mint + `","tokenAmount":"1000000"}],"accountData":[{"tokenBalanceChanges":[{"mint":"` + mint + `","rawTokenAmount":{"decimals":6}}]}]}]`))
+			_, _ = writer.Write([]byte(`[{"signature":"` + signature + `","slot":9,"timestamp":100,"nativeTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":42},{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":"7"}],"tokenTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","mint":"` + mint + `","tokenAmount":"1000000"},{"fromUserAccount":"","toUserAccount":"","mint":"","tokenAmount":null}],"accountData":[{"tokenBalanceChanges":[{"mint":"` + mint + `","rawTokenAmount":{"decimals":6}}]}]}]`))
 		case "/v0/transactions":
 			var body struct {
 				Transactions []string `json:"transactions"`
@@ -40,7 +40,7 @@ func TestSolanaListsBoundedNativeAndSPLTransfersWithoutSkippingEvents(t *testing
 			if len(body.Transactions) != 1 || body.Transactions[0] != signature {
 				t.Fatalf("history lookup = %#v", body)
 			}
-			_, _ = writer.Write([]byte(`[{"signature":"` + signature + `","slot":9,"timestamp":100,"nativeTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":42},{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":"7"}],"tokenTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","mint":"` + mint + `","tokenAmount":"1000000"}],"accountData":[{"tokenBalanceChanges":[{"mint":"` + mint + `","rawTokenAmount":{"decimals":6}}]}]}]`))
+			_, _ = writer.Write([]byte(`[{"signature":"` + signature + `","slot":9,"timestamp":100,"nativeTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":42},{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","amount":"7"}],"tokenTransfers":[{"fromUserAccount":"` + address + `","toUserAccount":"` + destination + `","mint":"` + mint + `","tokenAmount":"1000000"},{"fromUserAccount":"","toUserAccount":"","mint":"","tokenAmount":null}],"accountData":[{"tokenBalanceChanges":[{"mint":"` + mint + `","rawTokenAmount":{"decimals":6}}]}]}]`))
 		default:
 			t.Fatalf("unexpected path %q", request.URL.Path)
 		}

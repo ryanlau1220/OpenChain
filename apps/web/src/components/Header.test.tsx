@@ -16,14 +16,14 @@ describe('Header Component', () => {
 			/>,
 		);
 		expect(screen.getByText('OpenChain')).toBeTruthy();
-		expect(screen.getByRole('option', { name: 'Base Mainnet' })).toBeTruthy();
-		expect(screen.getByRole('option', { name: 'Solana Mainnet' })).toBeTruthy();
-		expect(screen.getByRole('option', { name: 'TRON Mainnet' })).toBeTruthy();
 		expect(screen.getByAltText('Base Mainnet icon')).toBeTruthy();
+		fireEvent.click(screen.getByLabelText('Network'));
+		expect(screen.getByRole('button', { name: 'Base Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Solana Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'TRON Mainnet' })).toBeTruthy();
 		fireEvent.change(screen.getByPlaceholderText('Search target address'), {
 			target: { value: '0x0000000000000000000000000000000000000000' },
 		});
 		expect(onNetworkChange).not.toHaveBeenCalled();
-		expect(screen.getByText('EVM address — choose its network')).toBeTruthy();
 	});
 });
