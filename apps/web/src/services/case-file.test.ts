@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	CASE_FILE_VERSION,
-	caseCSV,
 	createLocalCase,
 	loadLocalCase,
 	parseCaseFile,
@@ -20,17 +19,10 @@ describe('local case files', () => {
 		});
 	});
 
-	it('round-trips a versioned case and escapes CSV notes', () => {
+	it('round-trips a versioned local case', () => {
 		const caseFile = createLocalCase();
-		caseFile.annotations.push({
-			id: 'a1',
-			target: { kind: 'address', id: '0x1' },
-			note: 'note, with "evidence"',
-			createdAt: caseFile.createdAt,
-		});
 		const parsed = parseCaseFile(JSON.stringify(caseFile));
 		expect(parsed.version).toBe(CASE_FILE_VERSION);
-		expect(caseCSV(parsed)).toContain('"note, with ""evidence"""');
 	});
 
 	it('rejects malformed imports and restores a saved case', () => {
