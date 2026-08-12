@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package openchain.v1;
+
+import "openchain/v1/common.proto";
+
+option go_package = "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1;openchainv1";
+
+message ExportEvidencePackageRequest {
+  Network network = 1;
+  repeated string transfer_ids = 2;
+  string case_json = 3;
+}
+
+message ExportEvidencePackageResponse {
+  string package_json = 1;
+}
+
+service EvidenceService {
+  rpc ExportEvidencePackage(ExportEvidencePackageRequest) returns (ExportEvidencePackageResponse);
+}
