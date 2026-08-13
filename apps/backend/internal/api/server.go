@@ -91,24 +91,24 @@ func (s *Server) network(network pb.Network) (NetworkRuntime, error) {
 	return runtime, nil
 }
 
-func (s *Server) traceGraph(ctx context.Context, network pb.Network, address string, direction tracing.Direction, limit uint32, cursor string, retry bool) (*tracing.GraphResult, error) {
+func (s *Server) traceGraph(ctx context.Context, network pb.Network, address string, direction tracing.Direction, limit uint32, cursor string, maxCounterparties uint32, ranking tracing.Ranking, retry bool) (*tracing.GraphResult, error) {
 	runtime, err := s.network(network)
 	if err != nil {
 		return nil, err
 	}
 	if runtime.Queue != nil {
-		return runtime.Queue.TraceGraph(ctx, address, direction, limit, cursor, retry, s.queueClientKey(ctx))
+		return runtime.Queue.TraceGraph(ctx, address, direction, limit, cursor, maxCounterparties, ranking, retry, s.queueClientKey(ctx))
 	}
-	return runtime.Engine.ResolveGraph(ctx, address, direction, limit, cursor)
+	return runtime.Engine.ResolveGraph(ctx, address, direction, limit, cursor, maxCounterparties, ranking)
 }
 
-func (s *Server) traceStatus(ctx context.Context, network pb.Network, address string, direction tracing.Direction, limit uint32, cursor string) (*tracing.GraphResult, error) {
+func (s *Server) traceStatus(ctx context.Context, network pb.Network, address string, direction tracing.Direction, limit uint32, cursor string, maxCounterparties uint32, ranking tracing.Ranking) (*tracing.GraphResult, error) {
 	runtime, err := s.network(network)
 	if err != nil {
 		return nil, err
 	}
 	if runtime.Queue != nil {
-		return runtime.Queue.TraceStatus(ctx, address, direction, limit, cursor)
+		return runtime.Queue.TraceStatus(ctx, address, direction, limit, cursor, maxCounterparties, ranking)
 	}
 	return nil, tracing.ErrTraceNotFound
 }

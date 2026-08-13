@@ -44,7 +44,7 @@ func (d *DB) ExportEvidence(ctx context.Context, network string, transferIDs []s
 	if network == "" || len(ids) == 0 || len(ids) > maxEvidenceTransferIDs {
 		return nil, fmt.Errorf("select between 1 and %d transfers", maxEvidenceTransferIDs)
 	}
-	transfers, err := d.exportTransfers(ctx, network, ids)
+	transfers, err := d.exportTransfers(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -67,15 +67,15 @@ func (d *DB) ExportEvidence(ctx context.Context, network string, transferIDs []s
 	for _, transfer := range transfers {
 		addresses = append(addresses, transfer.FromAddress, transfer.ToAddress)
 	}
-	labels, err := d.exportLabels(ctx, network, uniqueStrings(addresses))
+	labels, err := d.exportLabels(ctx, uniqueStrings(addresses))
 	if err != nil {
 		return nil, err
 	}
 	return &EvidenceExport{Transfers: transfers, Snapshots: snapshots, Provenance: provenance, RuleRuns: runs, Labels: labels}, nil
 }
 
-func (d *DB) exportTransfers(ctx context.Context, network string, ids []string) ([]Transfer, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id, network, transaction_hash, event_id, transfer_kind, from_address, to_address, asset_symbol, asset_kind, asset_contract_address, asset_decimals, amount_base_units, block_number, block_hash, block_timestamp, provisional, source, retrieved_at FROM transfers WHERE network = $1 AND id = ANY($2) ORDER BY id`, network, pq.Array(ids))
+func (d *DB) exportTransfers(ctx context.Context, ids []string) ([]Transfer, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id, network, transaction_hash, event_id, transfer_kind, from_address, to_address, asset_symbol, asset_kind, asset_contract_address, asset_decimals, amount_base_units, block_number, block_hash, block_timestamp, provisional, source, retrieved_at FROM transfers WHERE id = ANY($1) ORDER BY id`, pq.Array(ids))
 	if err != nil {
 		return nil, fmt.Errorf("query package transfers: %w", err)
 	}
@@ -154,11 +154,11 @@ func (d *DB) exportRuleRuns(ctx context.Context, network string, ids []string) (
 	return result, nil
 }
 
-func (d *DB) exportLabels(ctx context.Context, network string, addresses []string) ([]CuratedLabel, error) {
+func (d *DB) exportLabels(ctx context.Context, addresses []string) ([]CuratedLabel, error) {
 	if len(addresses) == 0 {
 		return []CuratedLabel{}, nil
 	}
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id, network, address, category, label, confidence, evidence_url, source, source_version, visibility, trust_tier, created_by, created_at FROM curated_labels WHERE network = $1 AND address = ANY($2) ORDER BY trust_tier, label`, network, pq.Array(addresses))
+	rows, err := d.SQL.QueryContext(ctx, `SELECT id, network, address, category, label, confidence, evidence_url, source, source_version, visibility, trust_tier, created_by, created_at FROM curated_labels WHERE address = ANY($1) ORDER BY network, trust_tier, label`, pq.Array(addresses))
 	if err != nil {
 		return nil, fmt.Errorf("query package labels: %w", err)
 	}

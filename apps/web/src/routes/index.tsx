@@ -12,10 +12,12 @@ import {
 	type AddressSummary,
 	type GraphEdge,
 	type GraphNode,
+	type GraphOptions,
 	type InvestigationLead,
 	Network,
 	type SupportedNetwork,
 	TraceGraphResponse,
+	defaultGraphOptions,
 	expandNode,
 	exportEvidencePackage,
 	fetchTraceGraph,
@@ -45,6 +47,7 @@ const tracePollInterval = 5_000;
 function Index() {
 	const [address, setAddress] = useState('');
 	const [network, setNetwork] = useState<SupportedNetwork>(Network.ETHEREUM_MAINNET);
+	const [graphOptions, setGraphOptions] = useState<GraphOptions>(defaultGraphOptions);
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
@@ -75,7 +78,12 @@ function Index() {
 	}, [caseFile, caseLoaded]);
 
 	const load = useCallback(
-		async (target: string, preserveCurrentGraph = false, targetNetwork = network) => {
+		async (
+			target: string,
+			preserveCurrentGraph = false,
+			targetNetwork = network,
+			options = graphOptions,
+		) => {
 			const investigation = preserveCurrentGraph
 				? investigationRef.current
 				: ++investigationRef.current;
@@ -97,8 +105,8 @@ function Index() {
 			}
 			try {
 				const graph = preserveCurrentGraph
-					? await fetchTraceStatus(target, targetNetwork)
-					: await fetchTraceGraph(target, targetNetwork, true);
+					? await fetchTraceStatus(target, targetNetwork, '', options)
+					: await fetchTraceGraph(target, targetNetwork, options, true);
 				if (investigation !== investigationRef.current) return;
 				setErrorMessage('');
 				setGraphData(graph);
@@ -131,7 +139,7 @@ function Index() {
 				if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
 			}
 		},
-		[network],
+		[graphOptions, network],
 	);
 
 	const changeNetwork = useCallback(
@@ -168,11 +176,11 @@ function Index() {
 	useEffect(() => {
 		if (!graphData?.pending) return;
 		const timer = window.setTimeout(
-			() => void load(graphData.seedAddress, true),
+			() => void load(graphData.seedAddress, true, network, graphOptions),
 			tracePollInterval,
 		);
 		return () => window.clearTimeout(timer);
-	}, [graphData, load]);
+	}, [graphData, graphOptions, load, network]);
 
 	const handleSelect = useCallback(
 		async (node: GraphNode | null) => {
@@ -214,15 +222,17 @@ function Index() {
 			setExpandingAddress(key);
 			try {
 				const expanded = retry
-					? await expandNode(nodeAddress, network, page?.cursor, true)
-					: await fetchTraceStatus(nodeAddress, network, page?.cursor).then((status) => ({
-							newNodes: status.nodes,
-							newEdges: status.edges,
-							leads: status.leads,
-							nextCursor: status.nextCursor,
-							hasMore: status.hasMore,
-							pending: status.pending,
-						}));
+					? await expandNode(nodeAddress, network, page?.cursor, graphOptions, true)
+					: await fetchTraceStatus(nodeAddress, network, page?.cursor, graphOptions).then(
+							(status) => ({
+								newNodes: status.nodes,
+								newEdges: status.edges,
+								leads: status.leads,
+								nextCursor: status.nextCursor,
+								hasMore: status.hasMore,
+								pending: status.pending,
+							}),
+						);
 				if (investigation !== investigationRef.current) return;
 				if (expanded.pending) {
 					setPendingExpansion(key);
@@ -269,7 +279,7 @@ function Index() {
 				if (investigation === investigationRef.current) setExpandingAddress(null);
 			}
 		},
-		[branchPages, expandingAddress, graphData, network, pendingExpansion],
+		[branchPages, expandingAddress, graphData, graphOptions, network, pendingExpansion],
 	);
 
 	useEffect(() => {
@@ -322,9 +332,12 @@ function Index() {
 	);
 	const exportFrozenEvidence = useCallback(async () => {
 		if (!graphData) throw new Error('Trace an address before creating an evidence package.');
-		const graphIDs = new Set(graphData.edges.map((edge) => edge.id));
-		const selected = caseFile.selectedTransferIds.filter((id) => graphIDs.has(id));
-		const transferIDs = selected.length > 0 ? selected : graphData.edges.map((edge) => edge.id);
+		const evidenceIDs = new Set([
+			...graphData.edges.map((edge) => edge.id),
+			...graphData.leads.flatMap((lead) => lead.transferIds),
+		]);
+		const selected = caseFile.selectedTransferIds.filter((id) => evidenceIDs.has(id));
+		const transferIDs = selected.length > 0 ? selected : [...evidenceIDs];
 		if (transferIDs.length === 0) throw new Error('This investigation has no transfers to export.');
 		const packageJSON = await exportEvidencePackage(network, transferIDs, JSON.stringify(caseFile));
 		const packageFile = await parseEvidencePackage(packageJSON);
@@ -392,6 +405,11 @@ function Index() {
 							expandingAddress === activeAddress.toLowerCase() ||
 							pendingExpansion === activeAddress.toLowerCase()
 						}
+						graphOptions={graphOptions}
+						onGraphOptionsChange={(options) => {
+							setGraphOptions(options);
+							if (graphData) void load(graphData.seedAddress, false, network, options);
+						}}
 					/>
 					{(errorMessage || graphData?.sourceStatus?.warning) && (
 						<div className="absolute bottom-5 right-5 z-10 max-w-md space-y-2 text-xs pointer-events-none">

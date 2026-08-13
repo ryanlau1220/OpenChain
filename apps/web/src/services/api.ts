@@ -10,6 +10,7 @@ import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
 	GraphEdge,
 	GraphNode,
+	GraphRanking,
 	InvestigationLead,
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
@@ -31,6 +32,7 @@ export {
 	EntityType,
 	GraphEdge,
 	GraphNode,
+	GraphRanking,
 	InvestigationLead,
 	LabelVisibility,
 	Network,
@@ -40,10 +42,20 @@ export {
 export type SupportedNetwork =
 	| Network.ETHEREUM_MAINNET
 	| Network.BASE_MAINNET
+	| Network.POLYGON_MAINNET
+	| Network.ARBITRUM_ONE
+	| Network.OPTIMISM_MAINNET
 	| Network.SOLANA_MAINNET
 	| Network.TRON_MAINNET;
 
-export type NetworkSlug = 'ethereum-mainnet' | 'base-mainnet' | 'solana-mainnet' | 'tron-mainnet';
+export type NetworkSlug =
+	| 'ethereum-mainnet'
+	| 'base-mainnet'
+	| 'polygon-mainnet'
+	| 'arbitrum-one'
+	| 'optimism-mainnet'
+	| 'solana-mainnet'
+	| 'tron-mainnet';
 
 const NETWORK_DETAILS: Record<
 	SupportedNetwork,
@@ -69,6 +81,27 @@ const NETWORK_DETAILS: Record<
 		icon: '/networks/base.svg',
 		activityLabel: 'Outgoing nonce',
 	},
+	[Network.POLYGON_MAINNET]: {
+		name: 'Polygon Mainnet',
+		slug: 'polygon-mainnet',
+		explorer: 'https://polygonscan.com',
+		icon: '/networks/polygon.svg',
+		activityLabel: 'Outgoing nonce',
+	},
+	[Network.ARBITRUM_ONE]: {
+		name: 'Arbitrum One',
+		slug: 'arbitrum-one',
+		explorer: 'https://arbiscan.io',
+		icon: '/networks/arbitrum.svg',
+		activityLabel: 'Outgoing nonce',
+	},
+	[Network.OPTIMISM_MAINNET]: {
+		name: 'Optimism Mainnet',
+		slug: 'optimism-mainnet',
+		explorer: 'https://optimistic.etherscan.io',
+		icon: '/networks/optimism.svg',
+		activityLabel: 'Outgoing nonce',
+	},
 	[Network.SOLANA_MAINNET]: {
 		name: 'Solana Mainnet',
 		slug: 'solana-mainnet',
@@ -86,6 +119,9 @@ const NETWORK_DETAILS: Record<
 export const supportedNetworks = [
 	Network.ETHEREUM_MAINNET,
 	Network.BASE_MAINNET,
+	Network.POLYGON_MAINNET,
+	Network.ARBITRUM_ONE,
+	Network.OPTIMISM_MAINNET,
 	Network.SOLANA_MAINNET,
 	Network.TRON_MAINNET,
 ] as const;
@@ -123,6 +159,16 @@ export function detectAddressNetwork(value: string): SupportedNetwork | undefine
 	return undefined;
 }
 
+export function isEVMNetwork(network: SupportedNetwork): boolean {
+	return (
+		network === Network.ETHEREUM_MAINNET ||
+		network === Network.BASE_MAINNET ||
+		network === Network.POLYGON_MAINNET ||
+		network === Network.ARBITRUM_ONE ||
+		network === Network.OPTIMISM_MAINNET
+	);
+}
+
 export function explorerURL(network: SupportedNetwork, resource: 'address' | 'tx', value: string) {
 	if (network === Network.TRON_MAINNET)
 		return `${NETWORK_DETAILS[network].explorer}/${resource === 'tx' ? 'transaction' : 'address'}/${value}`;
@@ -148,20 +194,32 @@ export function entityLabel(t?: EntityType): string {
 
 // ── Tracing ─────────────────────────────────────────────────────────────────────
 
+export type GraphOptions = {
+	maxCounterparties: number;
+	ranking: GraphRanking;
+};
+
+export const defaultGraphOptions: GraphOptions = {
+	maxCounterparties: 10,
+	ranking: GraphRanking.MOST_RECENT,
+};
+
 export async function fetchTraceGraph(
 	seedAddress: string,
 	network: SupportedNetwork,
+	options: GraphOptions = defaultGraphOptions,
 	retry = false,
 ): Promise<TraceGraphResponse> {
-	return tracingClient.traceGraph({ seedAddress, network, limit: 25, retry });
+	return tracingClient.traceGraph({ seedAddress, network, limit: 50, retry, ...options });
 }
 
 export async function fetchTraceStatus(
 	address: string,
 	network: SupportedNetwork,
 	cursor = '',
+	options: GraphOptions = defaultGraphOptions,
 ): Promise<TraceGraphResponse> {
-	return tracingClient.getTraceStatus({ address, network, limit: 25, cursor });
+	return tracingClient.getTraceStatus({ address, network, limit: 50, cursor, ...options });
 }
 
 export async function lookupAddress(address: string, network: SupportedNetwork) {
@@ -182,9 +240,17 @@ export async function expandNode(
 	address: string,
 	network: SupportedNetwork,
 	cursor = '',
+	options: GraphOptions = defaultGraphOptions,
 	retry = false,
 ) {
-	return tracingClient.expandNode({ nodeAddress: address, network, limit: 25, cursor, retry });
+	return tracingClient.expandNode({
+		nodeAddress: address,
+		network,
+		limit: 50,
+		cursor,
+		retry,
+		...options,
+	});
 }
 
 export async function exportEvidencePackage(

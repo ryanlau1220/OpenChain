@@ -16,6 +16,7 @@ type Config struct {
 	SolanaMainnetRPCURL     string
 	EtherscanAPIKey         string
 	BlockscoutAPIKey        string
+	AlchemyAPIKey           string
 	TronGridAPIKey          string
 	WebOrigin               string
 	PublicRequestsPerMinute int
@@ -41,6 +42,7 @@ func LoadConfig() *Config {
 	solanaRPC := os.Getenv("SOLANA_MAINNET_RPC_URL")
 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
 	blockscoutAPIKey := os.Getenv("BLOCKSCOUT_API_KEY")
+	alchemyAPIKey := os.Getenv("ALCHEMY_API_KEY")
 	tronGridAPIKey := os.Getenv("TRONGRID_API_KEY")
 
 	webOrigin := os.Getenv("WEB_ORIGIN")
@@ -70,6 +72,7 @@ func LoadConfig() *Config {
 		SolanaMainnetRPCURL:     solanaRPC,
 		EtherscanAPIKey:         etherscanAPIKey,
 		BlockscoutAPIKey:        blockscoutAPIKey,
+		AlchemyAPIKey:           alchemyAPIKey,
 		TronGridAPIKey:          tronGridAPIKey,
 		WebOrigin:               webOrigin,
 		PublicRequestsPerMinute: publicRequestsPerMinute,
@@ -102,6 +105,9 @@ func (c *Config) Validate() error {
 	}
 	if c.BlockscoutAPIKey == "" {
 		return fmt.Errorf("BLOCKSCOUT_API_KEY is required")
+	}
+	if c.AlchemyAPIKey == "" {
+		return fmt.Errorf("ALCHEMY_API_KEY is required")
 	}
 	if c.TronGridAPIKey == "" {
 		return fmt.Errorf("TRONGRID_API_KEY is required")

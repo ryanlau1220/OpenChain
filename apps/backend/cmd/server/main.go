@@ -52,8 +52,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Curated label import failed: %v", err)
 	}
-	runtimes := make(map[pb.Network]api.NetworkRuntime, 4)
-	queues := make([]*tracing.Queue, 0, 4)
+	runtimes := make(map[pb.Network]api.NetworkRuntime, 7)
+	queues := make([]*tracing.Queue, 0, 7)
 	for _, network := range []struct {
 		id                    pb.Network
 		name, chainID, rpcURL string
@@ -68,6 +68,22 @@ func main() {
 		} else {
 			chainAdapter = adapter.NewEVMChainAdapter(network.name, network.chainID, adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
 		}
+		engine := tracing.NewEngine(chainAdapter, database, registry)
+		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
+		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
+		queues = append(queues, queue)
+	}
+	for _, network := range []struct {
+		id             pb.Network
+		name, endpoint string
+		nativeAsset    adapter.Asset
+	}{
+		{pb.Network_NETWORK_POLYGON_MAINNET, "polygon-mainnet", "https://polygon-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "POL", Decimals: 18}},
+		{pb.Network_NETWORK_ARBITRUM_ONE, "arbitrum-one", "https://arb-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
+		{pb.Network_NETWORK_OPTIMISM_MAINNET, "optimism-mainnet", "https://opt-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
+	} {
+		rpcURL := network.endpoint + "/" + cfg.AlchemyAPIKey
+		chainAdapter := adapter.NewAlchemyEVMChainAdapter(network.name, network.endpoint, cfg.AlchemyAPIKey, network.nativeAsset, adapter.NewEVMClient(rpcURL))
 		engine := tracing.NewEngine(chainAdapter, database, registry)
 		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
@@ -90,6 +106,14 @@ func main() {
 		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)
+	}
+	bridgeChains := make(map[string]adapter.ChainAdapter, len(runtimes))
+	for _, runtime := range runtimes {
+		bridgeChains[runtime.Engine.Network()] = runtime.Chain
+	}
+	bridgeCorrelator := tracing.NewBridgeCorrelator(bridgeChains)
+	for _, runtime := range runtimes {
+		runtime.Engine.SetBridgeCorrelator(bridgeCorrelator)
 	}
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	for _, queue := range queues {

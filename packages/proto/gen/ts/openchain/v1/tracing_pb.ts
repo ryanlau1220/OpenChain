@@ -9,6 +9,41 @@ import { Asset, EntityType, Network, SourceStatus } from "./common_pb.js";
 import { AddressLabel } from "./labels_pb.js";
 
 /**
+ * Counterparty selection is deterministic and scoped to the provider page.
+ * "largest raw amount" is asset-unit based; it is never a fiat valuation.
+ *
+ * @generated from enum openchain.v1.GraphRanking
+ */
+export enum GraphRanking {
+  /**
+   * @generated from enum value: GRAPH_RANKING_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GRAPH_RANKING_MOST_RECENT = 1;
+   */
+  MOST_RECENT = 1,
+
+  /**
+   * @generated from enum value: GRAPH_RANKING_LARGEST_RAW_AMOUNT = 2;
+   */
+  LARGEST_RAW_AMOUNT = 2,
+
+  /**
+   * @generated from enum value: GRAPH_RANKING_MOST_ACTIVE = 3;
+   */
+  MOST_ACTIVE = 3,
+}
+// Retrieve enum metadata with: proto3.getEnumType(GraphRanking)
+proto3.util.setEnumType(GraphRanking, "openchain.v1.GraphRanking", [
+  { no: 0, name: "GRAPH_RANKING_UNSPECIFIED" },
+  { no: 1, name: "GRAPH_RANKING_MOST_RECENT" },
+  { no: 2, name: "GRAPH_RANKING_LARGEST_RAW_AMOUNT" },
+  { no: 3, name: "GRAPH_RANKING_MOST_ACTIVE" },
+]);
+
+/**
  * @generated from enum openchain.v1.TraceDirection
  */
 export enum TraceDirection {
@@ -380,6 +415,16 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
    */
   retry = false;
 
+  /**
+   * @generated from field: uint32 max_counterparties = 7;
+   */
+  maxCounterparties = 0;
+
+  /**
+   * @generated from field: openchain.v1.GraphRanking ranking = 8;
+   */
+  ranking = GraphRanking.UNSPECIFIED;
+
   constructor(data?: PartialMessage<TraceGraphRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -394,6 +439,8 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
     { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "retry", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "max_counterparties", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 8, name: "ranking", kind: "enum", T: proto3.getEnumType(GraphRanking) },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphRequest {
@@ -536,6 +583,16 @@ export class TraceStatusRequest extends Message<TraceStatusRequest> {
    */
   cursor = "";
 
+  /**
+   * @generated from field: uint32 max_counterparties = 6;
+   */
+  maxCounterparties = 0;
+
+  /**
+   * @generated from field: openchain.v1.GraphRanking ranking = 7;
+   */
+  ranking = GraphRanking.UNSPECIFIED;
+
   constructor(data?: PartialMessage<TraceStatusRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -549,6 +606,8 @@ export class TraceStatusRequest extends Message<TraceStatusRequest> {
     { no: 3, name: "direction", kind: "enum", T: proto3.getEnumType(TraceDirection) },
     { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "max_counterparties", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 7, name: "ranking", kind: "enum", T: proto3.getEnumType(GraphRanking) },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceStatusRequest {
@@ -602,6 +661,16 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
    */
   retry = false;
 
+  /**
+   * @generated from field: uint32 max_counterparties = 7;
+   */
+  maxCounterparties = 0;
+
+  /**
+   * @generated from field: openchain.v1.GraphRanking ranking = 8;
+   */
+  ranking = GraphRanking.UNSPECIFIED;
+
   constructor(data?: PartialMessage<ExpandNodeRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -616,6 +685,8 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
     { no: 4, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "retry", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "max_counterparties", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 8, name: "ranking", kind: "enum", T: proto3.getEnumType(GraphRanking) },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeRequest {

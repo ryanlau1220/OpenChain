@@ -54,6 +54,17 @@ func recordAcquisition(ctx context.Context, provider string, request *http.Reque
 		}
 	}
 	url.RawQuery = query.Encode()
+	// Alchemy places the credential in the /v2/{key} path segment rather than
+	// the query string. Provenance must never persist that key.
+	path := strings.Split(url.Path, "/")
+	for index, segment := range path[:len(path)-1] {
+		if strings.EqualFold(segment, "v2") {
+			path[index+1] = "redacted"
+			url.Path = strings.Join(path, "/")
+			url.RawPath = ""
+			break
+		}
+	}
 	identity := request.Method + " " + url.String()
 	if request.GetBody != nil {
 		body, err := request.GetBody()

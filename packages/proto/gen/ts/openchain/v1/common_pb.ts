@@ -34,6 +34,21 @@ export enum Network {
    * @generated from enum value: NETWORK_TRON_MAINNET = 4;
    */
   TRON_MAINNET = 4,
+
+  /**
+   * @generated from enum value: NETWORK_POLYGON_MAINNET = 5;
+   */
+  POLYGON_MAINNET = 5,
+
+  /**
+   * @generated from enum value: NETWORK_ARBITRUM_ONE = 6;
+   */
+  ARBITRUM_ONE = 6,
+
+  /**
+   * @generated from enum value: NETWORK_OPTIMISM_MAINNET = 7;
+   */
+  OPTIMISM_MAINNET = 7,
 }
 // Retrieve enum metadata with: proto3.getEnumType(Network)
 proto3.util.setEnumType(Network, "openchain.v1.Network", [
@@ -42,6 +57,9 @@ proto3.util.setEnumType(Network, "openchain.v1.Network", [
   { no: 2, name: "NETWORK_BASE_MAINNET" },
   { no: 3, name: "NETWORK_SOLANA_MAINNET" },
   { no: 4, name: "NETWORK_TRON_MAINNET" },
+  { no: 5, name: "NETWORK_POLYGON_MAINNET" },
+  { no: 6, name: "NETWORK_ARBITRUM_ONE" },
+  { no: 7, name: "NETWORK_OPTIMISM_MAINNET" },
 ]);
 
 /**

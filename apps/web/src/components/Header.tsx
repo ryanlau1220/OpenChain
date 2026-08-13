@@ -5,6 +5,7 @@ import {
 	Network,
 	type SupportedNetwork,
 	detectAddressNetwork,
+	isEVMNetwork,
 	networkDetails,
 	supportedNetworks,
 } from '../services/api';
@@ -28,11 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
 		const detected = detectAddressNetwork(value);
 		// Keep an explicit EVM network choice: an address alone cannot distinguish
 		// Ethereum from Base. Otherwise, a 0x address switches non-EVM views to Ethereum.
-		if (
-			detected === Network.ETHEREUM_MAINNET &&
-			(network === Network.ETHEREUM_MAINNET || network === Network.BASE_MAINNET)
-		)
-			return network;
+		if (detected === Network.ETHEREUM_MAINNET && isEVMNetwork(network)) return network;
 		return detected;
 	};
 
@@ -53,8 +50,8 @@ export const Header: React.FC<HeaderProps> = ({
 		onNetworkChange(nextNetwork);
 	};
 	const networkGroups = [
-		{ label: 'EVM networks', items: supportedNetworks.slice(0, 2) },
-		{ label: 'Other networks', items: supportedNetworks.slice(2) },
+		{ label: 'EVM networks', items: supportedNetworks.filter(isEVMNetwork) },
+		{ label: 'Other networks', items: supportedNetworks.filter((item) => !isEVMNetwork(item)) },
 	] as const;
 	const selectedNetwork = networkDetails(network);
 

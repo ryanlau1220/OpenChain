@@ -26,12 +26,22 @@ type Lead struct {
 
 type Run = db.RuleRun
 
+// BridgeCandidate is a strictly observed source/destination bridge pair.
+// It is intentionally distinct from the behavioural investigation rules.
+type BridgeCandidate struct {
+	BridgeName, DestinationNetwork string
+	Source, Destination            db.Transfer
+}
+
 func Evaluate(network string, transfers []db.Transfer, completedAt time.Time) ([]Lead, []Run) {
 	finalized := finalizedTransfers(transfers)
 	definitions := Catalog()
 	leads := make([]Lead, 0)
 	runs := make([]Run, 0, len(definitions))
 	for _, definition := range definitions {
+		if definition.ID == "op-stack-bridge-correlation" {
+			continue
+		}
 		var detected []Lead
 		switch definition.ID {
 		case "fan-in-consolidation":
@@ -48,6 +58,50 @@ func Evaluate(network string, transfers []db.Transfer, completedAt time.Time) ([
 	}
 	sort.Slice(leads, func(left, right int) bool { return leads[left].ID < leads[right].ID })
 	return leads, runs
+}
+
+func EvaluateBridge(network string, candidates []BridgeCandidate, completedAt time.Time) ([]Lead, []Run) {
+	definition, ok := catalogDefinition("op-stack-bridge-correlation")
+	if !ok {
+		return nil, nil
+	}
+	leads := make([]Lead, 0, len(candidates))
+	inputIDs := make([]string, 0, len(candidates)*2)
+	for _, candidate := range candidates {
+		if candidate.Source.Provisional || candidate.Destination.Provisional || candidate.Source.BlockTimestamp.IsZero() || candidate.Destination.BlockTimestamp.IsZero() {
+			continue
+		}
+		ids := transferIDs([]db.Transfer{candidate.Source, candidate.Destination})
+		inputIDs = append(inputIDs, ids...)
+		leads = append(leads, lead(definition, candidate.Source.FromAddress, "OP Stack bridge correlation", "Observed a transfer to "+candidate.BridgeName+" on "+network+" followed by a same-amount transfer from the corresponding bridge on "+candidate.DestinationNetwork+" to the same address.", ids))
+	}
+	if len(leads) == 0 {
+		return nil, nil
+	}
+	result, _ := json.Marshal(leads)
+	return leads, []Run{{Network: network, RuleID: definition.ID, RuleVersion: definition.Version, Parameters: definition.DefaultParameters, InputTransferIDs: uniqueTransferIDs(inputIDs), Result: result, StartedAt: completedAt, CompletedAt: completedAt}}
+}
+
+func catalogDefinition(id string) (Definition, bool) {
+	for _, definition := range Catalog() {
+		if definition.ID == id {
+			return definition, true
+		}
+	}
+	return Definition{}, false
+}
+
+func uniqueTransferIDs(ids []string) []string {
+	unique := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		unique[id] = struct{}{}
+	}
+	result := make([]string, 0, len(unique))
+	for id := range unique {
+		result = append(result, id)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func finalizedTransfers(transfers []db.Transfer) []db.Transfer {

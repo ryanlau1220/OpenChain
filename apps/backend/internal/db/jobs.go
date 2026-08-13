@@ -21,6 +21,8 @@ type TraceJobQuery struct {
 	Network, Address, Direction, Cursor string
 	ClientKey                           string
 	Limit                               uint32
+	CounterpartyLimit                   uint32
+	Ranking                             string
 }
 
 type TraceJob struct {
@@ -32,6 +34,7 @@ type TraceJob struct {
 }
 
 func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry bool, maxQueued, maxQueuedPerClient int) (*TraceJob, error) {
+	query = normalizeTraceJobQuery(query)
 	tx, err := d.SQL.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -41,7 +44,7 @@ func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry boo
 		return nil, err
 	}
 	var exists bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trace_jobs WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_size = $5)`, query.Network, query.Address, query.Direction, query.Cursor, query.Limit).Scan(&exists); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trace_jobs WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_size = $5 AND counterparty_limit = $6 AND ranking = $7)`, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, query.CounterpartyLimit, query.Ranking).Scan(&exists); err != nil {
 		return nil, err
 	}
 	if !exists {
@@ -60,28 +63,28 @@ func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry boo
 			return nil, ErrTraceClientQueueFull
 		}
 	}
-	const statement = `INSERT INTO trace_jobs (network, address, direction, cursor, page_size, client_key, status)
-VALUES ($1, $2, $3, $4, $5, $6, 'queued')
-ON CONFLICT (network, address, direction, cursor, page_size) DO UPDATE
+	const statement = `INSERT INTO trace_jobs (network, address, direction, cursor, page_size, counterparty_limit, ranking, client_key, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued')
+ON CONFLICT (network, address, direction, cursor, page_size, counterparty_limit, ranking) DO UPDATE
 SET status = CASE
-  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN 'queued'
+  WHEN ($10 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $9::interval) THEN 'queued'
   ELSE trace_jobs.status
 END,
 result_json = CASE
-  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN NULL
+  WHEN ($10 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $9::interval) THEN NULL
   ELSE trace_jobs.result_json
 END,
 error_message = CASE
-  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN NULL
+  WHEN ($10 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $9::interval) THEN NULL
   ELSE trace_jobs.error_message
 END,
 completed_at = CASE
-  WHEN ($8 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $7::interval) THEN NULL
+  WHEN ($10 AND trace_jobs.status = 'failed') OR (trace_jobs.status = 'succeeded' AND trace_jobs.completed_at < now() - $9::interval) THEN NULL
   ELSE trace_jobs.completed_at
 END,
 updated_at = now()
-RETURNING id, network, address, direction, cursor, page_size, status, result_json, COALESCE(error_message, '')`
-	job, err := scanTraceJob(tx.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, query.ClientKey, traceResultCacheTTL.String(), retry))
+RETURNING id, network, address, direction, cursor, page_size, counterparty_limit, ranking, status, result_json, COALESCE(error_message, '')`
+	job, err := scanTraceJob(tx.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, query.CounterpartyLimit, query.Ranking, query.ClientKey, traceResultCacheTTL.String(), retry))
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +95,11 @@ RETURNING id, network, address, direction, cursor, page_size, status, result_jso
 }
 
 func (d *DB) TraceJob(ctx context.Context, query TraceJobQuery) (*TraceJob, error) {
-	const statement = `SELECT id, network, address, direction, cursor, page_size, status, result_json, COALESCE(error_message, '')
+	query = normalizeTraceJobQuery(query)
+	const statement = `SELECT id, network, address, direction, cursor, page_size, counterparty_limit, ranking, status, result_json, COALESCE(error_message, '')
 FROM trace_jobs
-WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_size = $5`
-	job, err := scanTraceJob(d.SQL.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit))
+WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_size = $5 AND counterparty_limit = $6 AND ranking = $7`
+	job, err := scanTraceJob(d.SQL.QueryRowContext(ctx, statement, query.Network, query.Address, query.Direction, query.Cursor, query.Limit, query.CounterpartyLimit, query.Ranking))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrTraceJobNotFound
 	}
@@ -131,7 +135,7 @@ UPDATE trace_jobs
 SET status = 'running', lease_expires_at = now() + $2::interval, updated_at = now()
 FROM next_job
 WHERE trace_jobs.id = next_job.id
-RETURNING trace_jobs.id, trace_jobs.network, trace_jobs.address, trace_jobs.direction, trace_jobs.cursor, trace_jobs.page_size, trace_jobs.status, trace_jobs.result_json, COALESCE(trace_jobs.error_message, '')`
+RETURNING trace_jobs.id, trace_jobs.network, trace_jobs.address, trace_jobs.direction, trace_jobs.cursor, trace_jobs.page_size, trace_jobs.counterparty_limit, trace_jobs.ranking, trace_jobs.status, trace_jobs.result_json, COALESCE(trace_jobs.error_message, '')`
 	job, err := scanTraceJob(d.SQL.QueryRowContext(ctx, statement, network, lease.String()))
 	if errors.Is(err, sql.ErrNoRows) || isUniqueViolation(err) {
 		return nil, nil
@@ -160,10 +164,20 @@ type traceJobScanner interface {
 
 func scanTraceJob(row traceJobScanner) (*TraceJob, error) {
 	job := &TraceJob{}
-	if err := row.Scan(&job.ID, &job.Query.Network, &job.Query.Address, &job.Query.Direction, &job.Query.Cursor, &job.Query.Limit, &job.Status, &job.Result, &job.ErrorMessage); err != nil {
+	if err := row.Scan(&job.ID, &job.Query.Network, &job.Query.Address, &job.Query.Direction, &job.Query.Cursor, &job.Query.Limit, &job.Query.CounterpartyLimit, &job.Query.Ranking, &job.Status, &job.Result, &job.ErrorMessage); err != nil {
 		return nil, err
 	}
 	return job, nil
+}
+
+func normalizeTraceJobQuery(query TraceJobQuery) TraceJobQuery {
+	if query.CounterpartyLimit == 0 {
+		query.CounterpartyLimit = 10
+	}
+	if query.Ranking == "" {
+		query.Ranking = "most_recent"
+	}
+	return query
 }
 
 func isUniqueViolation(err error) bool {

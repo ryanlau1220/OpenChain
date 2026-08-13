@@ -43,6 +43,14 @@ func Catalog() []Definition {
 			DefaultParameters: json.RawMessage(`{"window_seconds":3600,"include_provisional":false}`),
 			Limitations:       neutralLimitation,
 		},
+		{
+			ID:                "op-stack-bridge-correlation",
+			Version:           "1.0.0",
+			Name:              "OP Stack bridge correlation",
+			ParameterSchema:   json.RawMessage(`{"type":"object","properties":{"max_delay_seconds":{"type":"integer","minimum":1,"default":604800}},"additionalProperties":false}`),
+			DefaultParameters: json.RawMessage(`{"max_delay_seconds":604800}`),
+			Limitations:       "This is a deterministic bridge-transfer match using known bridge contracts, recipient, raw amount, and time window. It does not prove wallet ownership, token equivalence, or intent.",
+		},
 	}
 }
 

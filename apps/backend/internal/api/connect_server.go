@@ -30,6 +30,17 @@ func parseEntityType(value string) pb.EntityType {
 	}
 }
 
+func graphRanking(value pb.GraphRanking) tracing.Ranking {
+	switch value {
+	case pb.GraphRanking_GRAPH_RANKING_LARGEST_RAW_AMOUNT:
+		return tracing.RankingLargestRawAmount
+	case pb.GraphRanking_GRAPH_RANKING_MOST_ACTIVE:
+		return tracing.RankingMostActive
+	default:
+		return tracing.RankingMostRecent
+	}
+}
+
 func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Request[pb.TraceGraphRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
 	runtime, err := h.server.network(req.Msg.GetNetwork())
 	if err != nil {
@@ -39,7 +50,7 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
+	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetRetry())
 	if err != nil {
 		if errors.Is(err, errUnsupportedNetwork) {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -65,7 +76,7 @@ func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceStatus(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor())
+	result, err := h.server.traceStatus(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()))
 	if err != nil {
 		if errors.Is(err, tracing.ErrTraceNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("trace job was not found"))
@@ -85,7 +96,7 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetRetry())
+	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetRetry())
 	if err != nil {
 		if errors.Is(err, errUnsupportedNetwork) {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -218,6 +229,12 @@ func protoNetwork(network string) pb.Network {
 		return pb.Network_NETWORK_SOLANA_MAINNET
 	case "tron-mainnet":
 		return pb.Network_NETWORK_TRON_MAINNET
+	case "polygon-mainnet":
+		return pb.Network_NETWORK_POLYGON_MAINNET
+	case "arbitrum-one":
+		return pb.Network_NETWORK_ARBITRUM_ONE
+	case "optimism-mainnet":
+		return pb.Network_NETWORK_OPTIMISM_MAINNET
 	}
 	return pb.Network_NETWORK_ETHEREUM_MAINNET
 }

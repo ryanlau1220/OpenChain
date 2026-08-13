@@ -16,6 +16,8 @@ import {
 	EntityType,
 	type GraphEdge,
 	type GraphNode,
+	type GraphOptions,
+	GraphRanking,
 	type TraceGraphResponse,
 	entityLabel,
 } from '../services/api';
@@ -32,6 +34,8 @@ interface GraphCanvasProps {
 	highlightedTransferIds?: readonly string[];
 	loading?: boolean;
 	emptyMessage?: string;
+	graphOptions?: GraphOptions;
+	onGraphOptionsChange?: (options: GraphOptions) => void;
 }
 
 // PRISM node palette (light mode)
@@ -72,6 +76,45 @@ const emptyFilters: GraphFilters = {
 	transferKind: '',
 };
 const emptyTransferIDs: readonly string[] = [];
+
+type PositionedNode = { id: string; x: number; y: number };
+
+// Existing positions are deliberately immutable during an incremental expand.
+// New neighbours fan out from their already-rendered parent.
+export function positionAddedNodes(
+	addedIDs: readonly string[],
+	relationships: readonly { source: string; target: string }[],
+	existing: readonly PositionedNode[],
+): Map<string, { x: number; y: number }> {
+	const positions = new Map(existing.map((node) => [node.id, { x: node.x, y: node.y }]));
+	const pending = new Set(addedIDs);
+	const grouped = new Map<string, string[]>();
+	for (const id of addedIDs) {
+		const edge = relationships.find(
+			(item) =>
+				(item.source === id && positions.has(item.target)) ||
+				(item.target === id && positions.has(item.source)),
+		);
+		const anchor = edge ? (edge.source === id ? edge.target : edge.source) : '';
+		const nodes = grouped.get(anchor) || [];
+		nodes.push(id);
+		grouped.set(anchor, nodes);
+	}
+	for (const [anchor, ids] of grouped) {
+		const center = positions.get(anchor) || { x: 0, y: 0 };
+		ids.sort().forEach((id, index) => {
+			const angle = (Math.PI * 2 * index) / ids.length - Math.PI / 2;
+			const radius = anchor ? 130 : 180;
+			positions.set(id, {
+				x: center.x + Math.cos(angle) * radius,
+				y: center.y + Math.sin(angle) * radius,
+			});
+			pending.delete(id);
+		});
+	}
+	for (const id of pending) positions.set(id, { x: 180, y: 0 });
+	return positions;
+}
 
 const baseUnits = (value: string) => {
 	try {
@@ -236,6 +279,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	highlightedTransferIds = emptyTransferIDs,
 	loading = false,
 	emptyMessage = 'Enter a target address above to start tracing',
+	graphOptions,
+	onGraphOptionsChange,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
@@ -245,6 +290,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	);
 	const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
 	const [filterOpen, setFilterOpen] = useState(false);
+	const layoutRef = useRef(layoutName);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
 	const seedAddress = graphData?.seedAddress || '';
@@ -295,6 +341,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	useEffect(() => {
 		if (cyRef.current) applyEvidenceStyles(cyRef.current, highlightedIDs);
 	}, [highlightedIDs]);
+
+	useEffect(
+		() => () => {
+			cyRef.current?.destroy();
+			cyRef.current = null;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!containerRef.current || !graphData) return;
@@ -368,24 +422,35 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 
 			if (newElements.length === 0 && !needsRemoval) {
+				if (layoutRef.current !== effectiveLayout) {
+					cy.layout({ name: effectiveLayout, fit: true, padding: 80, animate: true }).run();
+					layoutRef.current = effectiveLayout;
+				}
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
 				return;
 			}
 
 			if (newElements.length > 0 && !needsRemoval && cy.elements().length > 0) {
+				const existing = cy.nodes().map((node) => ({ id: node.id(), ...node.position() }));
+				const positions = positionAddedNodes(
+					newElements.filter((item) => item.group === 'nodes').map((item) => String(item.data.id)),
+					elements
+						.filter((item) => item.group === 'edges')
+						.map((item) => ({
+							source: String(item.data.source),
+							target: String(item.data.target),
+						})),
+					existing,
+				);
+				for (const element of newElements) {
+					if (element.group === 'nodes') element.position = positions.get(String(element.data.id));
+				}
 				cy.batch(() => {
 					cy.add(newElements);
 				});
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
-				const layout = cy.layout({
-					name: effectiveLayout,
-					fit: false,
-					animate: true,
-				});
-				layout.run();
-				applyNodeStyles(cy, selectedNode?.id);
 				return;
 			}
 
@@ -544,10 +609,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		cyRef.current = cy;
-		return () => {
-			cy.destroy();
-			cyRef.current = null;
-		};
+		layoutRef.current = effectiveLayout;
 	}, [graphData, layoutName, visibleEdges, visibleNodes]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
@@ -624,6 +686,51 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
+					{graphOptions && onGraphOptionsChange && (
+						<>
+							<select
+								aria-label="Counterparties per address"
+								value={graphOptions.maxCounterparties}
+								onChange={(event) =>
+									onGraphOptionsChange({
+										...graphOptions,
+										maxCounterparties: Number(event.target.value),
+									})
+								}
+								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+								style={{
+									background: 'var(--slate)',
+									border: '1px solid var(--border)',
+									color: 'var(--ink-2)',
+								}}
+							>
+								<option value={5}>Top 5 counterparties</option>
+								<option value={10}>Top 10 counterparties</option>
+								<option value={25}>Top 25 counterparties</option>
+							</select>
+							<select
+								aria-label="Counterparty ranking"
+								value={graphOptions.ranking}
+								onChange={(event) =>
+									onGraphOptionsChange({
+										...graphOptions,
+										ranking: Number(event.target.value) as GraphRanking,
+									})
+								}
+								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+								style={{
+									background: 'var(--slate)',
+									border: '1px solid var(--border)',
+									color: 'var(--ink-2)',
+								}}
+								title="Largest raw amount compares native asset units, not fiat value."
+							>
+								<option value={GraphRanking.MOST_RECENT}>Most recent</option>
+								<option value={GraphRanking.MOST_ACTIVE}>Most active</option>
+								<option value={GraphRanking.LARGEST_RAW_AMOUNT}>Largest raw amount</option>
+							</select>
+						</>
+					)}
 					<button
 						type="button"
 						aria-expanded={filterOpen}

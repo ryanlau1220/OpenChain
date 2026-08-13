@@ -56,6 +56,10 @@ test('preserves an explicit EVM choice and detects address families', async ({ p
 	await expect(network).toContainText('Base Mainnet');
 	await address.fill('0x7a250d5630b4cf539739df2c5dacb4c659f2488d');
 	await expect(network).toContainText('Base Mainnet');
+	await selectNetwork(page, 'Polygon Mainnet');
+	await expect(network).toContainText('Polygon Mainnet');
+	await address.fill('0x7a250d5630b4cf539739df2c5dacb4c659f2488d');
+	await expect(network).toContainText('Polygon Mainnet');
 
 	await selectNetwork(page, 'Solana Mainnet');
 	await address.fill('');
@@ -84,6 +88,10 @@ test('persists local investigation notes across a reload', async ({ page }) => {
 });
 
 test('provides focused graph filters without leaving the investigation workspace', async ({ page }) => {
+	await expect(page.getByLabel('Counterparties per address')).toHaveValue('10');
+	await page.getByLabel('Counterparties per address').selectOption('5');
+	await expect(page.getByLabel('Counterparties per address')).toHaveValue('5');
+	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('1');
 	await page.getByText('Filters', { exact: true }).click();
 	await expect(page.getByLabel('From date')).toBeVisible();
 	await expect(page.getByLabel('To date')).toBeVisible();

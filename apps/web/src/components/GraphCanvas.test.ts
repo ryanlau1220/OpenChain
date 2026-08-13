@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphEdge } from '../services/api';
-import { aggregateGraphEdges, filterGraphEdges } from './GraphCanvas';
+import { aggregateGraphEdges, filterGraphEdges, positionAddedNodes } from './GraphCanvas';
 
 describe('aggregateGraphEdges', () => {
 	it('combines only transfers with the same direction and asset', () => {
@@ -71,5 +71,20 @@ describe('aggregateGraphEdges', () => {
 			transferKind: 'ERC20',
 		});
 		expect(visible.map((edge) => edge.id)).toEqual(['inbound']);
+	});
+});
+
+describe('positionAddedNodes', () => {
+	it('keeps existing coordinates and places new neighbours around their parent', () => {
+		const positions = positionAddedNodes(
+			['new-a', 'new-b'],
+			[
+				{ source: 'seed', target: 'new-a' },
+				{ source: 'seed', target: 'new-b' },
+			],
+			[{ id: 'seed', x: 24, y: 48 }],
+		);
+		expect(positions.get('seed')).toEqual({ x: 24, y: 48 });
+		expect(positions.get('new-a')).not.toEqual(positions.get('new-b'));
 	});
 });

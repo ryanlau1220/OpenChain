@@ -113,21 +113,28 @@ func TestTraceJobIntegration(t *testing.T) {
 	}()
 	query := TraceJobQuery{Network: "test", Address: "trace-job-test-address", Direction: "both", Limit: 1}
 
-	queued, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
+	queued, err := database.EnqueueTraceJob(ctx, query, false, 3, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
 	baseQuery := query
 	baseQuery.Network = "base-mainnet"
-	if _, err := database.EnqueueTraceJob(ctx, baseQuery, false, 2, 2); err != nil {
+	if _, err := database.EnqueueTraceJob(ctx, baseQuery, false, 3, 3); err != nil {
 		t.Fatal(err)
 	}
-	duplicate, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
+	duplicate, err := database.EnqueueTraceJob(ctx, query, false, 3, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if queued.ID != duplicate.ID || duplicate.Status != "queued" {
 		t.Fatalf("duplicate enqueue = %#v, want existing queued job %#v", duplicate, queued)
+	}
+	selected := query
+	selected.CounterpartyLimit = 5
+	selected.Ranking = "most_active"
+	distinct, err := database.EnqueueTraceJob(ctx, selected, false, 3, 3)
+	if err != nil || distinct.ID == queued.ID {
+		t.Fatalf("graph controls must identify a distinct job: %#v, err=%v", distinct, err)
 	}
 
 	claimed, err := database.ClaimTraceJob(ctx, query.Network, time.Minute)

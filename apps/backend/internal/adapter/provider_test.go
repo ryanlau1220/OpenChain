@@ -49,6 +49,19 @@ func TestAcquisitionIdentityRedactsCredentials(t *testing.T) {
 	}
 }
 
+func TestAcquisitionIdentityRedactsAlchemyPathCredential(t *testing.T) {
+	ctx, recorder := WithAcquisitionRecorder(context.Background())
+	request, err := http.NewRequest(http.MethodPost, "https://eth-mainnet.g.alchemy.com/v2/secret-api-key", bytes.NewReader([]byte(`{}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordAcquisition(ctx, AlchemySource, request, []byte(`{"result":[]}`))
+	items := recorder.Items()
+	if len(items) != 1 || strings.Contains(items[0].RequestIdentity, "secret-api-key") || !strings.Contains(items[0].RequestIdentity, "/v2/redacted") {
+		t.Fatalf("acquisition identity = %#v", items)
+	}
+}
+
 func TestProviderErrorRedactsProviderEndpointDetails(t *testing.T) {
 	err := NewProviderTransportError("etherscan-v2", errors.New("https://api.example/?apikey=secret"))
 	if err.Error() != "etherscan-v2 request failed" {

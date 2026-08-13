@@ -183,6 +183,32 @@ func (c *EVMClient) GetTxCount(ctx context.Context, address string) (uint64, err
 	return val.Uint64(), nil
 }
 
+func (c *EVMClient) GetTransaction(ctx context.Context, hash string) (*TransactionItem, error) {
+	raw, err := c.callRPC(ctx, "eth_getTransactionByHash", []interface{}{hash})
+	if err != nil {
+		return nil, err
+	}
+	var item struct {
+		Hash        string `json:"hash"`
+		From        string `json:"from"`
+		To          string `json:"to"`
+		Value       string `json:"value"`
+		BlockNumber string `json:"blockNumber"`
+	}
+	if string(raw) == "null" || json.Unmarshal(raw, &item) != nil || item.Hash == "" || item.From == "" || item.To == "" {
+		return nil, fmt.Errorf("transaction not found")
+	}
+	value, ok := new(big.Int).SetString(strings.TrimPrefix(item.Value, "0x"), 16)
+	if !ok {
+		return nil, fmt.Errorf("parse transaction value")
+	}
+	block, ok := new(big.Int).SetString(strings.TrimPrefix(item.BlockNumber, "0x"), 16)
+	if !ok {
+		return nil, fmt.Errorf("parse transaction block")
+	}
+	return &TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueBaseUnits: value.String(), AssetSymbol: "ETH", BlockNumber: block.Int64()}, nil
+}
+
 func (c *EVMClient) IsContract(ctx context.Context, address string) (bool, error) {
 	raw, err := c.callRPC(ctx, "eth_getCode", []interface{}{address, "latest"})
 	if err != nil {
