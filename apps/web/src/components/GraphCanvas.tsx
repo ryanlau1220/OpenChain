@@ -18,6 +18,7 @@ import {
 	type GraphNode,
 	type GraphOptions,
 	GraphRanking,
+	TraceDirection,
 	type TraceGraphResponse,
 	entityLabel,
 } from '../services/api';
@@ -78,6 +79,7 @@ const emptyFilters: GraphFilters = {
 const emptyTransferIDs: readonly string[] = [];
 
 type PositionedNode = { id: string; x: number; y: number };
+type LayoutName = 'flow' | 'cose' | 'concentric' | 'grid';
 
 // Existing positions are deliberately immutable during an incremental expand.
 // New neighbours fan out from their already-rendered parent.
@@ -85,6 +87,7 @@ export function positionAddedNodes(
 	addedIDs: readonly string[],
 	relationships: readonly { source: string; target: string }[],
 	existing: readonly PositionedNode[],
+	flow = false,
 ): Map<string, { x: number; y: number }> {
 	const positions = new Map(existing.map((node) => [node.id, { x: node.x, y: node.y }]));
 	const pending = new Set(addedIDs);
@@ -103,6 +106,20 @@ export function positionAddedNodes(
 	for (const [anchor, ids] of grouped) {
 		const center = positions.get(anchor) || { x: 0, y: 0 };
 		ids.sort().forEach((id, index) => {
+			if (flow) {
+				const edge = relationships.find(
+					(item) =>
+						(item.source === id && item.target === anchor) ||
+						(item.target === id && item.source === anchor),
+				);
+				const isInbound = edge?.target === anchor;
+				positions.set(id, {
+					x: center.x + (isInbound ? -220 : 220),
+					y: center.y + (index - (ids.length - 1) / 2) * 110,
+				});
+				pending.delete(id);
+				return;
+			}
 			const angle = (Math.PI * 2 * index) / ids.length - Math.PI / 2;
 			const radius = anchor ? 130 : 180;
 			positions.set(id, {
@@ -113,6 +130,68 @@ export function positionAddedNodes(
 		});
 	}
 	for (const id of pending) positions.set(id, { x: 180, y: 0 });
+	return positions;
+}
+
+// Source addresses remain left of the subject, destinations right. This keeps
+// the graph readable as branches grow without relying on a random simulation.
+export function flowNodePositions(
+	seedAddress: string,
+	nodeIDs: readonly string[],
+	relationships: readonly { source: string; target: string }[],
+	direction: TraceDirection,
+): Map<string, { x: number; y: number }> {
+	const inbound = new Map<string, string[]>();
+	const outbound = new Map<string, string[]>();
+	for (const relationship of relationships) {
+		inbound.set(relationship.target, [
+			...(inbound.get(relationship.target) || []),
+			relationship.source,
+		]);
+		outbound.set(relationship.source, [
+			...(outbound.get(relationship.source) || []),
+			relationship.target,
+		]);
+	}
+	const distancesFrom = (next: Map<string, string[]>) => {
+		const distances = new Map<string, number>([[seedAddress, 0]]);
+		const queue = [seedAddress];
+		for (let index = 0; index < queue.length; index++) {
+			const current = queue[index];
+			for (const neighbour of next.get(current) || []) {
+				if (distances.has(neighbour)) continue;
+				distances.set(neighbour, (distances.get(current) || 0) + 1);
+				queue.push(neighbour);
+			}
+		}
+		return distances;
+	};
+	const inboundDepth = distancesFrom(inbound);
+	const outboundDepth = distancesFrom(outbound);
+	const columns = new Map<number, string[]>();
+	for (const id of nodeIDs) {
+		let column = 0;
+		if (id !== seedAddress) {
+			const inDepth = inboundDepth.get(id);
+			const outDepth = outboundDepth.get(id);
+			if (direction === TraceDirection.INBOUND) column = inDepth ? -inDepth : 1;
+			else if (direction === TraceDirection.OUTBOUND) column = outDepth || -1;
+			else if (inDepth && !outDepth) column = -inDepth;
+			else if (outDepth && !inDepth) column = outDepth;
+			else if (inDepth && outDepth) column = outDepth <= inDepth ? outDepth : -inDepth;
+			else column = 1;
+		}
+		columns.set(column, [...(columns.get(column) || []), id]);
+	}
+	const positions = new Map<string, { x: number; y: number }>();
+	for (const [column, ids] of columns) {
+		ids.sort().forEach((id, index) => {
+			positions.set(id, {
+				x: column * 220,
+				y: (index - (ids.length - 1) / 2) * 110,
+			});
+		});
+	}
 	return positions;
 }
 
@@ -267,10 +346,29 @@ const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 	});
 };
 
-const layoutAndFit = (
-	cy: cytoscape.Core,
-	name: 'cose' | 'concentric' | 'breadthfirst' | 'grid',
-) => {
+const layoutAndFit = (cy: cytoscape.Core, name: LayoutName, direction: TraceDirection) => {
+	if (name === 'flow') {
+		const relationships = cy.edges().map((edge) => ({
+			source: edge.source().id(),
+			target: edge.target().id(),
+		}));
+		const seed = cy.nodes().filter('[?is_seed]')[0]?.id() || cy.nodes()[0]?.id() || '';
+		const positions = flowNodePositions(
+			seed,
+			cy.nodes().map((node) => node.id()),
+			relationships,
+			direction,
+		);
+		cy.batch(() => {
+			cy.nodes().forEach((node) => {
+				const position = positions.get(node.id());
+				if (position) node.position(position);
+			});
+		});
+		cy.resize();
+		if (cy.elements().length > 0) cy.fit(cy.elements(), 100);
+		return;
+	}
 	const layout = cy.layout({ name, directed: true, padding: 80, animate: false });
 	layout.one('layoutstop', () => {
 		cy.resize();
@@ -297,12 +395,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const cyRef = useRef<cytoscape.Core | null>(null);
 	const [internalSelectedNode, setInternalSelectedNode] = useState<GraphNode | null>(null);
-	const [layoutName, setLayoutName] = useState<'cose' | 'concentric' | 'breadthfirst' | 'grid'>(
-		'breadthfirst',
-	);
+	const [layoutName, setLayoutName] = useState<LayoutName>('flow');
 	const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
 	const [filterOpen, setFilterOpen] = useState(false);
-	const layoutRef = useRef(layoutName);
+	const layoutRef = useRef(`${layoutName}:${graphOptions?.direction ?? TraceDirection.BOTH}`);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
 	const seedAddress = graphData?.seedAddress || '';
@@ -415,8 +511,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 		});
 
-		const effectiveLayout =
-			layoutName === 'breadthfirst' && visibleEdges.length === 0 ? 'grid' : layoutName;
+		const effectiveLayout: LayoutName =
+			layoutName === 'flow' && visibleEdges.length === 0 ? 'grid' : layoutName;
+		const traceDirection = graphOptions?.direction ?? TraceDirection.BOTH;
+		const layoutKey = `${effectiveLayout}:${traceDirection}`;
 
 		if (cyRef.current) {
 			const cy = cyRef.current;
@@ -436,9 +534,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 
 			if (newElements.length === 0 && !needsRemoval) {
-				if (layoutRef.current !== effectiveLayout) {
-					layoutAndFit(cy, effectiveLayout);
-					layoutRef.current = effectiveLayout;
+				if (layoutRef.current !== layoutKey) {
+					layoutAndFit(cy, effectiveLayout, traceDirection);
+					layoutRef.current = layoutKey;
 				}
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
@@ -456,6 +554,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							target: String(item.data.target),
 						})),
 					existing,
+					effectiveLayout === 'flow',
 				);
 				for (const element of newElements) {
 					if (element.group === 'nodes') element.position = positions.get(String(element.data.id));
@@ -463,7 +562,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.batch(() => {
 					cy.add(newElements);
 				});
-				if (isInitialHydration) layoutAndFit(cy, effectiveLayout);
+				if (isInitialHydration) layoutAndFit(cy, effectiveLayout, traceDirection);
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
 				return;
@@ -475,7 +574,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 			applyNodeStyles(cy, selectedNode?.id);
 			applyEvidenceStyles(cy, highlightedIDs);
-			layoutAndFit(cy, effectiveLayout);
+			layoutAndFit(cy, effectiveLayout, traceDirection);
 			applyNodeStyles(cy, selectedNode?.id);
 			return;
 		}
@@ -562,7 +661,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			],
 			layout: { name: 'preset' },
 		});
-		layoutAndFit(cy, effectiveLayout);
+		layoutAndFit(cy, effectiveLayout, traceDirection);
 
 		applyNodeStyles(cy, selectedNode?.id);
 		applyEvidenceStyles(cy, highlightedIDs);
@@ -605,8 +704,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		cyRef.current = cy;
-		layoutRef.current = effectiveLayout;
-	}, [graphData, layoutName, visibleEdges, visibleNodes]);
+		layoutRef.current = layoutKey;
+	}, [graphData, graphOptions?.direction, layoutName, visibleEdges, visibleNodes]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
@@ -725,6 +824,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								<option value={GraphRanking.MOST_ACTIVE}>Most active</option>
 								<option value={GraphRanking.LARGEST_RAW_AMOUNT}>Largest raw amount</option>
 							</select>
+							<select
+								aria-label="Investigation direction"
+								value={graphOptions.direction}
+								onChange={(event) =>
+									onGraphOptionsChange({
+										...graphOptions,
+										direction: Number(event.target.value) as TraceDirection,
+									})
+								}
+								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+								style={{
+									background: 'var(--slate)',
+									border: '1px solid var(--border)',
+									color: 'var(--ink-2)',
+								}}
+							>
+								<option value={TraceDirection.BOTH}>Full flow</option>
+								<option value={TraceDirection.INBOUND}>Source of funds</option>
+								<option value={TraceDirection.OUTBOUND}>Destination of funds</option>
+							</select>
 						</>
 					)}
 					<button
@@ -743,9 +862,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					</button>
 					<select
 						value={layoutName}
-						onChange={(e) =>
-							setLayoutName(e.target.value as 'cose' | 'concentric' | 'breadthfirst' | 'grid')
-						}
+						onChange={(e) => setLayoutName(e.target.value as LayoutName)}
 						className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
 						style={{
 							background: 'var(--slate)',
@@ -753,7 +870,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							color: 'var(--ink-2)',
 						}}
 					>
-						<option value="breadthfirst">Flow (L→R)</option>
+						<option value="flow">Flow (source → target → destination)</option>
 						<option value="cose">Force Directed</option>
 						<option value="concentric">Concentric</option>
 						<option value="grid">Grid</option>
