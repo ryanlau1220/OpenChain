@@ -12,6 +12,7 @@ import {
 	GraphNode,
 	GraphRanking,
 	InvestigationLead,
+	TraceDirection,
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
 
@@ -36,6 +37,7 @@ export {
 	InvestigationLead,
 	LabelVisibility,
 	Network,
+	TraceDirection,
 	TraceGraphResponse,
 };
 
@@ -230,11 +232,13 @@ export function entityLabel(t?: EntityType): string {
 export type GraphOptions = {
 	maxCounterparties: number;
 	ranking: GraphRanking;
+	direction: TraceDirection;
 };
 
 export const defaultGraphOptions: GraphOptions = {
 	maxCounterparties: 10,
 	ranking: GraphRanking.MOST_RECENT,
+	direction: TraceDirection.BOTH,
 };
 
 export async function fetchTraceGraph(
