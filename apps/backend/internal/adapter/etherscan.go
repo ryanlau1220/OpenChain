@@ -49,6 +49,9 @@ func (a *EVMChainAdapter) NormalizeTransactionHash(value string) (string, error)
 }
 
 func (a *EVMChainAdapter) NativeAsset() Asset {
+	if a.network == "bnb-chain" {
+		return Asset{Kind: "NATIVE", Symbol: "BNB", Decimals: 18}
+	}
 	return Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}
 }
 
@@ -134,6 +137,7 @@ func (a *EVMChainAdapter) ListTransfers(ctx context.Context, address string, lim
 		if err != nil {
 			return nil, err
 		}
+		transfer.Asset = a.NativeAsset()
 		transfers = append(transfers, transfer)
 	}
 	for _, item := range internal {
@@ -147,6 +151,7 @@ func (a *EVMChainAdapter) ListTransfers(ctx context.Context, address string, lim
 		if transfer.EventID == "trace:" {
 			return nil, fmt.Errorf("Etherscan internal transfer is missing traceId")
 		}
+		transfer.Asset = a.NativeAsset()
 		transfers = append(transfers, transfer)
 	}
 	tokenTransfers, err := a.tokenTransfers(ctx, tokens)
@@ -368,7 +373,7 @@ func (a *EVMChainAdapter) LookupTransaction(ctx context.Context, hash string) (*
 	if !ok {
 		return nil, SourceStatus{}, fmt.Errorf("parse Etherscan transaction value")
 	}
-	return &TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueBaseUnits: value.String(), AssetSymbol: "ETH", BlockNumber: block}, a.SourceStatus(), nil
+	return &TransactionItem{Hash: strings.ToLower(item.Hash), From: strings.ToLower(item.From), To: strings.ToLower(item.To), ValueBaseUnits: value.String(), AssetSymbol: a.NativeAsset().Symbol, BlockNumber: block}, a.SourceStatus(), nil
 }
 
 func (a *EVMChainAdapter) GetContractMetadata(ctx context.Context, address string) (*ContractMetadata, error) {

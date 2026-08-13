@@ -45,6 +45,9 @@ export type SupportedNetwork =
 	| Network.POLYGON_MAINNET
 	| Network.ARBITRUM_ONE
 	| Network.OPTIMISM_MAINNET
+	| Network.BNB_CHAIN
+	| Network.TON_MAINNET
+	| Network.CARDANO_MAINNET
 	| Network.SOLANA_MAINNET
 	| Network.TRON_MAINNET;
 
@@ -54,6 +57,9 @@ export type NetworkSlug =
 	| 'polygon-mainnet'
 	| 'arbitrum-one'
 	| 'optimism-mainnet'
+	| 'bnb-chain'
+	| 'ton-mainnet'
+	| 'cardano-mainnet'
 	| 'solana-mainnet'
 	| 'tron-mainnet';
 
@@ -102,6 +108,13 @@ const NETWORK_DETAILS: Record<
 		icon: '/networks/optimism.svg',
 		activityLabel: 'Outgoing nonce',
 	},
+	[Network.BNB_CHAIN]: {
+		name: 'BNB Chain',
+		slug: 'bnb-chain',
+		explorer: 'https://bscscan.com',
+		icon: '/networks/bnb.svg',
+		activityLabel: 'Outgoing nonce',
+	},
 	[Network.SOLANA_MAINNET]: {
 		name: 'Solana Mainnet',
 		slug: 'solana-mainnet',
@@ -114,6 +127,18 @@ const NETWORK_DETAILS: Record<
 		explorer: 'https://tronscan.org/#',
 		icon: '/networks/tron.svg',
 	},
+	[Network.TON_MAINNET]: {
+		name: 'TON Mainnet',
+		slug: 'ton-mainnet',
+		explorer: 'https://tonviewer.com',
+		icon: '/networks/ton.svg',
+	},
+	[Network.CARDANO_MAINNET]: {
+		name: 'Cardano Mainnet',
+		slug: 'cardano-mainnet',
+		explorer: 'https://cardanoscan.io',
+		icon: '/networks/cardano.svg',
+	},
 };
 
 export const supportedNetworks = [
@@ -122,8 +147,11 @@ export const supportedNetworks = [
 	Network.POLYGON_MAINNET,
 	Network.ARBITRUM_ONE,
 	Network.OPTIMISM_MAINNET,
+	Network.BNB_CHAIN,
 	Network.SOLANA_MAINNET,
 	Network.TRON_MAINNET,
+	Network.TON_MAINNET,
+	Network.CARDANO_MAINNET,
 ] as const;
 
 export function networkDetails(network: SupportedNetwork) {
@@ -155,6 +183,10 @@ export function detectAddressNetwork(value: string): SupportedNetwork | undefine
 	if (/^0x[\da-fA-F]{40}$/.test(address)) return Network.ETHEREUM_MAINNET;
 	if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address) && decodedBase58Length(address) === 25)
 		return Network.TRON_MAINNET;
+	if ((address.startsWith('EQ') || address.startsWith('UQ')) && address.length === 48)
+		return Network.TON_MAINNET;
+	if ((address.startsWith('addr1') || address.startsWith('addr_test1')) && address.length >= 50)
+		return Network.CARDANO_MAINNET;
 	if (decodedBase58Length(address) === 32) return Network.SOLANA_MAINNET;
 	return undefined;
 }
@@ -165,7 +197,8 @@ export function isEVMNetwork(network: SupportedNetwork): boolean {
 		network === Network.BASE_MAINNET ||
 		network === Network.POLYGON_MAINNET ||
 		network === Network.ARBITRUM_ONE ||
-		network === Network.OPTIMISM_MAINNET
+		network === Network.OPTIMISM_MAINNET ||
+		network === Network.BNB_CHAIN
 	);
 }
 

@@ -52,8 +52,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Curated label import failed: %v", err)
 	}
-	runtimes := make(map[pb.Network]api.NetworkRuntime, 7)
-	queues := make([]*tracing.Queue, 0, 7)
+	runtimes := make(map[pb.Network]api.NetworkRuntime, 10)
+	queues := make([]*tracing.Queue, 0, 10)
 	for _, network := range []struct {
 		id                    pb.Network
 		name, chainID, rpcURL string
@@ -81,9 +81,28 @@ func main() {
 		{pb.Network_NETWORK_POLYGON_MAINNET, "polygon-mainnet", "https://polygon-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "POL", Decimals: 18}},
 		{pb.Network_NETWORK_ARBITRUM_ONE, "arbitrum-one", "https://arb-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
 		{pb.Network_NETWORK_OPTIMISM_MAINNET, "optimism-mainnet", "https://opt-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
+		{pb.Network_NETWORK_BNB_CHAIN, "bnb-chain", "https://bnb-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "BNB", Decimals: 18}},
 	} {
 		rpcURL := network.endpoint + "/" + cfg.AlchemyAPIKey
 		chainAdapter := adapter.NewAlchemyEVMChainAdapter(network.name, network.endpoint, cfg.AlchemyAPIKey, network.nativeAsset, adapter.NewEVMClient(rpcURL))
+		engine := tracing.NewEngine(chainAdapter, database, registry)
+		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
+		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
+		queues = append(queues, queue)
+	}
+	for _, network := range []struct {
+		id   pb.Network
+		name string
+	}{
+		{pb.Network_NETWORK_TON_MAINNET, "ton-mainnet"},
+		{pb.Network_NETWORK_CARDANO_MAINNET, "cardano-mainnet"},
+	} {
+		var chainAdapter adapter.ChainAdapter
+		if network.id == pb.Network_NETWORK_TON_MAINNET {
+			chainAdapter = adapter.NewTONAdapter(network.name, cfg.TonAPIKey)
+		} else {
+			chainAdapter = adapter.NewCardanoAdapter(network.name, cfg.BlockfrostProjectID)
+		}
 		engine := tracing.NewEngine(chainAdapter, database, registry)
 		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobs, cfg.MaxQueuedJobsPerClient)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}

@@ -18,6 +18,8 @@ type Config struct {
 	BlockscoutAPIKey        string
 	AlchemyAPIKey           string
 	TronGridAPIKey          string
+	TonAPIKey               string
+	BlockfrostProjectID     string
 	WebOrigin               string
 	PublicRequestsPerMinute int
 	MaxQueuedTraceJobs      int
@@ -44,6 +46,8 @@ func LoadConfig() *Config {
 	blockscoutAPIKey := os.Getenv("BLOCKSCOUT_API_KEY")
 	alchemyAPIKey := os.Getenv("ALCHEMY_API_KEY")
 	tronGridAPIKey := os.Getenv("TRONGRID_API_KEY")
+	tonAPIKey := os.Getenv("TONAPI_KEY")
+	blockfrostProjectID := os.Getenv("BLOCKFROST_PROJECT_ID")
 
 	webOrigin := os.Getenv("WEB_ORIGIN")
 	if webOrigin == "" {
@@ -74,6 +78,8 @@ func LoadConfig() *Config {
 		BlockscoutAPIKey:        blockscoutAPIKey,
 		AlchemyAPIKey:           alchemyAPIKey,
 		TronGridAPIKey:          tronGridAPIKey,
+		TonAPIKey:               tonAPIKey,
+		BlockfrostProjectID:     blockfrostProjectID,
 		WebOrigin:               webOrigin,
 		PublicRequestsPerMinute: publicRequestsPerMinute,
 		MaxQueuedTraceJobs:      maxQueuedTraceJobs,
@@ -111,6 +117,9 @@ func (c *Config) Validate() error {
 	}
 	if c.TronGridAPIKey == "" {
 		return fmt.Errorf("TRONGRID_API_KEY is required")
+	}
+	if c.TonAPIKey == "" || c.BlockfrostProjectID == "" {
+		return fmt.Errorf("TONAPI_KEY and BLOCKFROST_PROJECT_ID are required")
 	}
 	return nil
 }
