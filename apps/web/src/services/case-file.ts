@@ -1,5 +1,7 @@
-export const CASE_FILE_VERSION = 1;
-const STORAGE_KEY = 'openchain.local-case.v1';
+import { type GraphOptions, type NetworkSlug, defaultGraphOptions, isNetworkSlug } from './api';
+
+export const CASE_FILE_VERSION = 2;
+const STORAGE_KEY = 'openchain.local-case.v2';
 
 export type CaseAnnotation = {
 	id: string;
@@ -11,7 +13,8 @@ export type CaseAnnotation = {
 export type LocalCase = {
 	version: number;
 	title: string;
-	network: 'ethereum-mainnet' | 'base-mainnet' | 'solana-mainnet' | 'tron-mainnet';
+	network: NetworkSlug;
+	scope: GraphOptions;
 	createdAt: string;
 	updatedAt: string;
 	rootAddress: string;
@@ -27,6 +30,7 @@ export function createLocalCase(): LocalCase {
 		version: CASE_FILE_VERSION,
 		title: 'Untitled investigation',
 		network: 'ethereum-mainnet',
+		scope: { ...defaultGraphOptions },
 		createdAt: now,
 		updatedAt: now,
 		rootAddress: '',
@@ -73,12 +77,21 @@ export function parseCaseFile(value: string): LocalCase {
 				(annotation.target.kind === 'address' || annotation.target.kind === 'transfer')
 			);
 		});
+	const scope = item.scope as Partial<GraphOptions> | undefined;
+	const validScope =
+		!!scope &&
+		[5, 10, 25].includes(scope.maxCounterparties ?? 0) &&
+		[1, 2, 3, 4].includes(scope.ranking ?? 0) &&
+		[1, 2, 3].includes(scope.direction ?? 0) &&
+		[1, 2, 3].includes(scope.maxDepth ?? 0) &&
+		typeof scope.from === 'string' &&
+		typeof scope.to === 'string' &&
+		typeof scope.asset === 'string' &&
+		typeof scope.minimumAmount === 'string' &&
+		typeof scope.transferKind === 'string';
 	if (
 		item.version !== CASE_FILE_VERSION ||
-		(item.network !== 'ethereum-mainnet' &&
-			item.network !== 'base-mainnet' &&
-			item.network !== 'solana-mainnet' &&
-			item.network !== 'tron-mainnet') ||
+		!isNetworkSlug(item.network) ||
 		typeof item.title !== 'string' ||
 		typeof item.notes !== 'string' ||
 		typeof item.rootAddress !== 'string' ||
@@ -86,8 +99,9 @@ export function parseCaseFile(value: string): LocalCase {
 		typeof item.updatedAt !== 'string' ||
 		!strings(item.selectedAddressIds) ||
 		!strings(item.selectedTransferIds) ||
-		!annotations
+		!annotations ||
+		!validScope
 	)
 		throw new Error('Unsupported case file.');
-	return item as LocalCase;
+	return { ...item, scope: { ...scope } } as LocalCase;
 }

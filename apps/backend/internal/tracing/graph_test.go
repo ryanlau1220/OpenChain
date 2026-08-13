@@ -50,17 +50,22 @@ func TestSelectCounterpartyTransfersUsesDeterministicRequestedRanking(t *testing
 	transfers := []adapter.TransferItem{
 		{From: seed, To: "recent", AmountBaseUnits: "1", Asset: adapter.Asset{Decimals: 0}, Timestamp: now},
 		{From: seed, To: "large", AmountBaseUnits: "99", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-time.Hour)},
+		{From: seed, To: "total", AmountBaseUnits: "50", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-4 * time.Hour)},
+		{From: seed, To: "total", AmountBaseUnits: "50", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-5 * time.Hour)},
 		{From: seed, To: "active", AmountBaseUnits: "2", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-2 * time.Hour)},
 		{From: seed, To: "active", AmountBaseUnits: "2", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-3 * time.Hour)},
 	}
 	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingMostRecent); len(got) != 1 || got[0].To != "recent" {
 		t.Fatalf("recent = %#v", got)
 	}
-	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingLargestRawAmount); len(got) != 1 || got[0].To != "large" {
-		t.Fatalf("largest = %#v", got)
+	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingTotalRawAmount); len(got) != 2 || got[0].To != "total" {
+		t.Fatalf("total = %#v", got)
 	}
 	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingMostActive); len(got) != 2 || got[0].To != "active" {
 		t.Fatalf("active = %#v", got)
+	}
+	if got := selectCounterpartyTransfersWithKnown(transfers, seed, 1, RankingKnownEntity, map[string]bool{"large": true}); len(got) != 1 || got[0].To != "large" {
+		t.Fatalf("known = %#v", got)
 	}
 }
 

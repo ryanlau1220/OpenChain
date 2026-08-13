@@ -20,8 +20,10 @@ import {
 	GraphRanking,
 	TraceDirection,
 	type TraceGraphResponse,
+	defaultGraphOptions,
 	entityLabel,
 } from '../services/api';
+import { nodeDepths } from '../services/graph-scope';
 
 interface GraphCanvasProps {
 	graphData: TraceGraphResponse | null;
@@ -60,24 +62,7 @@ export type GraphRelationship = {
 	provisional: boolean;
 };
 
-type DirectionFilter = 'both' | 'inbound' | 'outbound';
-type GraphFilters = {
-	from: string;
-	to: string;
-	direction: DirectionFilter;
-	asset: string;
-	minimumAmount: string;
-	transferKind: string;
-};
-
-const emptyFilters: GraphFilters = {
-	from: '',
-	to: '',
-	direction: 'both',
-	asset: '',
-	minimumAmount: '',
-	transferKind: '',
-};
+type GraphFilters = Pick<GraphOptions, 'from' | 'to' | 'asset' | 'minimumAmount' | 'transferKind'>;
 const emptyTransferIDs: readonly string[] = [];
 
 type PositionedNode = { id: string; x: number; y: number };
@@ -345,8 +330,6 @@ export function filterGraphEdges(
 		if (timestamp < from || timestamp > to || (filters.asset && assetKey(edge) !== filters.asset))
 			return false;
 		if (filters.transferKind && edge.transferKind !== filters.transferKind) return false;
-		if (filters.direction === 'inbound' && edge.target !== seedAddress) return false;
-		if (filters.direction === 'outbound' && edge.source !== seedAddress) return false;
 		if (!filters.minimumAmount) return true;
 		const minimum = minimumBaseUnits(filters.minimumAmount, edge.asset?.decimals ?? 0);
 		return minimum !== null && baseUnits(edge.amountBaseUnits) >= minimum;
@@ -452,15 +435,25 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const cyRef = useRef<cytoscape.Core | null>(null);
 	const [internalSelectedNode, setInternalSelectedNode] = useState<GraphNode | null>(null);
 	const [layoutName, setLayoutName] = useState<LayoutName>('flow');
-	const [filters, setFilters] = useState<GraphFilters>(emptyFilters);
 	const [filterOpen, setFilterOpen] = useState(false);
 	const layoutRef = useRef(`${layoutName}:${graphOptions?.direction ?? TraceDirection.BOTH}`);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
+	const filters = graphOptions ?? defaultGraphOptions;
 	const seedAddress = graphData?.seedAddress || '';
-	const visibleEdges = useMemo(
+	const scopedEdges = useMemo(
 		() => filterGraphEdges(graphData?.edges || [], seedAddress, filters),
 		[filters, graphData?.edges, seedAddress],
+	);
+	const depths = useMemo(() => nodeDepths(seedAddress, scopedEdges), [scopedEdges, seedAddress]);
+	const visibleEdges = useMemo(
+		() =>
+			scopedEdges.filter(
+				(edge) =>
+					(depths.get(edge.source) ?? Number.POSITIVE_INFINITY) <= filters.maxDepth &&
+					(depths.get(edge.target) ?? Number.POSITIVE_INFINITY) <= filters.maxDepth,
+			),
+		[depths, filters.maxDepth, scopedEdges],
 	);
 	const visibleNodes = useMemo(() => {
 		const addresses = new Set([seedAddress]);
@@ -771,10 +764,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const toolBtn =
 		'p-1.5 rounded-lg transition hover:bg-[var(--slate)] text-[var(--ink-3)] hover:text-[var(--ink)]';
 	const activeFilterCount = Object.values(filters).filter(
-		(value) => value && value !== 'both',
+		(value) => typeof value === 'string' && value,
 	).length;
 	const updateFilter = <Key extends keyof GraphFilters>(key: Key, value: GraphFilters[Key]) =>
-		setFilters((current) => ({ ...current, [key]: value }));
+		graphOptions && onGraphOptionsChange?.({ ...graphOptions, [key]: value });
 	const showLoading = loading || Boolean(graphData?.pending);
 
 	return (
@@ -868,11 +861,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 									border: '1px solid var(--border)',
 									color: 'var(--ink-2)',
 								}}
-								title="Largest raw amount compares native asset units, not fiat value."
+								title="Ranking is deterministic. Amount ranking is the highest total for one raw on-chain asset, never fiat value."
 							>
 								<option value={GraphRanking.MOST_RECENT}>Most recent</option>
-								<option value={GraphRanking.MOST_ACTIVE}>Most active</option>
-								<option value={GraphRanking.LARGEST_RAW_AMOUNT}>Largest raw amount</option>
+								<option value={GraphRanking.MOST_ACTIVE}>Most transfers</option>
+								<option value={GraphRanking.TOTAL_RAW_AMOUNT}>Largest total per asset</option>
+								<option value={GraphRanking.KNOWN_ENTITY}>Known labelled entities</option>
 							</select>
 							<select
 								aria-label="Investigation direction"
@@ -893,6 +887,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								<option value={TraceDirection.BOTH}>Full flow</option>
 								<option value={TraceDirection.INBOUND}>Source of funds</option>
 								<option value={TraceDirection.OUTBOUND}>Destination of funds</option>
+							</select>
+							<select
+								aria-label="Maximum graph depth"
+								value={graphOptions.maxDepth}
+								onChange={(event) =>
+									onGraphOptionsChange({
+										...graphOptions,
+										maxDepth: Number(event.target.value),
+									})
+								}
+								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+								style={{
+									background: 'var(--slate)',
+									border: '1px solid var(--border)',
+									color: 'var(--ink-2)',
+								}}
+								title="Manual expansion stops at this distance from the target."
+							>
+								<option value={1}>Depth 1</option>
+								<option value={2}>Depth 2</option>
+								<option value={3}>Depth 3</option>
 							</select>
 						</>
 					)}
@@ -942,7 +957,16 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							</p>
 							<button
 								type="button"
-								onClick={() => setFilters(emptyFilters)}
+								onClick={() =>
+									onGraphOptionsChange?.({
+										...filters,
+										from: '',
+										to: '',
+										asset: '',
+										minimumAmount: '',
+										transferKind: '',
+									})
+								}
 								className="text-[10px]"
 								style={{ color: 'var(--accent)' }}
 							>
@@ -964,18 +988,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								onChange={(event) => updateFilter('to', event.target.value)}
 								className="prism-input text-[10px] px-2 py-1.5"
 							/>
-							<select
-								aria-label="Transfer direction"
-								value={filters.direction}
-								onChange={(event) =>
-									updateFilter('direction', event.target.value as DirectionFilter)
-								}
-								className="prism-input text-[10px] px-2 py-1.5"
-							>
-								<option value="both">All directions</option>
-								<option value="inbound">Inbound to target</option>
-								<option value="outbound">Outbound from target</option>
-							</select>
 							<select
 								aria-label="Asset"
 								value={filters.asset}
@@ -1014,7 +1026,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							</select>
 						</div>
 						<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
-							Amount uses the selected transfer’s asset units.
+							These filters only change the visible graph. Direction, ranking, depth, and top-N set
+							the trace scope.
 						</p>
 					</div>
 				</div>

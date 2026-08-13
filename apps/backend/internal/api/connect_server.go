@@ -32,10 +32,12 @@ func parseEntityType(value string) pb.EntityType {
 
 func graphRanking(value pb.GraphRanking) tracing.Ranking {
 	switch value {
-	case pb.GraphRanking_GRAPH_RANKING_LARGEST_RAW_AMOUNT:
-		return tracing.RankingLargestRawAmount
+	case pb.GraphRanking_GRAPH_RANKING_TOTAL_RAW_AMOUNT:
+		return tracing.RankingTotalRawAmount
 	case pb.GraphRanking_GRAPH_RANKING_MOST_ACTIVE:
 		return tracing.RankingMostActive
+	case pb.GraphRanking_GRAPH_RANKING_KNOWN_ENTITY:
+		return tracing.RankingKnownEntity
 	default:
 		return tracing.RankingMostRecent
 	}

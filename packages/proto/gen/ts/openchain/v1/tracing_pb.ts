@@ -10,7 +10,8 @@ import { AddressLabel } from "./labels_pb.js";
 
 /**
  * Counterparty selection is deterministic and scoped to the provider page.
- * "largest raw amount" is asset-unit based; it is never a fiat valuation.
+ * "total raw amount" is the highest total for one asset; it is never a fiat valuation.
+ * "known entity" means a curated label exists; it is not a risk score.
  *
  * @generated from enum openchain.v1.GraphRanking
  */
@@ -26,21 +27,27 @@ export enum GraphRanking {
   MOST_RECENT = 1,
 
   /**
-   * @generated from enum value: GRAPH_RANKING_LARGEST_RAW_AMOUNT = 2;
+   * @generated from enum value: GRAPH_RANKING_TOTAL_RAW_AMOUNT = 2;
    */
-  LARGEST_RAW_AMOUNT = 2,
+  TOTAL_RAW_AMOUNT = 2,
 
   /**
    * @generated from enum value: GRAPH_RANKING_MOST_ACTIVE = 3;
    */
   MOST_ACTIVE = 3,
+
+  /**
+   * @generated from enum value: GRAPH_RANKING_KNOWN_ENTITY = 4;
+   */
+  KNOWN_ENTITY = 4,
 }
 // Retrieve enum metadata with: proto3.getEnumType(GraphRanking)
 proto3.util.setEnumType(GraphRanking, "openchain.v1.GraphRanking", [
   { no: 0, name: "GRAPH_RANKING_UNSPECIFIED" },
   { no: 1, name: "GRAPH_RANKING_MOST_RECENT" },
-  { no: 2, name: "GRAPH_RANKING_LARGEST_RAW_AMOUNT" },
+  { no: 2, name: "GRAPH_RANKING_TOTAL_RAW_AMOUNT" },
   { no: 3, name: "GRAPH_RANKING_MOST_ACTIVE" },
+  { no: 4, name: "GRAPH_RANKING_KNOWN_ENTITY" },
 ]);
 
 /**

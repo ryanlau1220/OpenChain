@@ -23,9 +23,20 @@ function frozenEvidencePackage(root: string, transferID: string) {
 	const payload = {
 		exported_at: '2026-08-12T00:00:00Z',
 		case: {
-			version: 1,
+			version: 2,
 			title: 'Deterministic replay',
 			network: 'ethereum-mainnet',
+			scope: {
+				maxCounterparties: 10,
+				ranking: 1,
+				direction: 1,
+				maxDepth: 1,
+				from: '',
+				to: '',
+				asset: '',
+				minimumAmount: '',
+				transferKind: '',
+			},
 			createdAt: '2026-08-12T00:00:00Z',
 			updatedAt: '2026-08-12T00:00:00Z',
 			rootAddress: root,
@@ -78,7 +89,7 @@ test('persists local investigation notes across a reload', async ({ page }) => {
 	await page.getByLabel('Case notes').fill('Verified in Chromium.');
 	await expect
 		.poll(() =>
-			page.evaluate(() => JSON.parse(localStorage.getItem('openchain.local-case.v1') || '{}').title),
+			page.evaluate(() => JSON.parse(localStorage.getItem('openchain.local-case.v2') || '{}').title),
 		)
 		.toBe('E2E investigation');
 	await page.reload();
@@ -94,11 +105,15 @@ test('provides focused graph filters without leaving the investigation workspace
 	await expect(page.getByLabel('Investigation direction')).toHaveValue('1');
 	await page.getByLabel('Investigation direction').selectOption('2');
 	await expect(page.getByLabel('Investigation direction')).toHaveValue('2');
+	await expect(page.getByLabel('Maximum graph depth')).toHaveValue('1');
+	await page.getByLabel('Maximum graph depth').selectOption('2');
+	await expect(page.getByLabel('Maximum graph depth')).toHaveValue('2');
 	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('1');
+	await page.getByLabel('Counterparty ranking').selectOption('4');
+	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('4');
 	await page.getByText('Filters', { exact: true }).click();
 	await expect(page.getByLabel('From date')).toBeVisible();
 	await expect(page.getByLabel('To date')).toBeVisible();
-	await expect(page.getByLabel('Transfer direction')).toBeVisible();
 	await expect(page.getByLabel('Asset')).toBeVisible();
 	await expect(page.getByLabel('Minimum amount')).toBeVisible();
 	await expect(page.getByLabel('Transfer type')).toBeVisible();
@@ -128,6 +143,7 @@ test('replays a deterministic queued trace through finding, package export, and 
 	const packageJSON = frozenEvidencePackage(root, transferID);
 	let statusRequests = 0;
 	let exportRequests = 0;
+	let exportedDepth = 0;
 	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) =>
 		route.fulfill(connectJSON(pending)),
 	);
@@ -143,9 +159,19 @@ test('replays a deterministic queued trace through finding, package export, and 
 	);
 	await page.route('**/openchain.v1.EvidenceService/ExportEvidencePackage', (route) => {
 		exportRequests++;
+		const request = JSON.parse(route.request().postData() || '{}');
+		exportedDepth = JSON.parse(request.caseJson).scope.maxDepth;
 		return route.fulfill(connectJSON({ packageJson: packageJSON }));
 	});
-	await page.goto('/');
+	await page.getByLabel('Maximum graph depth').selectOption('2');
+	await expect(page.getByLabel('Maximum graph depth')).toHaveValue('2');
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() => JSON.parse(localStorage.getItem('openchain.local-case.v2') || '{}').scope?.maxDepth,
+			),
+		)
+		.toBe(2);
 	await page.getByPlaceholder('Search target address').fill(root);
 	await page.getByLabel('Investigate address').click();
 	await expect(page.getByText('Retrieving address flow…')).toBeVisible();
@@ -155,6 +181,7 @@ test('replays a deterministic queued trace through finding, package export, and 
 	await page.getByRole('button', { name: 'Package' }).click();
 	expect((await download).suggestedFilename()).toBe('openchain-evidence-package.json');
 	expect(exportRequests).toBe(1);
+	expect(exportedDepth).toBe(2);
 	await page.locator('input[type=file]').setInputFiles({ name: 'evidence.json', mimeType: 'application/json', buffer: Buffer.from(packageJSON) });
 	await expect(page.getByLabel('Case title')).toHaveValue('Deterministic replay');
 	await expect(page.getByRole('button', { name: 'Print' })).toBeEnabled();

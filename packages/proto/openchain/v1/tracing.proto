@@ -53,12 +53,14 @@ message InvestigationLead {
 }
 
 // Counterparty selection is deterministic and scoped to the provider page.
-// "largest raw amount" is asset-unit based; it is never a fiat valuation.
+// "total raw amount" is the highest total for one asset; it is never a fiat valuation.
+// "known entity" means a curated label exists; it is not a risk score.
 enum GraphRanking {
   GRAPH_RANKING_UNSPECIFIED = 0;
   GRAPH_RANKING_MOST_RECENT = 1;
-  GRAPH_RANKING_LARGEST_RAW_AMOUNT = 2;
+  GRAPH_RANKING_TOTAL_RAW_AMOUNT = 2;
   GRAPH_RANKING_MOST_ACTIVE = 3;
+  GRAPH_RANKING_KNOWN_ENTITY = 4;
 }
 
 message TraceGraphRequest {

@@ -38,10 +38,12 @@ import {
 	parseEvidencePackage,
 	replayEvidencePackage,
 } from '../services/evidence-package';
+import { nodeDepths } from '../services/graph-scope';
 
 export const Route = createFileRoute('/')({ component: Index });
 
 type BranchPage = { cursor: string; hasMore: boolean };
+type CaseUpdate = LocalCase | ((current: LocalCase) => LocalCase);
 const tracePollInterval = 5_000;
 
 function Index() {
@@ -58,6 +60,7 @@ function Index() {
 	const [selectedLead, setSelectedLead] = useState<InvestigationLead | null>(null);
 	const [highlightedTransferIds, setHighlightedTransferIds] = useState<readonly string[]>([]);
 	const [caseFile, setCaseFile] = useState<LocalCase>(createLocalCase);
+	const caseFileRef = useRef(caseFile);
 	const [frozenEvidence, setFrozenEvidence] = useState<EvidencePackage | null>(null);
 	const [caseLoaded, setCaseLoaded] = useState(false);
 	const [branchPages, setBranchPages] = useState<Record<string, BranchPage>>({});
@@ -65,13 +68,21 @@ function Index() {
 	const [pendingExpansion, setPendingExpansion] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState('');
 	const investigationRef = useRef(0);
+	const graphOptionsRef = useRef(graphOptions);
+	const updateCaseFile = useCallback((update: CaseUpdate) => {
+		const next = typeof update === 'function' ? update(caseFileRef.current) : update;
+		caseFileRef.current = next;
+		setCaseFile(next);
+	}, []);
 
 	useEffect(() => {
 		const storedCase = loadLocalCase();
-		setCaseFile(storedCase);
+		updateCaseFile(storedCase);
+		graphOptionsRef.current = storedCase.scope;
+		setGraphOptions(storedCase.scope);
 		setNetwork(networkFromSlug(storedCase.network));
 		setCaseLoaded(true);
-	}, []);
+	}, [updateCaseFile]);
 
 	useEffect(() => {
 		if (caseLoaded) saveLocalCase(caseFile);
@@ -82,7 +93,7 @@ function Index() {
 			target: string,
 			preserveCurrentGraph = false,
 			targetNetwork = network,
-			options = graphOptions,
+			options = graphOptionsRef.current,
 		) => {
 			const investigation = preserveCurrentGraph
 				? investigationRef.current
@@ -111,9 +122,10 @@ function Index() {
 				setErrorMessage('');
 				setGraphData(graph);
 				setSelectedNode(graph.nodes.find((node) => node.isSeed) ?? null);
-				setCaseFile((current) => ({
+				updateCaseFile((current) => ({
 					...current,
 					network: networkDetails(targetNetwork).slug,
+					scope: options,
 					rootAddress: graph.seedAddress,
 					updatedAt: new Date().toISOString(),
 				}));
@@ -139,7 +151,7 @@ function Index() {
 				if (!preserveCurrentGraph && investigation === investigationRef.current) setLoading(false);
 			}
 		},
-		[graphOptions, network],
+		[network, updateCaseFile],
 	);
 
 	const changeNetwork = useCallback(
@@ -160,7 +172,7 @@ function Index() {
 			setPendingExpansion(null);
 			setFrozenEvidence(null);
 			setErrorMessage('');
-			setCaseFile((current) => ({
+			updateCaseFile((current) => ({
 				...current,
 				network: networkDetails(nextNetwork).slug,
 				rootAddress: '',
@@ -170,7 +182,7 @@ function Index() {
 				updatedAt: new Date().toISOString(),
 			}));
 		},
-		[network],
+		[network, updateCaseFile],
 	);
 
 	useEffect(() => {
@@ -190,7 +202,7 @@ function Index() {
 			setSelectedLead(null);
 			setHighlightedTransferIds([]);
 			if (node)
-				setCaseFile((current) => ({
+				updateCaseFile((current) => ({
 					...current,
 					selectedAddressIds: [...new Set([...current.selectedAddressIds, node.id])],
 					updatedAt: new Date().toISOString(),
@@ -204,7 +216,7 @@ function Index() {
 				console.error(error);
 			}
 		},
-		[network],
+		[network, updateCaseFile],
 	);
 
 	const handleExpand = useCallback(
@@ -213,6 +225,8 @@ function Index() {
 			const page = branchPages[key];
 			if (
 				!graphData ||
+				(nodeDepths(graphData.seedAddress, graphData.edges).get(nodeAddress) ?? 0) >=
+					graphOptions.maxDepth ||
 				expandingAddress ||
 				(pendingExpansion && pendingExpansion !== key) ||
 				(page && !page.hasMore)
@@ -293,12 +307,18 @@ function Index() {
 
 	const activeAddress = selectedNode?.id || graphData?.seedAddress || '';
 	const activeBranch = branchPages[activeAddress];
-	const canExpand = Boolean(activeAddress) && (!activeBranch || activeBranch.hasMore);
+	const activeDepth = graphData
+		? (nodeDepths(graphData.seedAddress, graphData.edges).get(activeAddress) ?? 0)
+		: 0;
+	const canExpand =
+		Boolean(activeAddress) &&
+		activeDepth < graphOptions.maxDepth &&
+		(!activeBranch || activeBranch.hasMore);
 	const selectTransfer = useCallback((edge: GraphEdge) => {
 		setSelectedEdge(edge);
 		setSelectedLead(null);
 		setHighlightedTransferIds([edge.id]);
-		setCaseFile((current) => ({
+		updateCaseFile((current) => ({
 			...current,
 			selectedTransferIds: [...new Set([...current.selectedTransferIds, edge.id])],
 			updatedAt: new Date().toISOString(),
@@ -314,7 +334,7 @@ function Index() {
 			setSelectedEdge(evidence[0] ?? null);
 			setSelectedNode(subject);
 			setHighlightedTransferIds(lead.transferIds);
-			setCaseFile((current) => ({
+			updateCaseFile((current) => ({
 				...current,
 				selectedAddressIds: subject
 					? [...new Set([...current.selectedAddressIds, subject.id])]
@@ -328,7 +348,7 @@ function Index() {
 					setLabels(lookup.labels);
 				});
 		},
-		[graphData, network],
+		[graphData, network, updateCaseFile],
 	);
 	const exportFrozenEvidence = useCallback(async () => {
 		if (!graphData) throw new Error('Trace an address before creating an evidence package.');
@@ -336,34 +356,44 @@ function Index() {
 			...graphData.edges.map((edge) => edge.id),
 			...graphData.leads.flatMap((lead) => lead.transferIds),
 		]);
-		const selected = caseFile.selectedTransferIds.filter((id) => evidenceIDs.has(id));
+		const evidenceCase = { ...caseFileRef.current, scope: graphOptionsRef.current };
+		const selected = evidenceCase.selectedTransferIds.filter((id) => evidenceIDs.has(id));
 		const transferIDs = selected.length > 0 ? selected : [...evidenceIDs];
 		if (transferIDs.length === 0) throw new Error('This investigation has no transfers to export.');
-		const packageJSON = await exportEvidencePackage(network, transferIDs, JSON.stringify(caseFile));
+		const packageJSON = await exportEvidencePackage(
+			network,
+			transferIDs,
+			JSON.stringify(evidenceCase),
+		);
 		const packageFile = await parseEvidencePackage(packageJSON);
 		setFrozenEvidence(packageFile);
 		return packageJSON;
-	}, [caseFile, graphData, network]);
-	const importFrozenEvidence = useCallback((packageFile: EvidencePackage) => {
-		const replay = replayEvidencePackage(packageFile);
-		investigationRef.current++;
-		setAddress(replay.caseFile.rootAddress);
-		setNetwork(replay.network);
-		setCaseFile(replay.caseFile);
-		setGraphData(replay.graph);
-		setSelectedNode(replay.graph.nodes.find((node) => node.isSeed) ?? null);
-		setSelectedEdge(null);
-		setSelectedRelationship([]);
-		setSelectedLead(null);
-		setHighlightedTransferIds([]);
-		setSummary(null);
-		setLabels([]);
-		setBranchPages({});
-		setExpandingAddress(null);
-		setPendingExpansion(null);
-		setErrorMessage('');
-		setFrozenEvidence(packageFile);
-	}, []);
+	}, [graphData, network]);
+	const importFrozenEvidence = useCallback(
+		(packageFile: EvidencePackage) => {
+			const replay = replayEvidencePackage(packageFile);
+			investigationRef.current++;
+			setAddress(replay.caseFile.rootAddress);
+			setNetwork(replay.network);
+			graphOptionsRef.current = replay.caseFile.scope;
+			setGraphOptions(replay.caseFile.scope);
+			updateCaseFile(replay.caseFile);
+			setGraphData(replay.graph);
+			setSelectedNode(replay.graph.nodes.find((node) => node.isSeed) ?? null);
+			setSelectedEdge(null);
+			setSelectedRelationship([]);
+			setSelectedLead(null);
+			setHighlightedTransferIds([]);
+			setSummary(null);
+			setLabels([]);
+			setBranchPages({});
+			setExpandingAddress(null);
+			setPendingExpansion(null);
+			setErrorMessage('');
+			setFrozenEvidence(packageFile);
+		},
+		[updateCaseFile],
+	);
 
 	return (
 		<div className="h-dvh overflow-hidden flex flex-col" style={{ background: 'var(--snow)' }}>
@@ -404,8 +434,21 @@ function Index() {
 						expanding={expandingAddress === activeAddress || pendingExpansion === activeAddress}
 						graphOptions={graphOptions}
 						onGraphOptionsChange={(options) => {
+							const requiresNewTrace =
+								options.direction !== graphOptions.direction ||
+								options.maxCounterparties !== graphOptions.maxCounterparties ||
+								options.ranking !== graphOptions.ranking;
+							graphOptionsRef.current = options;
 							setGraphOptions(options);
-							if (graphData) void load(graphData.seedAddress, false, network, options);
+							const scopedCase = {
+								...caseFileRef.current,
+								scope: options,
+								updatedAt: new Date().toISOString(),
+							};
+							updateCaseFile(scopedCase);
+							saveLocalCase(scopedCase);
+							if (graphData && requiresNewTrace)
+								void load(graphData.seedAddress, false, network, options);
 						}}
 					/>
 					{(errorMessage || graphData?.sourceStatus?.warning) && (
@@ -470,7 +513,7 @@ function Index() {
 					{caseLoaded && (
 						<CaseWorkspace
 							caseFile={caseFile}
-							onChange={setCaseFile}
+							onChange={updateCaseFile}
 							onExportEvidence={exportFrozenEvidence}
 							onImportEvidence={importFrozenEvidence}
 							frozenEvidence={frozenEvidence}

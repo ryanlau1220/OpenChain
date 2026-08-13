@@ -25,12 +25,13 @@ type Direction string
 type Ranking string
 
 const (
-	DirectionBoth           Direction = "both"
-	DirectionInbound        Direction = "inbound"
-	DirectionOutbound       Direction = "outbound"
-	RankingMostRecent       Ranking   = "most_recent"
-	RankingLargestRawAmount Ranking   = "largest_raw_amount"
-	RankingMostActive       Ranking   = "most_active"
+	DirectionBoth         Direction = "both"
+	DirectionInbound      Direction = "inbound"
+	DirectionOutbound     Direction = "outbound"
+	RankingMostRecent     Ranking   = "most_recent"
+	RankingTotalRawAmount Ranking   = "total_raw_amount"
+	RankingMostActive     Ranking   = "most_active"
+	RankingKnownEntity    Ranking   = "known_entity"
 )
 
 type GraphNode struct {
@@ -96,7 +97,8 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		}
 		return nil, err
 	}
-	transfers := selectCounterpartyTransfers(filterTransfers(page.Transfers, address, direction), address, maxCounterparties, ranking)
+	filtered := filterTransfers(page.Transfers, address, direction)
+	transfers := selectCounterpartyTransfersWithKnown(filtered, address, maxCounterparties, ranking, e.knownCounterparties(ctx, filtered, address, ranking))
 	result := e.graph(ctx, address, transfers, page)
 	persistedTransfers := e.toTransfers(transfers, page.SourceStatus)
 	completedAt := time.Now().UTC()
@@ -136,7 +138,7 @@ func graphControls(maxCounterparties uint32, ranking Ranking) (uint32, Ranking) 
 		maxCounterparties = MaxCounterpartyLimit
 	}
 	switch ranking {
-	case RankingLargestRawAmount, RankingMostActive, RankingMostRecent:
+	case RankingTotalRawAmount, RankingMostActive, RankingMostRecent, RankingKnownEntity:
 	default:
 		ranking = RankingMostRecent
 	}
@@ -148,9 +150,15 @@ type counterpartyStats struct {
 	count   int
 	latest  time.Time
 	largest *big.Rat
+	totals  map[string]*big.Rat
+	known   bool
 }
 
 func selectCounterpartyTransfers(transfers []adapter.TransferItem, seed string, maxCounterparties uint32, ranking Ranking) []adapter.TransferItem {
+	return selectCounterpartyTransfersWithKnown(transfers, seed, maxCounterparties, ranking, nil)
+}
+
+func selectCounterpartyTransfersWithKnown(transfers []adapter.TransferItem, seed string, maxCounterparties uint32, ranking Ranking, known map[string]bool) []adapter.TransferItem {
 	maxCounterparties, ranking = graphControls(maxCounterparties, ranking)
 	stats := make(map[string]*counterpartyStats)
 	for _, transfer := range transfers {
@@ -163,7 +171,7 @@ func selectCounterpartyTransfers(transfers []adapter.TransferItem, seed string, 
 		}
 		item := stats[counterparty]
 		if item == nil {
-			item = &counterpartyStats{address: counterparty, largest: big.NewRat(0, 1)}
+			item = &counterpartyStats{address: counterparty, largest: big.NewRat(0, 1), totals: make(map[string]*big.Rat), known: known[counterparty]}
 			stats[counterparty] = item
 		}
 		item.count++
@@ -173,8 +181,15 @@ func selectCounterpartyTransfers(transfers []adapter.TransferItem, seed string, 
 		amount, ok := new(big.Int).SetString(transfer.AmountBaseUnits, 10)
 		if ok {
 			scaled := new(big.Rat).SetFrac(amount, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(transfer.Asset.Decimals)), nil))
-			if scaled.Cmp(item.largest) > 0 {
-				item.largest = scaled
+			assetKey := transfer.Asset.Kind + ":" + transfer.Asset.ContractAddress + ":" + transfer.Asset.Symbol
+			total := item.totals[assetKey]
+			if total == nil {
+				total = big.NewRat(0, 1)
+				item.totals[assetKey] = total
+			}
+			total.Add(total, scaled)
+			if total.Cmp(item.largest) > 0 {
+				item.largest = new(big.Rat).Set(total)
 			}
 		}
 	}
@@ -185,13 +200,17 @@ func selectCounterpartyTransfers(transfers []adapter.TransferItem, seed string, 
 	sort.Slice(items, func(left, right int) bool {
 		first, second := items[left], items[right]
 		switch ranking {
-		case RankingLargestRawAmount:
+		case RankingTotalRawAmount:
 			if compared := first.largest.Cmp(second.largest); compared != 0 {
 				return compared > 0
 			}
 		case RankingMostActive:
 			if first.count != second.count {
 				return first.count > second.count
+			}
+		case RankingKnownEntity:
+			if first.known != second.known {
+				return first.known
 			}
 		}
 		if !first.latest.Equal(second.latest) {
@@ -214,6 +233,28 @@ func selectCounterpartyTransfers(transfers []adapter.TransferItem, seed string, 
 		}
 	}
 	return result
+}
+
+func (e *Engine) knownCounterparties(ctx context.Context, transfers []adapter.TransferItem, seed string, ranking Ranking) map[string]bool {
+	if ranking != RankingKnownEntity || e.labelRegistry == nil {
+		return nil
+	}
+	known := make(map[string]bool)
+	for _, transfer := range transfers {
+		counterparty := transfer.From
+		if strings.EqualFold(counterparty, seed) {
+			counterparty = transfer.To
+		}
+		if counterparty == "" || strings.EqualFold(counterparty, seed) {
+			continue
+		}
+		if _, checked := known[counterparty]; checked {
+			continue
+		}
+		items, err := e.labelRegistry.GetLabels(ctx, e.Network(), counterparty)
+		known[counterparty] = err == nil && len(items) > 0
+	}
+	return known
 }
 
 func (e *Engine) PendingGraph(address, warning string) *GraphResult {

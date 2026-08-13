@@ -167,6 +167,13 @@ export function networkFromSlug(slug: NetworkSlug): SupportedNetwork {
 	);
 }
 
+export function isNetworkSlug(value: unknown): value is NetworkSlug {
+	return (
+		typeof value === 'string' &&
+		supportedNetworks.some((network) => networkDetails(network).slug === value)
+	);
+}
+
 const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function decodedBase58Length(value: string): number {
@@ -233,13 +240,31 @@ export type GraphOptions = {
 	maxCounterparties: number;
 	ranking: GraphRanking;
 	direction: TraceDirection;
+	maxDepth: number;
+	from: string;
+	to: string;
+	asset: string;
+	minimumAmount: string;
+	transferKind: string;
 };
 
 export const defaultGraphOptions: GraphOptions = {
 	maxCounterparties: 10,
 	ranking: GraphRanking.MOST_RECENT,
 	direction: TraceDirection.BOTH,
+	maxDepth: 1,
+	from: '',
+	to: '',
+	asset: '',
+	minimumAmount: '',
+	transferKind: '',
 };
+
+const traceOptions = ({ direction, maxCounterparties, ranking }: GraphOptions) => ({
+	direction,
+	maxCounterparties,
+	ranking,
+});
 
 export async function fetchTraceGraph(
 	seedAddress: string,
@@ -247,7 +272,13 @@ export async function fetchTraceGraph(
 	options: GraphOptions = defaultGraphOptions,
 	retry = false,
 ): Promise<TraceGraphResponse> {
-	return tracingClient.traceGraph({ seedAddress, network, limit: 50, retry, ...options });
+	return tracingClient.traceGraph({
+		seedAddress,
+		network,
+		limit: 50,
+		retry,
+		...traceOptions(options),
+	});
 }
 
 export async function fetchTraceStatus(
@@ -256,7 +287,13 @@ export async function fetchTraceStatus(
 	cursor = '',
 	options: GraphOptions = defaultGraphOptions,
 ): Promise<TraceGraphResponse> {
-	return tracingClient.getTraceStatus({ address, network, limit: 50, cursor, ...options });
+	return tracingClient.getTraceStatus({
+		address,
+		network,
+		limit: 50,
+		cursor,
+		...traceOptions(options),
+	});
 }
 
 export async function lookupAddress(address: string, network: SupportedNetwork) {
@@ -286,7 +323,7 @@ export async function expandNode(
 		limit: 50,
 		cursor,
 		retry,
-		...options,
+		...traceOptions(options),
 	});
 }
 
