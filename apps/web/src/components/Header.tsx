@@ -25,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
 	const [singleInput, setSingleInput] = useState(currentAddress);
 	const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
+	const [networkQuery, setNetworkQuery] = useState('');
 	const inputNetwork = (value: string) => {
 		const detected = detectAddressNetwork(value);
 		// Keep an explicit EVM network choice: an address alone cannot distinguish
@@ -47,12 +48,22 @@ export const Header: React.FC<HeaderProps> = ({
 	};
 	const selectNetwork = (nextNetwork: SupportedNetwork) => {
 		setNetworkMenuOpen(false);
+		setNetworkQuery('');
 		onNetworkChange(nextNetwork);
 	};
 	const networkGroups = [
 		{ label: 'EVM networks', items: supportedNetworks.filter(isEVMNetwork) },
 		{ label: 'Other networks', items: supportedNetworks.filter((item) => !isEVMNetwork(item)) },
 	] as const;
+	const normalizedNetworkQuery = networkQuery.trim().toLowerCase();
+	const visibleGroups = networkGroups
+		.map((group) => ({
+			...group,
+			items: group.items.filter((item) =>
+				networkDetails(item).name.toLowerCase().includes(normalizedNetworkQuery),
+			),
+		}))
+		.filter((group) => group.items.length > 0);
 	const selectedNetwork = networkDetails(network);
 
 	return (
@@ -87,7 +98,10 @@ export const Header: React.FC<HeaderProps> = ({
 							type="button"
 							aria-label="Network"
 							aria-expanded={networkMenuOpen}
-							onClick={() => setNetworkMenuOpen((open) => !open)}
+							onClick={() => {
+								setNetworkQuery('');
+								setNetworkMenuOpen((open) => !open);
+							}}
 							className="flex h-full items-center gap-2 border-r px-3 text-xs font-medium transition hover:bg-[var(--snow)]"
 							style={{ borderColor: 'var(--border)', color: 'var(--ink-2)' }}
 						>
@@ -105,7 +119,15 @@ export const Header: React.FC<HeaderProps> = ({
 								className="absolute left-0 top-[calc(100%+0.4rem)] z-50 w-56 rounded-xl p-1.5 shadow-lg"
 								style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
 							>
-								{networkGroups.map((group) => (
+								<input
+									aria-label="Find network"
+									value={networkQuery}
+									onChange={(event) => setNetworkQuery(event.target.value)}
+									placeholder="Find network"
+									className="prism-input m-1 px-2 py-1.5 text-xs"
+									style={{ width: 'calc(100% - 0.5rem)' }}
+								/>
+								{visibleGroups.map((group) => (
 									<div key={group.label} className="py-1">
 										<p
 											className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider"
@@ -131,6 +153,11 @@ export const Header: React.FC<HeaderProps> = ({
 										})}
 									</div>
 								))}
+								{visibleGroups.length === 0 && (
+									<p className="px-2 py-3 text-xs" style={{ color: 'var(--ink-3)' }}>
+										No network found
+									</p>
+								)}
 							</div>
 						)}
 					</div>
