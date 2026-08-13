@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { type GraphEdge, TraceDirection } from '../services/api';
+import { type GraphEdge, GraphNode, TraceDirection } from '../services/api';
 import {
 	aggregateGraphEdges,
+	clusterLeafCounterparties,
 	filterGraphEdges,
 	flowNodePositions,
 	positionAddedNodes,
@@ -135,5 +136,70 @@ describe('flowNodePositions', () => {
 		);
 		expect(positions.get('source')?.x).toBeLessThan(positions.get('seed')?.x ?? 0);
 		expect(positions.get('destination')?.x).toBeGreaterThan(positions.get('seed')?.x ?? 0);
+	});
+});
+
+describe('clusterLeafCounterparties', () => {
+	it('collapses a large simple fan-out until its cluster is expanded', () => {
+		const seed = new GraphNode({ id: 'seed', isSeed: true });
+		const members = Array.from(
+			{ length: 8 },
+			(_, index) => new GraphNode({ id: `member-${index}` }),
+		);
+		const edges = members.map(
+			(member, index) =>
+				({
+					id: `edge-${index}`,
+					source: 'seed',
+					target: member.id,
+					txCount: 1,
+					amountBaseUnits: '1000000',
+					asset: { kind: 'ERC20', contractAddress: 'usdc', symbol: 'USDC', decimals: 6 },
+				}) as GraphEdge,
+		);
+		const clustered = clusterLeafCounterparties([seed, ...members], edges, new Set());
+		expect(clustered.nodes).toHaveLength(2);
+		const [clusterId] = clustered.clusters.keys();
+		expect(clustered.clusters.get(clusterId)).toMatchObject({
+			memberIds: members.map((member) => member.id),
+			transferCount: 8,
+		});
+		expect(clustered.edges.every((edge) => edge.target === clusterId)).toBe(true);
+
+		const expanded = clusterLeafCounterparties([seed, ...members], edges, new Set([clusterId]));
+		expect(expanded.nodes).toHaveLength(9);
+		expect(expanded.edges.map((edge) => edge.target)).toEqual(members.map((member) => member.id));
+	});
+
+	it('keeps an address visible when it participates in a multi-hop path', () => {
+		const seed = new GraphNode({ id: 'seed', isSeed: true });
+		const members = Array.from(
+			{ length: 8 },
+			(_, index) => new GraphNode({ id: `member-${index}` }),
+		);
+		const edges = members.map(
+			(member, index) =>
+				({
+					id: `edge-${index}`,
+					source: 'seed',
+					target: member.id,
+					amountBaseUnits: '1',
+					asset: { symbol: 'ETH', decimals: 18 },
+				}) as GraphEdge,
+		);
+		edges.push({
+			id: 'continued-path',
+			source: 'member-0',
+			target: 'next-hop',
+			amountBaseUnits: '1',
+			asset: { symbol: 'ETH', decimals: 18 },
+		} as GraphEdge);
+		const graph = clusterLeafCounterparties(
+			[seed, ...members, new GraphNode({ id: 'next-hop' })],
+			edges,
+			new Set(),
+		);
+		expect(graph.nodes.map((node) => node.id)).toContain('member-0');
+		expect(graph.clusters).toHaveLength(0);
 	});
 });

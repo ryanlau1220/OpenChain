@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
 	EntityType,
 	type GraphEdge,
-	type GraphNode,
+	GraphNode,
 	type GraphOptions,
 	GraphRanking,
 	TraceDirection,
@@ -69,6 +69,22 @@ const emptyTransferIDs: readonly string[] = [];
 type PositionedNode = { id: string; x: number; y: number };
 type LayoutName = 'flow' | 'cose' | 'concentric' | 'grid';
 type NodeTransferCounts = { inbound: number; outbound: number };
+
+export type GraphCluster = {
+	id: string;
+	anchorId: string;
+	direction: 'inbound' | 'outbound';
+	memberIds: string[];
+	transferCount: number;
+	totalAmount: bigint;
+	representative: GraphEdge;
+};
+
+export type ClusteredGraph = {
+	nodes: GraphNode[];
+	edges: GraphEdge[];
+	clusters: Map<string, GraphCluster>;
+};
 
 const shortAddress = (address: string) =>
 	address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
@@ -307,6 +323,99 @@ const assetKey = (edge: GraphEdge) =>
 		':',
 	);
 
+// Collapse only simple, same-asset leaf branches. Addresses participating in a
+// path stay visible so an investigator never loses a relationship in the graph.
+export function clusterLeafCounterparties(
+	nodes: readonly GraphNode[],
+	edges: readonly GraphEdge[],
+	expandedClusterIds: ReadonlySet<string>,
+	minimumMembers = 8,
+): ClusteredGraph {
+	const incidents = new Map<string, GraphEdge[]>();
+	for (const edge of edges) {
+		incidents.set(edge.source, [...(incidents.get(edge.source) || []), edge]);
+		incidents.set(edge.target, [...(incidents.get(edge.target) || []), edge]);
+	}
+	const groups = new Map<
+		string,
+		{ anchorId: string; direction: 'inbound' | 'outbound'; members: string[]; edges: GraphEdge[] }
+	>();
+	for (const node of nodes) {
+		if (node.isSeed) continue;
+		const related = incidents.get(node.id) || [];
+		if (related.length === 0) continue;
+		const first = related[0];
+		const direction = first.target === node.id ? 'outbound' : 'inbound';
+		const anchorId = direction === 'outbound' ? first.source : first.target;
+		if (
+			related.some(
+				(edge) =>
+					assetKey(edge) !== assetKey(first) ||
+					(direction === 'outbound'
+						? edge.source !== anchorId || edge.target !== node.id
+						: edge.source !== node.id || edge.target !== anchorId),
+			)
+		)
+			continue;
+		const key = `${anchorId}\u0000${direction}\u0000${assetKey(first)}`;
+		const group = groups.get(key) || {
+			anchorId,
+			direction,
+			members: [],
+			edges: [],
+		};
+		group.members.push(node.id);
+		group.edges.push(...related);
+		groups.set(key, group);
+	}
+
+	const clusters = new Map<string, GraphCluster>();
+	const memberCluster = new Map<string, string>();
+	const existingIds = new Set(nodes.map((node) => node.id));
+	let index = 0;
+	for (const [, group] of [...groups.entries()].toSorted(([left], [right]) =>
+		left.localeCompare(right),
+	)) {
+		if (group.members.length < minimumMembers) continue;
+		let id = `__openchain_cluster_${index++}`;
+		while (existingIds.has(id)) id = `_${id}`;
+		existingIds.add(id);
+		const cluster = {
+			id,
+			anchorId: group.anchorId,
+			direction: group.direction,
+			memberIds: group.members.toSorted(),
+			transferCount: group.edges.reduce((total, edge) => total + (edge.txCount || 1), 0),
+			totalAmount: group.edges.reduce((total, edge) => total + baseUnits(edge.amountBaseUnits), 0n),
+			representative: group.edges[0],
+		};
+		clusters.set(id, cluster);
+		if (!expandedClusterIds.has(id))
+			for (const memberId of cluster.memberIds) memberCluster.set(memberId, id);
+	}
+
+	const collapsedClusters = [...clusters.values()].filter(
+		(cluster) => !expandedClusterIds.has(cluster.id),
+	);
+	const clusteredNodes = nodes.filter((node) => !memberCluster.has(node.id));
+	for (const cluster of collapsedClusters)
+		clusteredNodes.push(
+			new GraphNode({ id: cluster.id, label: `${cluster.memberIds.length} counterparties` }),
+		);
+	return {
+		nodes: clusteredNodes,
+		edges: edges.map(
+			(edge) =>
+				({
+					...edge,
+					source: memberCluster.get(edge.source) || edge.source,
+					target: memberCluster.get(edge.target) || edge.target,
+				}) as GraphEdge,
+		),
+		clusters,
+	};
+}
+
 const minimumBaseUnits = (value: string, decimals: number) => {
 	if (!/^\d+(?:\.\d+)?$/.test(value)) return null;
 	const [whole, fraction = ''] = value.split('.');
@@ -438,6 +547,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const [internalSelectedNode, setInternalSelectedNode] = useState<GraphNode | null>(null);
 	const [layoutName, setLayoutName] = useState<LayoutName>('flow');
 	const [filterOpen, setFilterOpen] = useState(false);
+	const [expandedClusterIds, setExpandedClusterIds] = useState<ReadonlySet<string>>(new Set());
 	const layoutRef = useRef(`${layoutName}:${graphOptions?.direction ?? TraceDirection.BOTH}`);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
@@ -465,6 +575,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		}
 		return (graphData?.nodes || []).filter((node) => addresses.has(node.id));
 	}, [graphData?.nodes, seedAddress, visibleEdges]);
+	const clusteredGraph = useMemo(
+		() => clusterLeafCounterparties(visibleNodes, visibleEdges, expandedClusterIds),
+		[expandedClusterIds, visibleEdges, visibleNodes],
+	);
+	const displayNodes = clusteredGraph.nodes;
+	const displayEdges = clusteredGraph.edges;
 	const nodeCounts = useMemo(() => transferCountsByNode(visibleEdges), [visibleEdges]);
 	const assets = useMemo(() => {
 		const unique = new Map<string, string>();
@@ -479,6 +595,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		[graphData?.edges],
 	);
 	const highlightedIDs = useMemo(() => new Set(highlightedTransferIds), [highlightedTransferIds]);
+
+	useEffect(() => {
+		setExpandedClusterIds(new Set());
+	}, [graphData?.seedAddress]);
 
 	const onNodeSelectRef = useRef(onNodeSelect);
 	useEffect(() => {
@@ -515,11 +635,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		const elements: cytoscape.ElementDefinition[] = [];
 
-		visibleNodes.forEach((n) => {
-			const palette = nodePalette(n);
-			const badge = nodeBadge(n);
+		displayNodes.forEach((n) => {
+			const cluster = clusteredGraph.clusters.get(n.id);
+			const palette = cluster ? { bg: '#334155', border: '#94A3B8', text: '#fff' } : nodePalette(n);
+			const badge = cluster ? `${cluster.direction.toUpperCase()} CLUSTER` : nodeBadge(n);
 			const counts = nodeCounts.get(n.id) || { inbound: n.inTxCount, outbound: n.outTxCount };
-			const displayLabel = n.label || shortAddress(n.id);
+			const displayLabel = cluster
+				? `${cluster.memberIds.length} counterparties\n${cluster.transferCount} transfers · ${formatRelationshipAmount(cluster.totalAmount, cluster.representative)}\nClick to expand`
+				: n.label || shortAddress(n.id);
 
 			elements.push({
 				group: 'nodes',
@@ -532,12 +655,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					borderColor: palette.border,
 					borderWidth: n.isSeed ? 4 : 2,
 					palette,
-					raw: n,
+					is_cluster: Boolean(cluster),
+					cluster,
+					raw: cluster ? undefined : n,
 				},
 			});
 		});
 
-		aggregateGraphEdges(visibleEdges).forEach((relationship) => {
+		aggregateGraphEdges(displayEdges).forEach((relationship) => {
 			elements.push({
 				group: 'edges',
 				data: {
@@ -584,7 +709,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				return;
 			}
 
-			if (newElements.length > 0 && !needsRemoval && cy.elements().length > 0) {
+			if ((newElements.length > 0 || needsRemoval) && cy.elements().length > 0) {
+				cy.elements()
+					.filter((element) => !desiredElementIds.has(element.id()))
+					.remove();
 				const existing = cy.nodes().map((node) => ({ id: node.id(), ...node.position() }));
 				const positions = positionAddedNodes(
 					newElements.filter((item) => item.group === 'nodes').map((item) => String(item.data.id)),
@@ -600,9 +728,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				for (const element of newElements) {
 					if (element.group === 'nodes') element.position = positions.get(String(element.data.id));
 				}
-				cy.batch(() => {
-					cy.add(newElements);
-				});
+				if (newElements.length > 0) cy.batch(() => cy.add(newElements));
 				if (isInitialHydration) layoutAndFit(cy, effectiveLayout, traceDirection);
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
@@ -661,6 +787,16 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'border-width': 6,
 						'border-color': '#34D399',
 						'border-opacity': 1,
+					},
+				},
+				{
+					selector: 'node[?is_cluster]',
+					style: {
+						shape: 'round-rectangle',
+						width: 104,
+						height: 54,
+						'font-size': '8px',
+						'text-max-width': '150px',
 					},
 				},
 				{
@@ -723,6 +859,11 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		cy.on('tap', 'node', (evt) => {
+			const cluster = evt.target.data('cluster') as GraphCluster | undefined;
+			if (cluster) {
+				setExpandedClusterIds((current) => new Set([...current, cluster.id]));
+				return;
+			}
 			const nData = evt.target.data('raw');
 			if (!nData) return;
 			setInternalSelectedNode(nData);
@@ -750,7 +891,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		cyRef.current = cy;
 		layoutRef.current = layoutKey;
-	}, [graphData, graphOptions?.direction, layoutName, nodeCounts, visibleEdges, visibleNodes]);
+	}, [
+		clusteredGraph.clusters,
+		displayEdges,
+		displayNodes,
+		graphData,
+		graphOptions?.direction,
+		layoutName,
+		nodeCounts,
+	]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
