@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { GraphEdge } from '../services/api';
-import { aggregateGraphEdges, filterGraphEdges, positionAddedNodes } from './GraphCanvas';
+import { type GraphEdge, TraceDirection } from '../services/api';
+import {
+	aggregateGraphEdges,
+	filterGraphEdges,
+	flowNodePositions,
+	positionAddedNodes,
+} from './GraphCanvas';
 
 describe('aggregateGraphEdges', () => {
 	it('combines only transfers with the same direction and asset', () => {
@@ -86,5 +91,35 @@ describe('positionAddedNodes', () => {
 		);
 		expect(positions.get('seed')).toEqual({ x: 24, y: 48 });
 		expect(positions.get('new-a')).not.toEqual(positions.get('new-b'));
+	});
+
+	it('adds inbound and outbound neighbours to the correct empty flow column', () => {
+		const positions = positionAddedNodes(
+			['source', 'destination'],
+			[
+				{ source: 'source', target: 'seed' },
+				{ source: 'seed', target: 'destination' },
+			],
+			[{ id: 'seed', x: 0, y: 0 }],
+			true,
+		);
+		expect(positions.get('source')?.x).toBeLessThan(0);
+		expect(positions.get('destination')?.x).toBeGreaterThan(0);
+	});
+});
+
+describe('flowNodePositions', () => {
+	it('places funding sources left of the target and destinations right', () => {
+		const positions = flowNodePositions(
+			'seed',
+			['source', 'seed', 'destination'],
+			[
+				{ source: 'source', target: 'seed' },
+				{ source: 'seed', target: 'destination' },
+			],
+			TraceDirection.BOTH,
+		);
+		expect(positions.get('source')?.x).toBeLessThan(positions.get('seed')?.x ?? 0);
+		expect(positions.get('destination')?.x).toBeGreaterThan(positions.get('seed')?.x ?? 0);
 	});
 });

@@ -91,6 +91,9 @@ test('provides focused graph filters without leaving the investigation workspace
 	await expect(page.getByLabel('Counterparties per address')).toHaveValue('10');
 	await page.getByLabel('Counterparties per address').selectOption('5');
 	await expect(page.getByLabel('Counterparties per address')).toHaveValue('5');
+	await expect(page.getByLabel('Investigation direction')).toHaveValue('1');
+	await page.getByLabel('Investigation direction').selectOption('2');
+	await expect(page.getByLabel('Investigation direction')).toHaveValue('2');
 	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('1');
 	await page.getByText('Filters', { exact: true }).click();
 	await expect(page.getByLabel('From date')).toBeVisible();
