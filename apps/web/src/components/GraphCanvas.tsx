@@ -267,6 +267,15 @@ const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 	});
 };
 
+const layoutAndFit = (cy: cytoscape.Core, name: 'cose' | 'concentric' | 'breadthfirst' | 'grid') => {
+	const layout = cy.layout({ name, directed: true, padding: 80, animate: false });
+	layout.one('layoutstop', () => {
+		cy.resize();
+		if (cy.elements().length > 0) cy.fit(cy.elements(), 100);
+	});
+	layout.run();
+};
+
 export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	graphData,
 	selectedNode: propSelectedNode,
@@ -408,6 +417,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		if (cyRef.current) {
 			const cy = cyRef.current;
+			const isInitialHydration =
+				cy.nodes().length === 1 && cy.nodes()[0].data('is_seed') && cy.edges().length === 0;
 			const currentElementIds = new Set(cy.elements().map((e) => e.id()));
 			const desiredElementIds = new Set(elements.map((element) => element.data.id as string));
 			const needsRemoval = [...currentElementIds].some((id) => !desiredElementIds.has(id));
@@ -423,7 +434,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 			if (newElements.length === 0 && !needsRemoval) {
 				if (layoutRef.current !== effectiveLayout) {
-					cy.layout({ name: effectiveLayout, fit: true, padding: 80, animate: true }).run();
+					layoutAndFit(cy, effectiveLayout);
 					layoutRef.current = effectiveLayout;
 				}
 				applyNodeStyles(cy, selectedNode?.id);
@@ -449,6 +460,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				cy.batch(() => {
 					cy.add(newElements);
 				});
+				if (isInitialHydration) layoutAndFit(cy, effectiveLayout);
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
 				return;
@@ -460,18 +472,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			});
 			applyNodeStyles(cy, selectedNode?.id);
 			applyEvidenceStyles(cy, highlightedIDs);
-			const layout = cy.layout({
-				name: effectiveLayout,
-				fit: true,
-				padding: 80,
-				animate: true,
-			});
-			layout.run();
+			layoutAndFit(cy, effectiveLayout);
 			applyNodeStyles(cy, selectedNode?.id);
-			if (cy.nodes().length > 0) {
-				cy.fit(cy.nodes(), 100);
-				cy.center(cy.nodes());
-			}
 			return;
 		}
 
@@ -555,18 +557,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					},
 				},
 			],
-			layout: {
-				name: effectiveLayout,
-				directed: true,
-				padding: 60,
-				animate: true,
-			},
+			layout: { name: 'preset' },
 		});
-
-		if (cy.nodes().length > 0) {
-			cy.fit(cy.nodes(), 100);
-			cy.center(cy.nodes());
-		}
+		layoutAndFit(cy, effectiveLayout);
 
 		applyNodeStyles(cy, selectedNode?.id);
 		applyEvidenceStyles(cy, highlightedIDs);
@@ -858,7 +851,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			)}
 
 			{/* Cytoscape canvas */}
-			<div ref={containerRef} className="flex-1 w-full h-full cursor-grab active:cursor-grabbing" />
+			<div ref={containerRef} className="min-h-0 flex-1 w-full cursor-grab active:cursor-grabbing" />
 
 			{/* Floating zoom controls */}
 			<div
