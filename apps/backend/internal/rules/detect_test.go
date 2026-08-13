@@ -3,6 +3,7 @@ package rules
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,6 +85,68 @@ func TestEvaluateFindsRapidOnwardTransferOnlyWithinWindow(t *testing.T) {
 	}
 }
 
+func TestEvaluateFindsRepeatedEqualAmountDispersionWithoutCallingAmountsSmall(t *testing.T) {
+	transfers := []db.Transfer{
+		ruleTransfer("split-1", hub, alice, 0),
+		ruleTransfer("split-2", hub, bob, time.Hour),
+		ruleTransfer("split-3", hub, carol, 2*time.Hour),
+	}
+	for index := range transfers {
+		transfers[index].AmountBaseUnits = "4200000"
+	}
+	leads, _ := Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
+	lead := findLead(t, leads, "repeated-equal-amount-dispersion")
+	if lead.SubjectAddress != hub || !reflect.DeepEqual(lead.TransferIDs, []string{"split-1", "split-2", "split-3"}) || strings.Contains(strings.ToLower(lead.Rationale), "small") {
+		t.Fatalf("equal-amount dispersion lead = %#v", lead)
+	}
+	transfers[2].AmountBaseUnits = "4200001"
+	leads, _ = Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
+	if hasLead(leads, "repeated-equal-amount-dispersion") {
+		t.Fatalf("equal-amount rule accepted distinct amounts: %#v", leads)
+	}
+}
+
+func TestEvaluateFindsSequentialDecreasingTransfers(t *testing.T) {
+	transfers := []db.Transfer{
+		ruleTransfer("hop-1", alice, hub, 0),
+		ruleTransfer("hop-2", hub, bob, 30*time.Minute),
+		ruleTransfer("hop-3", bob, carol, time.Hour),
+	}
+	transfers[0].AmountBaseUnits = "100"
+	transfers[1].AmountBaseUnits = "90"
+	transfers[2].AmountBaseUnits = "80"
+	leads, _ := Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
+	lead := findLead(t, leads, "sequential-decreasing-transfer")
+	if lead.SubjectAddress != alice || !reflect.DeepEqual(lead.TransferIDs, []string{"hop-1", "hop-2", "hop-3"}) {
+		t.Fatalf("sequential-decreasing lead = %#v", lead)
+	}
+	transfers[2].AmountBaseUnits = "90"
+	leads, _ = Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
+	if hasLead(leads, "sequential-decreasing-transfer") {
+		t.Fatalf("sequential rule accepted a non-decreasing hop: %#v", leads)
+	}
+}
+
+func TestEvaluateFindsOnlyNarrowBriefIntermediaryPattern(t *testing.T) {
+	transfers := []db.Transfer{
+		ruleTransfer("in", alice, hub, 0),
+		ruleTransfer("out", hub, bob, time.Hour),
+	}
+	for index := range transfers {
+		transfers[index].AmountBaseUnits = "50"
+	}
+	leads, _ := Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
+	lead := findLead(t, leads, "brief-intermediary-pass-through")
+	if lead.SubjectAddress != hub || !reflect.DeepEqual(lead.TransferIDs, []string{"in", "out"}) || !strings.Contains(lead.Limitations, "not an address lifetime") {
+		t.Fatalf("brief intermediary lead = %#v", lead)
+	}
+	transfers = append(transfers, ruleTransfer("extra", hub, carol, 2*time.Hour))
+	leads, _ = Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
+	if hasLead(leads, "brief-intermediary-pass-through") {
+		t.Fatalf("brief intermediary rule accepted extra observed activity: %#v", leads)
+	}
+}
+
 func TestEvaluateRejectsRuleFalsePositives(t *testing.T) {
 	fanOutRepeatedCounterparty := []db.Transfer{
 		ruleTransfer("out-1", hub, alice, 0),
@@ -140,12 +203,13 @@ func TestEvaluateBridgeProducesQualifiedEvidenceLead(t *testing.T) {
 
 func ruleTransfer(id, from, to string, offset time.Duration) db.Transfer {
 	return db.Transfer{
-		ID:             id,
-		Network:        "ethereum-mainnet",
-		FromAddress:    from,
-		ToAddress:      to,
-		Asset:          adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18},
-		BlockTimestamp: time.Unix(1_700_000_000, 0).UTC().Add(offset),
+		ID:              id,
+		Network:         "ethereum-mainnet",
+		FromAddress:     from,
+		ToAddress:       to,
+		Asset:           adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18},
+		AmountBaseUnits: "100",
+		BlockTimestamp:  time.Unix(1_700_000_000, 0).UTC().Add(offset),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,6 +51,12 @@ func Evaluate(network string, transfers []db.Transfer, completedAt time.Time) ([
 			detected = fanOut(definition, finalized)
 		case "rapid-onward-transfer":
 			detected = rapidOnward(definition, finalized)
+		case "repeated-equal-amount-dispersion":
+			detected = repeatedEqualAmount(definition, finalized)
+		case "sequential-decreasing-transfer":
+			detected = sequentialDecreasing(definition, finalized)
+		case "brief-intermediary-pass-through":
+			detected = briefIntermediary(definition, finalized)
 		}
 		sort.Slice(detected, func(left, right int) bool { return detected[left].ID < detected[right].ID })
 		result, _ := json.Marshal(detected)
@@ -212,7 +219,7 @@ func rapidOnward(definition Definition, transfers []db.Transfer) []Lead {
 				}
 				if outbound.BlockTimestamp.Sub(inbound.BlockTimestamp) <= window {
 					ids := transferIDs([]db.Transfer{inbound, outbound})
-					leads = append(leads, lead(definition, middle, "Rapid onward-transfer lead", "Observed an inbound transfer followed by a transfer of the same asset within "+itoa(int(window.Hours()))+" hour.", ids))
+					leads = append(leads, lead(definition, middle, "Rapid onward-transfer pattern", "Observed an inbound transfer followed by a transfer of the same asset within "+itoa(int(window.Hours()))+" hour.", ids))
 					found = true
 					break
 				}
@@ -221,6 +228,92 @@ func rapidOnward(definition Definition, transfers []db.Transfer) []Lead {
 				break
 			}
 		}
+	}
+	return leads
+}
+
+func repeatedEqualAmount(definition Definition, transfers []db.Transfer) []Lead {
+	window, minimum := fanParameters(definition)
+	if window <= 0 || minimum < 2 {
+		return nil
+	}
+	groups := make(map[string][]db.Transfer)
+	for _, transfer := range transfers {
+		amount, ok := normalizedAmount(transfer)
+		if !ok || transfer.FromAddress == "" || transfer.ToAddress == "" || transfer.FromAddress == transfer.ToAddress {
+			continue
+		}
+		key := transfer.FromAddress + "\x00" + assetKey(transfer) + "\x00" + amount
+		groups[key] = append(groups[key], transfer)
+	}
+	leads := make([]Lead, 0)
+	for _, group := range groups {
+		sortTransfers(group)
+		matches, distinct := firstDistinctWindow(group, false, minimum, window)
+		if len(matches) == 0 {
+			continue
+		}
+		leads = append(leads, lead(definition, matches[0].FromAddress, "Repeated equal-amount dispersion pattern", "Observed "+itoa(len(matches))+" outbound transfers of the same raw amount and asset to "+itoa(distinct)+" distinct counterparties within "+itoa(int(window.Hours()))+" hours.", transferIDs(matches)))
+	}
+	return leads
+}
+
+func sequentialDecreasing(definition Definition, transfers []db.Transfer) []Lead {
+	window, hops := chainParameters(definition)
+	if window <= 0 || hops != 3 {
+		return nil
+	}
+	// ponytail: trace pages are capped at 50 observations; add an adjacency index if rules run over larger batches.
+	leads := make([]Lead, 0)
+	for _, first := range transfers {
+		firstAmount, ok := parsedAmount(first)
+		if !ok || first.FromAddress == "" || first.ToAddress == "" || first.FromAddress == first.ToAddress {
+			continue
+		}
+		for _, second := range transfers {
+			secondAmount, ok := parsedAmount(second)
+			if !ok || second.FromAddress != first.ToAddress || assetKey(second) != assetKey(first) || second.BlockTimestamp.Before(first.BlockTimestamp) || second.BlockTimestamp.Sub(first.BlockTimestamp) > window || secondAmount.Cmp(firstAmount) >= 0 || second.ToAddress == first.FromAddress || second.ToAddress == second.FromAddress {
+				continue
+			}
+			for _, third := range transfers {
+				thirdAmount, ok := parsedAmount(third)
+				if !ok || third.FromAddress != second.ToAddress || assetKey(third) != assetKey(first) || third.BlockTimestamp.Before(second.BlockTimestamp) || third.BlockTimestamp.Sub(second.BlockTimestamp) > window || thirdAmount.Cmp(secondAmount) >= 0 || third.ToAddress == first.FromAddress || third.ToAddress == first.ToAddress || third.ToAddress == third.FromAddress {
+					continue
+				}
+				ids := transferIDs([]db.Transfer{first, second, third})
+				leads = append(leads, lead(definition, first.FromAddress, "Sequential decreasing-transfer pattern", "Observed three sequential transfers of the same asset with decreasing raw amounts; each hop occurred within "+itoa(int(window.Hours()))+" hour of the preceding hop.", ids))
+				break
+			}
+		}
+	}
+	return leads
+}
+
+func briefIntermediary(definition Definition, transfers []db.Transfer) []Lead {
+	window := rapidParameters(definition)
+	if window <= 0 {
+		return nil
+	}
+	byAddress := make(map[string][]db.Transfer)
+	for _, transfer := range transfers {
+		if transfer.FromAddress != "" {
+			byAddress[transfer.FromAddress] = append(byAddress[transfer.FromAddress], transfer)
+		}
+		if transfer.ToAddress != "" && transfer.ToAddress != transfer.FromAddress {
+			byAddress[transfer.ToAddress] = append(byAddress[transfer.ToAddress], transfer)
+		}
+	}
+	leads := make([]Lead, 0)
+	for address, group := range byAddress {
+		if len(group) != 2 {
+			continue
+		}
+		sortTransfers(group)
+		inbound, outbound := group[0], group[1]
+		if inbound.ToAddress != address || outbound.FromAddress != address || outbound.ToAddress == inbound.FromAddress || assetKey(inbound) != assetKey(outbound) || outbound.BlockTimestamp.Before(inbound.BlockTimestamp) || outbound.BlockTimestamp.Sub(inbound.BlockTimestamp) > window || !sameAmount(inbound, outbound) {
+			continue
+		}
+		leads = append(leads, lead(definition, address, "Briefly observed intermediary pattern", "Within the selected observations, this address received and forwarded the same raw asset amount to a different counterparty within "+itoa(int(window.Hours()))+" hour.", transferIDs(group)))
 	}
 	return leads
 }
@@ -246,6 +339,17 @@ func rapidParameters(definition Definition) time.Duration {
 	return time.Duration(parameters.WindowSeconds) * time.Second
 }
 
+func chainParameters(definition Definition) (time.Duration, int) {
+	var parameters struct {
+		WindowSeconds int `json:"window_seconds"`
+		MinHops       int `json:"min_hops"`
+	}
+	if err := json.Unmarshal(definition.DefaultParameters, &parameters); err != nil || parameters.WindowSeconds < 1 || parameters.MinHops < 3 {
+		return 0, 0
+	}
+	return time.Duration(parameters.WindowSeconds) * time.Second, parameters.MinHops
+}
+
 func lead(definition Definition, subject, title, rationale string, ids []string) Lead {
 	ids = append([]string(nil), ids...)
 	sort.Strings(ids)
@@ -264,6 +368,28 @@ func transferIDs(transfers []db.Transfer) []string {
 
 func assetKey(transfer db.Transfer) string {
 	return transfer.Asset.Kind + "\x00" + transfer.Asset.ContractAddress + "\x00" + transfer.Asset.Symbol
+}
+
+func parsedAmount(transfer db.Transfer) (*big.Int, bool) {
+	amount, ok := new(big.Int).SetString(transfer.AmountBaseUnits, 10)
+	return amount, ok && amount.Sign() >= 0
+}
+
+func normalizedAmount(transfer db.Transfer) (string, bool) {
+	amount, ok := parsedAmount(transfer)
+	if !ok {
+		return "", false
+	}
+	return amount.String(), true
+}
+
+func sameAmount(left, right db.Transfer) bool {
+	first, ok := parsedAmount(left)
+	if !ok {
+		return false
+	}
+	second, ok := parsedAmount(right)
+	return ok && first.Cmp(second) == 0
 }
 
 func sortTransfers(transfers []db.Transfer) {

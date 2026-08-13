@@ -142,7 +142,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 				t.Fatalf("snapshots = %d, links = %d", snapshots, links)
 			}
 			var ruleRuns int
-			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, "ethereum-mainnet").Scan(&ruleRuns); err != nil || ruleRuns != 3 {
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, "ethereum-mainnet").Scan(&ruleRuns); err != nil || ruleRuns != len(rules.Catalog())-1 {
 				t.Fatalf("rule runs = %d err = %v", ruleRuns, err)
 			}
 			var version string
@@ -156,7 +156,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 				transferIDs = append(transferIDs, edge.GetId())
 			}
 			exported, err := database.ExportEvidence(ctx, "ethereum-mainnet", transferIDs)
-			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 3 || len(exported.Provenance) != 9 || len(exported.RuleRuns) != 3 {
+			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 3 || len(exported.Provenance) != 9 || len(exported.RuleRuns) != len(rules.Catalog())-1 {
 				t.Fatalf("evidence export = %#v err=%v", exported, err)
 			}
 			packageResponse, err := evidenceClient.ExportEvidencePackage(ctx, connect.NewRequest(&pb.ExportEvidencePackageRequest{Network: pb.Network_NETWORK_ETHEREUM_MAINNET, TransferIds: transferIDs, CaseJson: `{"version":1,"title":"Integration case"}`}))
