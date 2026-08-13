@@ -3,11 +3,13 @@ package tracing
 import (
 	"context"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/db"
+	"github.com/openchain/openchain/apps/backend/internal/rules"
 )
 
 func TestBridgeCorrelatorMatchesOnlyCanonicalTimedSameAmountTransfers(t *testing.T) {
@@ -29,6 +31,29 @@ func TestBridgeCorrelatorRejectsDifferentAssetKind(t *testing.T) {
 	evidence := correlator.Correlate(context.Background(), "ethereum-mainnet", []db.Transfer{{Network: "ethereum-mainnet", FromAddress: owner, ToAddress: "0x3154cf16ccdb4c6d922629664174b904d80f2c35", AmountBaseUnits: "1000000", Asset: adapter.Asset{Kind: "ERC20"}, BlockTimestamp: now}})
 	if len(evidence) != 0 {
 		t.Fatalf("evidence = %#v", evidence)
+	}
+}
+
+func TestBridgeCorrelatorRejectsDifferentReportedAssetSymbol(t *testing.T) {
+	owner := "0x1111111111111111111111111111111111111111"
+	now := time.Now().UTC().Add(-time.Hour)
+	chain := &bridgeTestChain{page: &adapter.TransferPage{Transfers: []adapter.TransferItem{{Hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", EventID: "tx", TransferKind: "ERC20", From: "0x4200000000000000000000000000000000000010", To: owner, AmountBaseUnits: "1000000", Asset: adapter.Asset{Kind: "ERC20", Symbol: "USDT", Decimals: 6}, Timestamp: now.Add(time.Minute)}}, SourceStatus: adapter.SourceStatus{RetrievedAt: now.Add(time.Hour)}}}
+	correlator := NewBridgeCorrelator(map[string]adapter.ChainAdapter{"base-mainnet": chain})
+	evidence := correlator.Correlate(context.Background(), "ethereum-mainnet", []db.Transfer{{Network: "ethereum-mainnet", FromAddress: owner, ToAddress: "0x3154cf16ccdb4c6d922629664174b904d80f2c35", AmountBaseUnits: "1000000", Asset: adapter.Asset{Kind: "ERC20", Symbol: "USDC", Decimals: 6}, BlockTimestamp: now}})
+	if len(evidence) != 0 {
+		t.Fatalf("evidence = %#v", evidence)
+	}
+}
+
+func TestCrossChainTransitionKeepsEvidenceWithoutOwnershipClaim(t *testing.T) {
+	source := db.Transfer{ID: "ethereum-mainnet:source", Network: "ethereum-mainnet", TransactionHash: "0xsource", Asset: adapter.Asset{Kind: "ERC20", Symbol: "USDC", Decimals: 6}, AmountBaseUnits: "1000000", BlockTimestamp: time.Unix(100, 0)}
+	destination := db.Transfer{ID: "base-mainnet:destination", Network: "base-mainnet", TransactionHash: "0xdestination", BlockTimestamp: time.Unix(200, 0)}
+	transition := crossChainTransition(rules.BridgeCandidate{BridgeName: "Base Standard Bridge", Source: source, Destination: destination}, "0xsourcebridge", "0xdestinationbridge")
+	if transition.ID != "cross-chain:ethereum-mainnet:source:base-mainnet:destination" || transition.Source.TransactionHash != "0xsource" {
+		t.Fatalf("transition = %#v", transition)
+	}
+	if !strings.Contains(transition.Limitations, "does not establish cross-chain address ownership") {
+		t.Fatalf("limitations = %q", transition.Limitations)
 	}
 }
 

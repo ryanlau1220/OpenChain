@@ -243,6 +243,13 @@ func TestGraphProtoCarriesBlockHash(t *testing.T) {
 	}
 }
 
+func TestGraphProtoCarriesQualifiedCrossChainEvidence(t *testing.T) {
+	transitions := toCrossChainProto([]tracing.CrossChainTransition{{ID: "cross-chain:source:destination", BridgeName: "Base Standard Bridge", SourceNetwork: "ethereum-mainnet", DestinationNetwork: "base-mainnet", Source: db.Transfer{ID: "source", TransactionHash: "0xsource", Asset: adapter.Asset{Kind: "ERC20", Symbol: "USDC", Decimals: 6}, AmountBaseUnits: "1000000", BlockTimestamp: time.Unix(100, 0)}, Destination: db.Transfer{ID: "destination", TransactionHash: "0xdestination", BlockTimestamp: time.Unix(200, 0)}, SourceBridgeAddress: "0xsourcebridge", DestinationBridgeAddress: "0xdestinationbridge", Limitations: "does not establish cross-chain address ownership"}})
+	if len(transitions) != 1 || transitions[0].GetSourceNetwork() != pb.Network_NETWORK_ETHEREUM_MAINNET || transitions[0].GetDestinationNetwork() != pb.Network_NETWORK_BASE_MAINNET || transitions[0].GetAsset().GetSymbol() != "USDC" || transitions[0].GetLimitations() == "" {
+		t.Fatalf("transitions = %#v", transitions)
+	}
+}
+
 func TestCuratedLabelsReachLookupAndLabelAPI(t *testing.T) {
 	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
 		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test curated-label API flow")

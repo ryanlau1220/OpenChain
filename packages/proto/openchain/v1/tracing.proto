@@ -52,6 +52,27 @@ message InvestigationLead {
   string parameters_json = 9;
 }
 
+// A conservative continuation between two chains through a known bridge.
+// It records matching transfer evidence only; it never asserts that addresses
+// on the two chains share an owner.
+message CrossChainTransition {
+  string id = 1;
+  string bridge_name = 2;
+  Network source_network = 3;
+  Network destination_network = 4;
+  string source_transfer_id = 5;
+  string destination_transfer_id = 6;
+  string source_transaction_hash = 7;
+  string destination_transaction_hash = 8;
+  Asset asset = 9;
+  string amount_base_units = 10;
+  int64 source_timestamp = 11;
+  int64 destination_timestamp = 12;
+  string source_bridge_address = 13;
+  string destination_bridge_address = 14;
+  string limitations = 15;
+}
+
 // Counterparty selection is deterministic and scoped to the provider page.
 // "total raw amount" is the highest total for one asset; it is never a fiat valuation.
 // "known entity" means a curated label exists; it is not a risk score.
@@ -85,6 +106,7 @@ message TraceGraphResponse {
   SourceStatus source_status = 8;
   bool pending = 9;
   repeated InvestigationLead leads = 10;
+  repeated CrossChainTransition cross_chain_transitions = 11;
 }
 
 // TraceStatusRequest only reads the durable job created by TraceGraph or
@@ -118,6 +140,7 @@ message ExpandNodeResponse {
   SourceStatus source_status = 5;
   bool pending = 6;
   repeated InvestigationLead leads = 7;
+  repeated CrossChainTransition cross_chain_transitions = 8;
 }
 
 service TracingService {

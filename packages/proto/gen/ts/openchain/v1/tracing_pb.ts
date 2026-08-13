@@ -389,6 +389,131 @@ export class InvestigationLead extends Message<InvestigationLead> {
 }
 
 /**
+ * A conservative continuation between two chains through a known bridge.
+ * It records matching transfer evidence only; it never asserts that addresses
+ * on the two chains share an owner.
+ *
+ * @generated from message openchain.v1.CrossChainTransition
+ */
+export class CrossChainTransition extends Message<CrossChainTransition> {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * @generated from field: string bridge_name = 2;
+   */
+  bridgeName = "";
+
+  /**
+   * @generated from field: openchain.v1.Network source_network = 3;
+   */
+  sourceNetwork = Network.UNSPECIFIED;
+
+  /**
+   * @generated from field: openchain.v1.Network destination_network = 4;
+   */
+  destinationNetwork = Network.UNSPECIFIED;
+
+  /**
+   * @generated from field: string source_transfer_id = 5;
+   */
+  sourceTransferId = "";
+
+  /**
+   * @generated from field: string destination_transfer_id = 6;
+   */
+  destinationTransferId = "";
+
+  /**
+   * @generated from field: string source_transaction_hash = 7;
+   */
+  sourceTransactionHash = "";
+
+  /**
+   * @generated from field: string destination_transaction_hash = 8;
+   */
+  destinationTransactionHash = "";
+
+  /**
+   * @generated from field: openchain.v1.Asset asset = 9;
+   */
+  asset?: Asset;
+
+  /**
+   * @generated from field: string amount_base_units = 10;
+   */
+  amountBaseUnits = "";
+
+  /**
+   * @generated from field: int64 source_timestamp = 11;
+   */
+  sourceTimestamp = protoInt64.zero;
+
+  /**
+   * @generated from field: int64 destination_timestamp = 12;
+   */
+  destinationTimestamp = protoInt64.zero;
+
+  /**
+   * @generated from field: string source_bridge_address = 13;
+   */
+  sourceBridgeAddress = "";
+
+  /**
+   * @generated from field: string destination_bridge_address = 14;
+   */
+  destinationBridgeAddress = "";
+
+  /**
+   * @generated from field: string limitations = 15;
+   */
+  limitations = "";
+
+  constructor(data?: PartialMessage<CrossChainTransition>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.CrossChainTransition";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "bridge_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "source_network", kind: "enum", T: proto3.getEnumType(Network) },
+    { no: 4, name: "destination_network", kind: "enum", T: proto3.getEnumType(Network) },
+    { no: 5, name: "source_transfer_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "destination_transfer_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "source_transaction_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "destination_transaction_hash", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "asset", kind: "message", T: Asset },
+    { no: 10, name: "amount_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "source_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 12, name: "destination_timestamp", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 13, name: "source_bridge_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 14, name: "destination_bridge_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 15, name: "limitations", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CrossChainTransition {
+    return new CrossChainTransition().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CrossChainTransition {
+    return new CrossChainTransition().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CrossChainTransition {
+    return new CrossChainTransition().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CrossChainTransition | PlainMessage<CrossChainTransition> | undefined, b: CrossChainTransition | PlainMessage<CrossChainTransition> | undefined): boolean {
+    return proto3.util.equals(CrossChainTransition, a, b);
+  }
+}
+
+/**
  * @generated from message openchain.v1.TraceGraphRequest
  */
 export class TraceGraphRequest extends Message<TraceGraphRequest> {
@@ -521,6 +646,11 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
    */
   leads: InvestigationLead[] = [];
 
+  /**
+   * @generated from field: repeated openchain.v1.CrossChainTransition cross_chain_transitions = 11;
+   */
+  crossChainTransitions: CrossChainTransition[] = [];
+
   constructor(data?: PartialMessage<TraceGraphResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -539,6 +669,7 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
     { no: 8, name: "source_status", kind: "message", T: SourceStatus },
     { no: 9, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 10, name: "leads", kind: "message", T: InvestigationLead, repeated: true },
+    { no: 11, name: "cross_chain_transitions", kind: "message", T: CrossChainTransition, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphResponse {
@@ -752,6 +883,11 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
    */
   leads: InvestigationLead[] = [];
 
+  /**
+   * @generated from field: repeated openchain.v1.CrossChainTransition cross_chain_transitions = 8;
+   */
+  crossChainTransitions: CrossChainTransition[] = [];
+
   constructor(data?: PartialMessage<ExpandNodeResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -767,6 +903,7 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
     { no: 5, name: "source_status", kind: "message", T: SourceStatus },
     { no: 6, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 7, name: "leads", kind: "message", T: InvestigationLead, repeated: true },
+    { no: 8, name: "cross_chain_transitions", kind: "message", T: CrossChainTransition, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeResponse {

@@ -8,6 +8,7 @@ import { AddressLabel, LabelVisibility } from '@openchain/proto/openchain/v1/lab
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
+	CrossChainTransition,
 	GraphEdge,
 	GraphNode,
 	GraphRanking,
@@ -30,6 +31,7 @@ export const evidenceClient = createClient(EvidenceService, transport);
 export type { AddressSummary };
 export {
 	AddressLabel,
+	CrossChainTransition,
 	EntityType,
 	GraphEdge,
 	GraphNode,

@@ -80,7 +80,7 @@ func EvaluateBridge(network string, candidates []BridgeCandidate, completedAt ti
 		}
 		ids := transferIDs([]db.Transfer{candidate.Source, candidate.Destination})
 		inputIDs = append(inputIDs, ids...)
-		leads = append(leads, lead(definition, candidate.Source.FromAddress, "OP Stack bridge correlation", "Observed a transfer to "+candidate.BridgeName+" on "+network+" followed by a same-amount transfer from the corresponding bridge on "+candidate.DestinationNetwork+" to the same address.", ids))
+		leads = append(leads, lead(definition, candidate.Source.FromAddress, "OP Stack bridge correlation", "Observed a transfer to "+candidate.BridgeName+" on "+network+" followed by a transfer from the corresponding bridge on "+candidate.DestinationNetwork+" with the same reported asset kind, symbol, decimals, raw amount, recipient, and a qualifying time window.", ids))
 	}
 	if len(leads) == 0 {
 		return nil, nil

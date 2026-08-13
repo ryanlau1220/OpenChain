@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaseWorkspace } from '../components/CaseWorkspace';
+import { CrossChainPaths } from '../components/CrossChainPaths';
 import { EvidencePaths } from '../components/EvidencePaths';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { Header } from '../components/Header';
@@ -256,6 +257,7 @@ function Index() {
 								newNodes: status.nodes,
 								newEdges: status.edges,
 								leads: status.leads,
+								crossChainTransitions: status.crossChainTransitions,
 								nextCursor: status.nextCursor,
 								hasMore: status.hasMore,
 								pending: status.pending,
@@ -284,11 +286,21 @@ function Index() {
 						...current.leads,
 						...expanded.leads.filter((lead) => !leadIds.has(lead.id)),
 					];
+					const transitionIDs = new Set(
+						current.crossChainTransitions.map((transition) => transition.id),
+					);
+					const crossChainTransitions = [
+						...current.crossChainTransitions,
+						...expanded.crossChainTransitions.filter(
+							(transition) => !transitionIDs.has(transition.id),
+						),
+					];
 					return new TraceGraphResponse({
 						...current,
 						nodes,
 						edges,
 						leads,
+						crossChainTransitions,
 						totalNodes: nodes.length,
 						totalEdges: edges.length,
 					});
@@ -547,6 +559,7 @@ function Index() {
 							onTogglePin={toggleEvidencePin}
 						/>
 					)}
+					{graphData && <CrossChainPaths transitions={graphData.crossChainTransitions} />}
 					{caseLoaded && (
 						<CaseWorkspace
 							caseFile={caseFile}

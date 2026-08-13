@@ -65,7 +65,7 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions)}), nil
 }
 
 func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect.Request[pb.TraceStatusRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
@@ -85,7 +85,7 @@ func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions)}), nil
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
@@ -111,7 +111,7 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads)}), nil
+	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions)}), nil
 }
 
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {
@@ -134,6 +134,14 @@ func toLeadProto(leads []rules.Lead) []*pb.InvestigationLead {
 	result := make([]*pb.InvestigationLead, 0, len(leads))
 	for _, lead := range leads {
 		result = append(result, &pb.InvestigationLead{Id: lead.ID, RuleId: lead.RuleID, RuleVersion: lead.RuleVersion, Title: lead.Title, SubjectAddress: lead.SubjectAddress, TransferIds: lead.TransferIDs, Rationale: lead.Rationale, Limitations: lead.Limitations, ParametersJson: string(lead.Parameters)})
+	}
+	return result
+}
+
+func toCrossChainProto(transitions []tracing.CrossChainTransition) []*pb.CrossChainTransition {
+	result := make([]*pb.CrossChainTransition, 0, len(transitions))
+	for _, transition := range transitions {
+		result = append(result, &pb.CrossChainTransition{Id: transition.ID, BridgeName: transition.BridgeName, SourceNetwork: protoNetwork(transition.SourceNetwork), DestinationNetwork: protoNetwork(transition.DestinationNetwork), SourceTransferId: transition.Source.ID, DestinationTransferId: transition.Destination.ID, SourceTransactionHash: transition.Source.TransactionHash, DestinationTransactionHash: transition.Destination.TransactionHash, Asset: &pb.Asset{Kind: transition.Source.Asset.Kind, ContractAddress: transition.Source.Asset.ContractAddress, Symbol: transition.Source.Asset.Symbol, Decimals: transition.Source.Asset.Decimals}, AmountBaseUnits: transition.Source.AmountBaseUnits, SourceTimestamp: transition.Source.BlockTimestamp.Unix(), DestinationTimestamp: transition.Destination.BlockTimestamp.Unix(), SourceBridgeAddress: transition.SourceBridgeAddress, DestinationBridgeAddress: transition.DestinationBridgeAddress, Limitations: transition.Limitations})
 	}
 	return result
 }
@@ -236,6 +244,12 @@ func protoNetwork(network string) pb.Network {
 		return pb.Network_NETWORK_ARBITRUM_ONE
 	case "optimism-mainnet":
 		return pb.Network_NETWORK_OPTIMISM_MAINNET
+	case "bnb-chain":
+		return pb.Network_NETWORK_BNB_CHAIN
+	case "ton-mainnet":
+		return pb.Network_NETWORK_TON_MAINNET
+	case "cardano-mainnet":
+		return pb.Network_NETWORK_CARDANO_MAINNET
 	}
 	return pb.Network_NETWORK_ETHEREUM_MAINNET
 }

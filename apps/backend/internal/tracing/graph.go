@@ -59,6 +59,7 @@ type GraphResult struct {
 	Pending                bool
 	SourceStatus           adapter.SourceStatus
 	Leads                  []rules.Lead
+	CrossChainTransitions  []CrossChainTransition
 }
 
 type Engine struct {
@@ -111,21 +112,29 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
 			return nil, err
 		}
-		if e.bridgeCorrelator != nil {
-			bridgeEvidence := e.bridgeCorrelator.Correlate(ctx, e.Network(), persistedTransfers)
-			candidates := make([]rules.BridgeCandidate, 0, len(bridgeEvidence))
-			for _, evidence := range bridgeEvidence {
+	}
+	if e.bridgeCorrelator != nil {
+		bridgeEvidence := e.bridgeCorrelator.Correlate(ctx, e.Network(), persistedTransfers)
+		candidates := make([]rules.BridgeCandidate, 0, len(bridgeEvidence))
+		for _, evidence := range bridgeEvidence {
+			if e.database != nil {
 				if err := e.database.SaveEvidenceGraph(ctx, evidence.Addresses, evidence.Transfers, evidence.Acquisitions); err != nil {
 					return nil, err
 				}
-				candidates = append(candidates, evidence.Candidate)
 			}
-			bridgeLeads, bridgeRuns := rules.EvaluateBridge(e.Network(), candidates, completedAt)
+			candidates = append(candidates, evidence.Candidate)
+			result.CrossChainTransitions = append(result.CrossChainTransitions, evidence.Transition)
+		}
+		bridgeLeads, bridgeRuns := rules.EvaluateBridge(e.Network(), candidates, completedAt)
+		if e.database != nil {
 			if err := e.database.SaveRuleRuns(ctx, bridgeRuns); err != nil {
 				return nil, err
 			}
-			result.Leads = append(result.Leads, bridgeLeads...)
 		}
+		result.Leads = append(result.Leads, bridgeLeads...)
+		sort.Slice(result.CrossChainTransitions, func(left, right int) bool {
+			return result.CrossChainTransitions[left].ID < result.CrossChainTransitions[right].ID
+		})
 	}
 	return result, nil
 }
