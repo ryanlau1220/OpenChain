@@ -44,4 +44,19 @@ describe('Header Component', () => {
 		expect(screen.getByRole('button', { name: 'Cardano Mainnet' })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Ethereum Mainnet' })).toBeNull();
 	});
+
+	it('closes the network menu when clicking outside it', () => {
+		render(
+			<Header
+				currentAddress=""
+				onSearch={vi.fn()}
+				network={Network.ETHEREUM_MAINNET}
+				onNetworkChange={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByLabelText('Network'));
+		expect(screen.getByLabelText('Find network')).toBeTruthy();
+		fireEvent.pointerDown(document.body);
+		expect(screen.queryByLabelText('Find network')).toBeNull();
+	});
 });

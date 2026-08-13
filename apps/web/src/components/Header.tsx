@@ -1,6 +1,6 @@
 import { ChevronDown, Search } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
 	Network,
 	type SupportedNetwork,
@@ -26,6 +26,16 @@ export const Header: React.FC<HeaderProps> = ({
 	const [singleInput, setSingleInput] = useState(currentAddress);
 	const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
 	const [networkQuery, setNetworkQuery] = useState('');
+	const networkMenuRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!networkMenuOpen) return;
+		const closeOutsideMenu = (event: PointerEvent) => {
+			if (!networkMenuRef.current?.contains(event.target as Node)) setNetworkMenuOpen(false);
+		};
+		document.addEventListener('pointerdown', closeOutsideMenu);
+		return () => document.removeEventListener('pointerdown', closeOutsideMenu);
+	}, [networkMenuOpen]);
 	const inputNetwork = (value: string) => {
 		const detected = detectAddressNetwork(value);
 		// Keep an explicit EVM network choice: an address alone cannot distinguish
@@ -93,7 +103,7 @@ export const Header: React.FC<HeaderProps> = ({
 					className="flex h-11 rounded-xl"
 					style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
 				>
-					<div className="relative shrink-0">
+					<div ref={networkMenuRef} className="relative shrink-0">
 						<button
 							type="button"
 							aria-label="Network"
