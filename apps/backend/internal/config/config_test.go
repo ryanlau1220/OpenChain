@@ -15,6 +15,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	_ = os.Unsetenv("BLOCKSCOUT_API_KEY")
 	_ = os.Unsetenv("ALCHEMY_API_KEY")
 	_ = os.Unsetenv("TRONGRID_API_KEY")
+	_ = os.Unsetenv("TONAPI_KEY")
+	_ = os.Unsetenv("BLOCKFROST_PROJECT_ID")
 	_ = os.Unsetenv("PUBLIC_REQUESTS_PER_MINUTE")
 	_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS")
 	_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT")
@@ -39,6 +41,8 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 	_ = os.Setenv("BLOCKSCOUT_API_KEY", "test-key")
 	_ = os.Setenv("ALCHEMY_API_KEY", "test-key")
 	_ = os.Setenv("TRONGRID_API_KEY", "test-key")
+	_ = os.Setenv("TONAPI_KEY", "test-key")
+	_ = os.Setenv("BLOCKFROST_PROJECT_ID", "test-key")
 	_ = os.Setenv("PUBLIC_REQUESTS_PER_MINUTE", "12")
 	_ = os.Setenv("MAX_QUEUED_TRACE_JOBS", "7")
 	_ = os.Setenv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT", "2")
@@ -52,6 +56,8 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 		_ = os.Unsetenv("BLOCKSCOUT_API_KEY")
 		_ = os.Unsetenv("ALCHEMY_API_KEY")
 		_ = os.Unsetenv("TRONGRID_API_KEY")
+		_ = os.Unsetenv("TONAPI_KEY")
+		_ = os.Unsetenv("BLOCKFROST_PROJECT_ID")
 		_ = os.Unsetenv("PUBLIC_REQUESTS_PER_MINUTE")
 		_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS")
 		_ = os.Unsetenv("MAX_QUEUED_TRACE_JOBS_PER_CLIENT")
@@ -75,14 +81,14 @@ func TestLoadConfigCustomEnv(t *testing.T) {
 }
 
 func TestValidateRejectsInsecureRPCURL(t *testing.T) {
-	cfg := &Config{EthereumMainnetRPCURL: "http://127.0.0.1:8545", BaseMainnetRPCURL: "https://base-rpc.example.com", SolanaMainnetRPCURL: "https://mainnet.helius-rpc.com/?api-key=test-key", EtherscanAPIKey: "test-key", BlockscoutAPIKey: "test-key", AlchemyAPIKey: "test-key", TronGridAPIKey: "test-key"}
+	cfg := &Config{EthereumMainnetRPCURL: "http://127.0.0.1:8545", BaseMainnetRPCURL: "https://base-rpc.example.com", SolanaMainnetRPCURL: "https://mainnet.helius-rpc.com/?api-key=test-key", EtherscanAPIKey: "test-key", BlockscoutAPIKey: "test-key", AlchemyAPIKey: "test-key", TronGridAPIKey: "test-key", TonAPIKey: "test-key", BlockfrostProjectID: "test-key"}
 	if cfg.Validate() == nil {
 		t.Fatal("insecure RPC URL was accepted")
 	}
 }
 
 func TestValidateRejectsSolanaRPCWithoutHeliusHistoryAccess(t *testing.T) {
-	cfg := &Config{EthereumMainnetRPCURL: "https://ethereum-rpc.example.com", BaseMainnetRPCURL: "https://base-rpc.example.com", SolanaMainnetRPCURL: "https://api.mainnet-beta.solana.com", EtherscanAPIKey: "test-key", BlockscoutAPIKey: "test-key", AlchemyAPIKey: "test-key", TronGridAPIKey: "test-key"}
+	cfg := &Config{EthereumMainnetRPCURL: "https://ethereum-rpc.example.com", BaseMainnetRPCURL: "https://base-rpc.example.com", SolanaMainnetRPCURL: "https://api.mainnet-beta.solana.com", EtherscanAPIKey: "test-key", BlockscoutAPIKey: "test-key", AlchemyAPIKey: "test-key", TronGridAPIKey: "test-key", TonAPIKey: "test-key", BlockfrostProjectID: "test-key"}
 	if cfg.Validate() == nil {
 		t.Fatal("Solana RPC without Helius history access was accepted")
 	}

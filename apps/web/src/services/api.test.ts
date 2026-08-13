@@ -20,6 +20,9 @@ describe('requestErrorMessage', () => {
 		expect(explorerURL(Network.TRON_MAINNET, 'address', 'TAddress')).toBe(
 			'https://tronscan.org/#/address/TAddress',
 		);
+		expect(explorerURL(Network.BNB_CHAIN, 'address', '0xabc')).toBe(
+			'https://bscscan.com/address/0xabc',
+		);
 	});
 
 	it('detects address families and defaults ambiguous EVM addresses to Ethereum', () => {
@@ -28,5 +31,13 @@ describe('requestErrorMessage', () => {
 		expect(detectAddressNetwork('0x0000000000000000000000000000000000000000')).toBe(
 			Network.ETHEREUM_MAINNET,
 		);
+		expect(detectAddressNetwork('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c')).toBe(
+			Network.TON_MAINNET,
+		);
+		expect(
+			detectAddressNetwork(
+				'addr1qabcdefghijklmnopqrstuvxyz023456789abcdefghijklmnopqrstuvxyz023456789',
+			),
+		).toBe(Network.CARDANO_MAINNET);
 	});
 });

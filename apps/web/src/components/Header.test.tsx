@@ -19,11 +19,29 @@ describe('Header Component', () => {
 		expect(screen.getByAltText('Base Mainnet icon')).toBeTruthy();
 		fireEvent.click(screen.getByLabelText('Network'));
 		expect(screen.getByRole('button', { name: 'Base Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'BNB Chain' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Solana Mainnet' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'TRON Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'TON Mainnet' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Cardano Mainnet' })).toBeTruthy();
 		fireEvent.change(screen.getByPlaceholderText('Search target address'), {
 			target: { value: '0x0000000000000000000000000000000000000000' },
 		});
 		expect(onNetworkChange).not.toHaveBeenCalled();
+	});
+
+	it('filters the network menu immediately', () => {
+		render(
+			<Header
+				currentAddress=""
+				onSearch={vi.fn()}
+				network={Network.ETHEREUM_MAINNET}
+				onNetworkChange={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByLabelText('Network'));
+		fireEvent.change(screen.getByLabelText('Find network'), { target: { value: 'cardano' } });
+		expect(screen.getByRole('button', { name: 'Cardano Mainnet' })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Ethereum Mainnet' })).toBeNull();
 	});
 });

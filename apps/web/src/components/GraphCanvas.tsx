@@ -267,7 +267,10 @@ const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 	});
 };
 
-const layoutAndFit = (cy: cytoscape.Core, name: 'cose' | 'concentric' | 'breadthfirst' | 'grid') => {
+const layoutAndFit = (
+	cy: cytoscape.Core,
+	name: 'cose' | 'concentric' | 'breadthfirst' | 'grid',
+) => {
 	const layout = cy.layout({ name, directed: true, padding: 80, animate: false });
 	layout.one('layoutstop', () => {
 		cy.resize();
@@ -851,7 +854,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			)}
 
 			{/* Cytoscape canvas */}
-			<div ref={containerRef} className="min-h-0 flex-1 w-full cursor-grab active:cursor-grabbing" />
+			<div
+				ref={containerRef}
+				className="min-h-0 flex-1 w-full cursor-grab active:cursor-grabbing"
+			/>
 
 			{/* Floating zoom controls */}
 			<div

@@ -401,9 +401,7 @@ function Index() {
 						highlightedTransferIds={highlightedTransferIds}
 						onExpandNode={handleExpand}
 						canExpand={canExpand}
-						expanding={
-							expandingAddress === activeAddress || pendingExpansion === activeAddress
-						}
+						expanding={expandingAddress === activeAddress || pendingExpansion === activeAddress}
 						graphOptions={graphOptions}
 						onGraphOptionsChange={(options) => {
 							setGraphOptions(options);
