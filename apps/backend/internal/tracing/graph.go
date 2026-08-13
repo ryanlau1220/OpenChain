@@ -14,14 +14,23 @@ import (
 	"github.com/openchain/openchain/apps/backend/internal/rules"
 )
 
-const maxPageSize = 50
+const (
+	maxPageSize              = 50
+	DefaultCounterpartyLimit = 10
+	MaxCounterpartyLimit     = 25
+)
 
 type Direction string
 
+type Ranking string
+
 const (
-	DirectionBoth     Direction = "both"
-	DirectionInbound  Direction = "inbound"
-	DirectionOutbound Direction = "outbound"
+	DirectionBoth           Direction = "both"
+	DirectionInbound        Direction = "inbound"
+	DirectionOutbound       Direction = "outbound"
+	RankingMostRecent       Ranking   = "most_recent"
+	RankingLargestRawAmount Ranking   = "largest_raw_amount"
+	RankingMostActive       Ranking   = "most_active"
 )
 
 type GraphNode struct {
@@ -52,16 +61,19 @@ type GraphResult struct {
 }
 
 type Engine struct {
-	chainAdapter  adapter.ChainAdapter
-	database      *db.DB
-	labelRegistry *labels.Service
+	chainAdapter     adapter.ChainAdapter
+	database         *db.DB
+	labelRegistry    *labels.Service
+	bridgeCorrelator *BridgeCorrelator
 }
+
+func (e *Engine) SetBridgeCorrelator(correlator *BridgeCorrelator) { e.bridgeCorrelator = correlator }
 
 func NewEngine(chainAdapter adapter.ChainAdapter, database *db.DB, labels *labels.Service) *Engine {
 	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels}
 }
 
-func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string) (*GraphResult, error) {
+func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking) (*GraphResult, error) {
 	if e.chainAdapter == nil {
 		return nil, fmt.Errorf("trace data source is not configured")
 	}
@@ -73,6 +85,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	if limit == 0 || limit > maxPageSize {
 		limit = maxPageSize
 	}
+	maxCounterparties, ranking = graphControls(maxCounterparties, ranking)
 	acquisitionContext, recorder := adapter.WithAcquisitionRecorder(ctx)
 	page, err := e.chainAdapter.ListTransfers(acquisitionContext, address, limit, cursor)
 	if err != nil {
@@ -83,10 +96,11 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		}
 		return nil, err
 	}
-	transfers := filterTransfers(page.Transfers, address, direction)
+	transfers := selectCounterpartyTransfers(filterTransfers(page.Transfers, address, direction), address, maxCounterparties, ranking)
 	result := e.graph(ctx, address, transfers, page)
 	persistedTransfers := e.toTransfers(transfers, page.SourceStatus)
-	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, time.Now().UTC())
+	completedAt := time.Now().UTC()
+	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, completedAt)
 	result.Leads = leads
 	if e.database != nil {
 		if err := e.database.SaveEvidenceGraph(ctx, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items()); err != nil {
@@ -95,8 +109,111 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
 			return nil, err
 		}
+		if e.bridgeCorrelator != nil {
+			bridgeEvidence := e.bridgeCorrelator.Correlate(ctx, e.Network(), persistedTransfers)
+			candidates := make([]rules.BridgeCandidate, 0, len(bridgeEvidence))
+			for _, evidence := range bridgeEvidence {
+				if err := e.database.SaveEvidenceGraph(ctx, evidence.Addresses, evidence.Transfers, evidence.Acquisitions); err != nil {
+					return nil, err
+				}
+				candidates = append(candidates, evidence.Candidate)
+			}
+			bridgeLeads, bridgeRuns := rules.EvaluateBridge(e.Network(), candidates, completedAt)
+			if err := e.database.SaveRuleRuns(ctx, bridgeRuns); err != nil {
+				return nil, err
+			}
+			result.Leads = append(result.Leads, bridgeLeads...)
+		}
 	}
 	return result, nil
+}
+
+func graphControls(maxCounterparties uint32, ranking Ranking) (uint32, Ranking) {
+	if maxCounterparties == 0 {
+		maxCounterparties = DefaultCounterpartyLimit
+	}
+	if maxCounterparties > MaxCounterpartyLimit {
+		maxCounterparties = MaxCounterpartyLimit
+	}
+	switch ranking {
+	case RankingLargestRawAmount, RankingMostActive, RankingMostRecent:
+	default:
+		ranking = RankingMostRecent
+	}
+	return maxCounterparties, ranking
+}
+
+type counterpartyStats struct {
+	address string
+	count   int
+	latest  time.Time
+	largest *big.Rat
+}
+
+func selectCounterpartyTransfers(transfers []adapter.TransferItem, seed string, maxCounterparties uint32, ranking Ranking) []adapter.TransferItem {
+	maxCounterparties, ranking = graphControls(maxCounterparties, ranking)
+	stats := make(map[string]*counterpartyStats)
+	for _, transfer := range transfers {
+		counterparty := transfer.From
+		if strings.EqualFold(counterparty, seed) {
+			counterparty = transfer.To
+		}
+		if counterparty == "" || strings.EqualFold(counterparty, seed) {
+			continue
+		}
+		item := stats[counterparty]
+		if item == nil {
+			item = &counterpartyStats{address: counterparty, largest: big.NewRat(0, 1)}
+			stats[counterparty] = item
+		}
+		item.count++
+		if transfer.Timestamp.After(item.latest) {
+			item.latest = transfer.Timestamp
+		}
+		amount, ok := new(big.Int).SetString(transfer.AmountBaseUnits, 10)
+		if ok {
+			scaled := new(big.Rat).SetFrac(amount, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(transfer.Asset.Decimals)), nil))
+			if scaled.Cmp(item.largest) > 0 {
+				item.largest = scaled
+			}
+		}
+	}
+	items := make([]*counterpartyStats, 0, len(stats))
+	for _, item := range stats {
+		items = append(items, item)
+	}
+	sort.Slice(items, func(left, right int) bool {
+		first, second := items[left], items[right]
+		switch ranking {
+		case RankingLargestRawAmount:
+			if compared := first.largest.Cmp(second.largest); compared != 0 {
+				return compared > 0
+			}
+		case RankingMostActive:
+			if first.count != second.count {
+				return first.count > second.count
+			}
+		}
+		if !first.latest.Equal(second.latest) {
+			return first.latest.After(second.latest)
+		}
+		return first.address < second.address
+	})
+	selected := make(map[string]struct{}, min(int(maxCounterparties), len(items)))
+	for _, item := range items[:min(int(maxCounterparties), len(items))] {
+		selected[item.address] = struct{}{}
+	}
+	result := make([]adapter.TransferItem, 0, len(transfers))
+	for _, transfer := range transfers {
+		counterparty := transfer.From
+		if strings.EqualFold(counterparty, seed) {
+			counterparty = transfer.To
+		}
+		if _, ok := selected[counterparty]; ok {
+			result = append(result, transfer)
+		}
+	}
+	return result
 }
 
 func (e *Engine) PendingGraph(address, warning string) *GraphResult {

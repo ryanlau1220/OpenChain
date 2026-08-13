@@ -13,7 +13,7 @@ import (
 
 func TestTraceGraphWithoutUpstreamReturnsSeed(t *testing.T) {
 	engine := NewEngine(nil, nil, labels.NewService(nil))
-	_, err := engine.ResolveGraph(context.Background(), "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", DirectionBoth, 10, "")
+	_, err := engine.ResolveGraph(context.Background(), "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", DirectionBoth, 10, "", DefaultCounterpartyLimit, RankingMostRecent)
 	if err == nil {
 		t.Fatal("expected an unavailable Etherscan error")
 	}
@@ -41,6 +41,37 @@ func TestFinalityWindowsMarkRecentObservationsProvisional(t *testing.T) {
 	}
 	if !isProvisional("solana-mainnet", now, now) || isProvisional("solana-mainnet", now.Add(-2*time.Minute), now) {
 		t.Fatal("Solana finality window was not applied")
+	}
+}
+
+func TestSelectCounterpartyTransfersUsesDeterministicRequestedRanking(t *testing.T) {
+	seed := testTraceAddress
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	transfers := []adapter.TransferItem{
+		{From: seed, To: "recent", AmountBaseUnits: "1", Asset: adapter.Asset{Decimals: 0}, Timestamp: now},
+		{From: seed, To: "large", AmountBaseUnits: "99", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-time.Hour)},
+		{From: seed, To: "active", AmountBaseUnits: "2", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-2 * time.Hour)},
+		{From: seed, To: "active", AmountBaseUnits: "2", Asset: adapter.Asset{Decimals: 0}, Timestamp: now.Add(-3 * time.Hour)},
+	}
+	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingMostRecent); len(got) != 1 || got[0].To != "recent" {
+		t.Fatalf("recent = %#v", got)
+	}
+	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingLargestRawAmount); len(got) != 1 || got[0].To != "large" {
+		t.Fatalf("largest = %#v", got)
+	}
+	if got := selectCounterpartyTransfers(transfers, seed, 1, RankingMostActive); len(got) != 2 || got[0].To != "active" {
+		t.Fatalf("active = %#v", got)
+	}
+}
+
+func TestGraphControlsClampAndDefault(t *testing.T) {
+	limit, ranking := graphControls(0, "")
+	if limit != DefaultCounterpartyLimit || ranking != RankingMostRecent {
+		t.Fatalf("defaults = %d %q", limit, ranking)
+	}
+	limit, _ = graphControls(MaxCounterpartyLimit+1, RankingMostRecent)
+	if limit != MaxCounterpartyLimit {
+		t.Fatalf("limit = %d", limit)
 	}
 }
 
