@@ -74,6 +74,20 @@ function Index() {
 		caseFileRef.current = next;
 		setCaseFile(next);
 	}, []);
+	const saveScope = useCallback(
+		(scope: GraphOptions) => {
+			graphOptionsRef.current = scope;
+			setGraphOptions(scope);
+			const scopedCase = {
+				...caseFileRef.current,
+				scope,
+				updatedAt: new Date().toISOString(),
+			};
+			updateCaseFile(scopedCase);
+			saveLocalCase(scopedCase);
+		},
+		[updateCaseFile],
+	);
 
 	useEffect(() => {
 		const storedCase = loadLocalCase();
@@ -314,16 +328,19 @@ function Index() {
 		Boolean(activeAddress) &&
 		activeDepth < graphOptions.maxDepth &&
 		(!activeBranch || activeBranch.hasMore);
-	const selectTransfer = useCallback((edge: GraphEdge) => {
-		setSelectedEdge(edge);
-		setSelectedLead(null);
-		setHighlightedTransferIds([edge.id]);
-		updateCaseFile((current) => ({
-			...current,
-			selectedTransferIds: [...new Set([...current.selectedTransferIds, edge.id])],
-			updatedAt: new Date().toISOString(),
-		}));
-	}, []);
+	const selectTransfer = useCallback(
+		(edge: GraphEdge) => {
+			setSelectedEdge(edge);
+			setSelectedLead(null);
+			setHighlightedTransferIds([edge.id]);
+			updateCaseFile((current) => ({
+				...current,
+				selectedTransferIds: [...new Set([...current.selectedTransferIds, edge.id])],
+				updatedAt: new Date().toISOString(),
+			}));
+		},
+		[updateCaseFile],
+	);
 	const selectLead = useCallback(
 		(lead: InvestigationLead) => {
 			if (!graphData) return;
@@ -394,6 +411,27 @@ function Index() {
 		},
 		[updateCaseFile],
 	);
+	const traceDirection = useCallback(
+		(direction: TraceDirection) => {
+			if (!graphData) return;
+			const scope = { ...graphOptionsRef.current, direction };
+			saveScope(scope);
+			void load(graphData.seedAddress, false, network, scope);
+		},
+		[graphData, load, network, saveScope],
+	);
+	const toggleEvidencePin = useCallback(
+		(transferID: string) => {
+			updateCaseFile((current) => ({
+				...current,
+				selectedTransferIds: current.selectedTransferIds.includes(transferID)
+					? current.selectedTransferIds.filter((id) => id !== transferID)
+					: [...current.selectedTransferIds, transferID],
+				updatedAt: new Date().toISOString(),
+			}));
+		},
+		[updateCaseFile],
+	);
 
 	return (
 		<div className="h-dvh overflow-hidden flex flex-col" style={{ background: 'var(--snow)' }}>
@@ -430,6 +468,7 @@ function Index() {
 						}}
 						highlightedTransferIds={highlightedTransferIds}
 						onExpandNode={handleExpand}
+						onTraceDirection={traceDirection}
 						canExpand={canExpand}
 						expanding={expandingAddress === activeAddress || pendingExpansion === activeAddress}
 						graphOptions={graphOptions}
@@ -438,15 +477,7 @@ function Index() {
 								options.direction !== graphOptions.direction ||
 								options.maxCounterparties !== graphOptions.maxCounterparties ||
 								options.ranking !== graphOptions.ranking;
-							graphOptionsRef.current = options;
-							setGraphOptions(options);
-							const scopedCase = {
-								...caseFileRef.current,
-								scope: options,
-								updatedAt: new Date().toISOString(),
-							};
-							updateCaseFile(scopedCase);
-							saveLocalCase(scopedCase);
+							saveScope(options);
 							if (graphData && requiresNewTrace)
 								void load(graphData.seedAddress, false, network, options);
 						}}
@@ -508,7 +539,13 @@ function Index() {
 						/>
 					)}
 					{graphData && (
-						<EvidencePaths nodes={graphData.nodes} edges={graphData.edges} network={network} />
+						<EvidencePaths
+							nodes={graphData.nodes}
+							edges={graphData.edges}
+							network={network}
+							pinnedTransferIds={caseFile.selectedTransferIds}
+							onTogglePin={toggleEvidencePin}
+						/>
 					)}
 					{caseLoaded && (
 						<CaseWorkspace

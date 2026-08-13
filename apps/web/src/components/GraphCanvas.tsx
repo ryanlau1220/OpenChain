@@ -32,6 +32,7 @@ interface GraphCanvasProps {
 	onEdgeSelect?: (edge: GraphEdge | null) => void;
 	onRelationshipSelect?: (edges: readonly GraphEdge[]) => void;
 	onExpandNode?: (address: string) => void;
+	onTraceDirection?: (direction: TraceDirection) => void;
 	canExpand?: boolean;
 	expanding?: boolean;
 	highlightedTransferIds?: readonly string[];
@@ -423,6 +424,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	onEdgeSelect,
 	onRelationshipSelect,
 	onExpandNode,
+	onTraceDirection,
 	canExpand = false,
 	expanding = false,
 	highlightedTransferIds = emptyTransferIDs,
@@ -822,6 +824,28 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							{expanding ? 'Expanding…' : 'Expand'}
 						</button>
 					</div>
+					{graphData && onTraceDirection && (
+						<div className="flex items-center gap-1.5">
+							<button
+								type="button"
+								onClick={() => onTraceDirection(TraceDirection.INBOUND)}
+								className="btn-outline text-[11px] transition font-medium"
+								style={{ padding: '0.25rem 0.625rem' }}
+								title="Reload the target with incoming transfers only."
+							>
+								Trace source of funds
+							</button>
+							<button
+								type="button"
+								onClick={() => onTraceDirection(TraceDirection.OUTBOUND)}
+								className="btn-outline text-[11px] transition font-medium"
+								style={{ padding: '0.25rem 0.625rem' }}
+								title="Reload the target with outgoing transfers only."
+							>
+								Trace destination of funds
+							</button>
+						</div>
+					)}
 				</div>
 				<div className="flex items-center gap-2">
 					{graphOptions && onGraphOptionsChange && (

@@ -119,6 +119,34 @@ test('provides focused graph filters without leaving the investigation workspace
 	await expect(page.getByLabel('Transfer type')).toBeVisible();
 });
 
+test('guides source and destination tracing from the target address', async ({ page }) => {
+	const root = '0x0000000000000000000000000000000000000001';
+	const directions: string[] = [];
+	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) => {
+		directions.push(JSON.parse(route.request().postData() || '{}').direction);
+		return route.fulfill(
+			connectJSON({
+				seedAddress: root,
+				nodes: [{ id: root, label: 'Test seed', isSeed: true }],
+				sourceStatus: { source: 'test-fixture', isComplete: true },
+			}),
+		);
+	});
+	await page.route('**/openchain.v1.LookupService/LookupAddress', (route) =>
+		route.fulfill(connectJSON({})),
+	);
+	await page.route('**/openchain.v1.LabelService/GetLabels', (route) =>
+		route.fulfill(connectJSON({})),
+	);
+	await page.getByPlaceholder('Search target address').fill(root);
+	await page.getByLabel('Investigate address').click();
+	await expect(page.getByRole('button', { name: 'Trace source of funds' })).toBeVisible();
+	await page.getByRole('button', { name: 'Trace source of funds' }).click();
+	await expect.poll(() => directions.at(-1)).toBe('TRACE_DIRECTION_INBOUND');
+	await page.getByRole('button', { name: 'Trace destination of funds' }).click();
+	await expect.poll(() => directions.at(-1)).toBe('TRACE_DIRECTION_OUTBOUND');
+});
+
 test('replays a deterministic queued trace through finding, package export, and import', async ({ page }) => {
 	const root = '0x0000000000000000000000000000000000000001';
 	const target = '0x0000000000000000000000000000000000000002';
