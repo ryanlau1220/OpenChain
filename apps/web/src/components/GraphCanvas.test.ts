@@ -5,6 +5,7 @@ import {
 	filterGraphEdges,
 	flowNodePositions,
 	positionAddedNodes,
+	transferCountsByNode,
 } from './GraphCanvas';
 
 describe('aggregateGraphEdges', () => {
@@ -17,6 +18,7 @@ describe('aggregateGraphEdges', () => {
 				amountBaseUnits: '1200000',
 				txCount: 1,
 				asset: { kind: 'ERC20', contractAddress: 'usdc', symbol: 'USDC', decimals: 6 },
+				firstTxTimestamp: 1_704_067_200n,
 				lastTxTimestamp: 1n,
 			},
 			{
@@ -26,6 +28,7 @@ describe('aggregateGraphEdges', () => {
 				amountBaseUnits: '800000',
 				txCount: 1,
 				asset: { kind: 'ERC20', contractAddress: 'usdc', symbol: 'USDC', decimals: 6 },
+				firstTxTimestamp: 1_704_067_200n,
 				lastTxTimestamp: 2n,
 			},
 			{
@@ -35,15 +38,26 @@ describe('aggregateGraphEdges', () => {
 				amountBaseUnits: '1',
 				txCount: 1,
 				asset: { kind: 'NATIVE', symbol: 'ETH', decimals: 18 },
+				firstTxTimestamp: 1_704_067_200n,
 				lastTxTimestamp: 3n,
 			},
 		] as GraphEdge[];
 
 		const relationships = aggregateGraphEdges(edges);
 		expect(relationships).toHaveLength(2);
-		expect(relationships[0].label).toBe('2 transfers · 2 USDC');
+		expect(relationships[0].label).toContain('2 transfers · 2 USDC');
+		expect(relationships[0].timeRange).toBe('Jan 1');
 		expect(relationships[0].representative.id).toBe('2');
 		expect(relationships[0].transfers.map((edge) => edge.id)).toEqual(['1', '2']);
+	});
+
+	it('counts visible inbound and outbound transfers for each node', () => {
+		const counts = transferCountsByNode([
+			{ source: 'source', target: 'seed', txCount: 2 },
+			{ source: 'seed', target: 'destination', txCount: 3 },
+		] as GraphEdge[]);
+		expect(counts.get('seed')).toEqual({ inbound: 2, outbound: 3 });
+		expect(counts.get('source')).toEqual({ inbound: 0, outbound: 2 });
 	});
 
 	it('filters by target direction, asset amount, type, and inclusive date range', () => {

@@ -42,6 +42,7 @@ interface GraphCanvasProps {
 // PRISM node palette (light mode)
 const NODE_COLORS = {
 	seed: { bg: '#887DFF', border: '#A7F9FF', text: '#fff' },
+	service: { bg: '#0F766E', border: '#99F6E4', text: '#fff' },
 	exchange: { bg: '#F59E0B', border: '#FDE68A', text: '#fff' },
 	contract: { bg: '#8B5CF6', border: '#DDD6FE', text: '#fff' },
 	default: { bg: '#4B5068', border: '#C8CADC', text: '#fff' },
@@ -52,6 +53,7 @@ export type GraphRelationship = {
 	source: string;
 	target: string;
 	label: string;
+	timeRange: string;
 	color: string;
 	representative: GraphEdge;
 	transfers: GraphEdge[];
@@ -80,6 +82,56 @@ const emptyTransferIDs: readonly string[] = [];
 
 type PositionedNode = { id: string; x: number; y: number };
 type LayoutName = 'flow' | 'cose' | 'concentric' | 'grid';
+type NodeTransferCounts = { inbound: number; outbound: number };
+
+const shortAddress = (address: string) =>
+	address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
+
+const formatTransferTime = (timestamp: bigint) => {
+	const date = new Date(Number(timestamp) * 1000);
+	if (!Number.isFinite(date.getTime())) return 'Unknown time';
+	return new Intl.DateTimeFormat(undefined, {
+		month: 'short',
+		day: 'numeric',
+		timeZone: 'UTC',
+	}).format(date);
+};
+
+export function formatRelationshipTimeRange(first: bigint, last: bigint): string {
+	const start = formatTransferTime(first);
+	const end = formatTransferTime(last);
+	return start === end ? start : `${start}–${end}`;
+}
+
+export function transferCountsByNode(edges: readonly GraphEdge[]): Map<string, NodeTransferCounts> {
+	const counts = new Map<string, NodeTransferCounts>();
+	for (const edge of edges) {
+		const quantity = edge.txCount || 1;
+		const source = counts.get(edge.source) || { inbound: 0, outbound: 0 };
+		const target = counts.get(edge.target) || { inbound: 0, outbound: 0 };
+		source.outbound += quantity;
+		target.inbound += quantity;
+		counts.set(edge.source, source);
+		counts.set(edge.target, target);
+	}
+	return counts;
+}
+
+const nodeBadge = (node: GraphNode) => {
+	if (node.isSeed) return 'TARGET';
+	if (node.labels.length > 0) return 'LABELLED SERVICE';
+	if (node.entityType === EntityType.EOA || node.entityType === EntityType.UNSPECIFIED)
+		return 'UNKNOWN ADDRESS';
+	return entityLabel(node.entityType);
+};
+
+const nodePalette = (node: GraphNode) => {
+	if (node.isSeed) return NODE_COLORS.seed;
+	if (node.labels.length > 0) return NODE_COLORS.service;
+	if (node.entityType === EntityType.EXCHANGE) return NODE_COLORS.exchange;
+	if (node.entityType === EntityType.CONTRACT) return NODE_COLORS.contract;
+	return NODE_COLORS.default;
+};
 
 // Existing positions are deliberately immutable during an incremental expand.
 // New neighbours fan out from their already-rendered parent.
@@ -243,18 +295,22 @@ export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelations
 	return [...relationships].map(([id, relationship]) => {
 		const edge = relationship.representative;
 		const stable = edge.asset?.symbol === 'USDT' || edge.asset?.symbol === 'USDC';
+		const transfers = relationship.transfers.toSorted((left, right) => {
+			if (left.firstTxTimestamp !== right.firstTxTimestamp)
+				return Number(left.firstTxTimestamp) - Number(right.firstTxTimestamp);
+			return left.id.localeCompare(right.id);
+		});
+		const first = transfers[0];
+		const last = transfers[transfers.length - 1];
 		return {
 			id,
 			source: edge.source,
 			target: edge.target,
-			label: `${relationship.count} ${relationship.count === 1 ? 'transfer' : 'transfers'} · ${formatRelationshipAmount(relationship.amount, edge)}`,
+			label: `${relationship.count} ${relationship.count === 1 ? 'transfer' : 'transfers'} · ${formatRelationshipAmount(relationship.amount, edge)}\n${formatRelationshipTimeRange(first.firstTxTimestamp, last.lastTxTimestamp)}`,
+			timeRange: formatRelationshipTimeRange(first.firstTxTimestamp, last.lastTxTimestamp),
 			color: stable ? '#34D399' : '#887DFF',
 			representative: edge,
-			transfers: relationship.transfers.toSorted((left, right) => {
-				if (left.firstTxTimestamp !== right.firstTxTimestamp)
-					return Number(left.firstTxTimestamp) - Number(right.firstTxTimestamp);
-				return left.id.localeCompare(right.id);
-			}),
+			transfers,
 			provisional: relationship.transfers.some((transfer) => transfer.provisional),
 		};
 	});
@@ -414,6 +470,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		}
 		return (graphData?.nodes || []).filter((node) => addresses.has(node.id));
 	}, [graphData?.nodes, seedAddress, visibleEdges]);
+	const nodeCounts = useMemo(() => transferCountsByNode(visibleEdges), [visibleEdges]);
 	const assets = useMemo(() => {
 		const unique = new Map<string, string>();
 		for (const edge of graphData?.edges || []) {
@@ -464,27 +521,16 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		const elements: cytoscape.ElementDefinition[] = [];
 
 		visibleNodes.forEach((n) => {
-			let palette = NODE_COLORS.default;
-			let badge = entityLabel(n.entityType);
-
-			if (n.isSeed) {
-				palette = NODE_COLORS.seed;
-				badge = 'Target';
-			} else if (n.entityType === EntityType.EXCHANGE) {
-				palette = NODE_COLORS.exchange;
-				badge = 'Exchange';
-			} else if (n.entityType === EntityType.CONTRACT) {
-				palette = NODE_COLORS.contract;
-				badge = 'Contract';
-			}
-
-			const displayLabel = n.label || n.id.substring(0, 8);
+			const palette = nodePalette(n);
+			const badge = nodeBadge(n);
+			const counts = nodeCounts.get(n.id) || { inbound: n.inTxCount, outbound: n.outTxCount };
+			const displayLabel = n.label || shortAddress(n.id);
 
 			elements.push({
 				group: 'nodes',
 				data: {
 					id: n.id,
-					label: displayLabel,
+					label: `${badge}\n${displayLabel}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`,
 					badge,
 					is_seed: n.isSeed,
 					bg: palette.bg,
@@ -589,13 +635,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'background-color': 'data(bg)',
 						label: 'data(label)',
 						color: '#FFFFFF',
-						'font-size': '10px',
+						'font-size': '9px',
 						'font-family': 'Inter, sans-serif',
-						'text-valign': 'top',
-						'text-margin-y': -8,
+						'text-valign': 'bottom',
+						'text-margin-y': 10,
 						'text-wrap': 'wrap',
-						'text-max-width': '96px',
-						'text-outline-width': 2,
+						'text-max-width': '120px',
+						'text-outline-width': 3,
 						'text-outline-color': 'data(bg)',
 						width: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
 						height: (ele: cytoscape.NodeSingular) => (ele.data('is_seed') ? 52 : 38),
@@ -631,11 +677,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'target-arrow-shape': 'triangle',
 						'curve-style': 'bezier',
 						label: 'data(label)',
-						'font-size': '8px',
+						'font-size': '7px',
 						color: '#4B5068',
+						'text-rotation': 'autorotate',
+						'text-margin-y': -12,
+						'text-wrap': 'wrap',
+						'text-max-width': '110px',
 						'text-background-opacity': 1,
 						'text-background-color': '#FFFFFF',
-						'text-background-padding': '2px',
+						'text-background-padding': '1px',
 						'text-background-shape': 'roundrectangle',
 						'text-border-opacity': 1,
 						'text-border-width': 1,
@@ -705,7 +755,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		cyRef.current = cy;
 		layoutRef.current = layoutKey;
-	}, [graphData, graphOptions?.direction, layoutName, visibleEdges, visibleNodes]);
+	}, [graphData, graphOptions?.direction, layoutName, nodeCounts, visibleEdges, visibleNodes]);
 
 	const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.2);
 	const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
