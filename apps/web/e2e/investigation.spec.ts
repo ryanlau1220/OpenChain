@@ -166,18 +166,32 @@ test('replays a deterministic queued trace through finding, package export, and 
 		leads: [{ id: 'fan-out-dispersion:test', ruleId: 'fan-out-dispersion', ruleVersion: '1.0.0', title: 'Fan-out dispersion lead', subjectAddress: root, transferIds: [transferID], rationale: 'Observed deterministic distribution.', limitations: 'Requires human review.', parametersJson: '{"window_seconds":3600,"min_distinct_counterparties":3}' }],
 		totalNodes: 2,
 		totalEdges: 1,
+		hasMore: true,
 		sourceStatus: { source: 'test-fixture', isComplete: true },
 	};
 	const packageJSON = frozenEvidencePackage(root, transferID);
 	let statusRequests = 0;
+	let expansionRequests = 0;
+	const traceDirections: string[] = [];
 	let exportRequests = 0;
 	let exportedDepth = 0;
-	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) =>
-		route.fulfill(connectJSON(pending)),
-	);
+	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) => {
+		traceDirections.push(JSON.parse(route.request().postData() || '{}').direction);
+		return route.fulfill(connectJSON(pending));
+	});
 	await page.route('**/openchain.v1.TracingService/GetTraceStatus', (route) => {
 		statusRequests++;
 		return route.fulfill(connectJSON(completed));
+	});
+	await page.route('**/openchain.v1.TracingService/ExpandNode', (route) => {
+		expansionRequests++;
+		return route.fulfill(
+			connectJSON({
+				newNodes: [{ id: '0x0000000000000000000000000000000000000003', label: 'Expanded source' }],
+				newEdges: [{ id: 'ethereum-mainnet:expanded:tx', source: '0x0000000000000000000000000000000000000003', target: root, amountBaseUnits: '41', txCount: 1, asset: { kind: 'NATIVE', symbol: 'ETH', decimals: 18 }, firstTxTimestamp: '2', lastTxTimestamp: '2', eventId: 'tx', blockNumber: '2', transactionHash: '0xexpanded', transferKind: 'NATIVE', sourceName: 'test-fixture', retrievedAt: '2' }],
+				hasMore: false,
+			}),
+		);
 	});
 	await page.route('**/openchain.v1.LookupService/LookupAddress', (route) =>
 		route.fulfill(connectJSON({})),
@@ -205,6 +219,12 @@ test('replays a deterministic queued trace through finding, package export, and 
 	await expect(page.getByText('Retrieving address flow…')).toBeVisible();
 	await expect(page.getByText('Fan-out dispersion lead')).toBeVisible({ timeout: 10_000 });
 	expect(statusRequests).toBe(1);
+	await page.getByRole('button', { name: 'Trace source of funds' }).click();
+	await expect.poll(() => statusRequests, { timeout: 10_000 }).toBe(2);
+	expect(traceDirections.at(-1)).toBe('TRACE_DIRECTION_INBOUND');
+	await page.getByRole('button', { name: 'Expand' }).click();
+	await expect.poll(() => expansionRequests).toBe(1);
+	await expect(page.getByRole('button', { name: 'Expand' })).toBeDisabled();
 	const download = page.waitForEvent('download');
 	await page.getByRole('button', { name: 'Package' }).click();
 	expect((await download).suggestedFilename()).toBe('openchain-evidence-package.json');

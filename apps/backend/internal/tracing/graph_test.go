@@ -80,6 +80,26 @@ func TestGraphControlsClampAndDefault(t *testing.T) {
 	}
 }
 
+func TestGraphAggregatesPerNodeTransferCountsAndOrdersEdges(t *testing.T) {
+	seed := testTraceAddress
+	engine := NewEngine(&retryChain{}, nil, labels.NewService(nil))
+	graph := engine.graph(context.Background(), seed, []adapter.TransferItem{
+		{Hash: "0xbbb", EventID: "tx", From: "source", To: seed, AmountBaseUnits: "2000000000000000000", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, Timestamp: time.Unix(100, 0)},
+		{Hash: "0xaaa", EventID: "tx", From: "source", To: seed, AmountBaseUnits: "1000000000000000000", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, Timestamp: time.Unix(90, 0)},
+		{Hash: "0xccc", EventID: "tx", From: seed, To: "destination", AmountBaseUnits: "3000000000000000000", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, Timestamp: time.Unix(110, 0)},
+	}, &adapter.TransferPage{SourceStatus: adapter.SourceStatus{Source: "fixture", RetrievedAt: time.Unix(1000, 0)}})
+	nodes := make(map[string]GraphNode, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		nodes[node.ID] = node
+	}
+	if graph.TotalNodes != 3 || graph.TotalEdges != 3 || nodes[seed].InTxCount != 2 || nodes[seed].OutTxCount != 1 || nodes["source"].OutTxCount != 2 || nodes["destination"].InTxCount != 1 {
+		t.Fatalf("graph aggregation = %#v", graph)
+	}
+	if graph.Edges[0].ID != "ethereum-mainnet:0xaaa:tx" || graph.Edges[0].AmountFormatted != "1.0000 ETH" || graph.Edges[2].ID != "ethereum-mainnet:0xccc:tx" {
+		t.Fatalf("edges = %#v", graph.Edges)
+	}
+}
+
 func TestTraceJobRetriesTemporaryProviderFailure(t *testing.T) {
 	chain := &retryChain{}
 	queue := NewQueue(NewEngine(chain, nil, labels.NewService(nil)), nil, 1, 1)

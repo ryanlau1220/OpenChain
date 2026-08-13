@@ -169,3 +169,59 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	}
 	t.Fatal("trace job was not completed")
 }
+
+func TestLargeFanDatasetsPersistDeterministicFindings(t *testing.T) {
+	if os.Getenv("OPENCHAIN_DB_INTEGRATION_TEST") != "1" {
+		t.Skip("set OPENCHAIN_DB_INTEGRATION_TEST=1 to test controlled large fan datasets")
+	}
+	database, err := db.NewDB(db.DefaultConfig(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := database.InitSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	database.SQL.SetMaxOpenConns(1)
+	database.SQL.SetMaxIdleConns(1)
+	schema := "openchain_large_fan_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s; CREATE TABLE %s.rule_runs (LIKE public.rule_runs INCLUDING ALL); SET search_path = %s, public`, schema, schema, schema)); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
+	}()
+
+	const network = "controlled-large-fan"
+	const hub = "0x00000000000000000000000000000000000000aa"
+	now := time.Unix(1_700_000_000, 0).UTC()
+	transfers := make([]db.Transfer, 0, 128)
+	for index := 0; index < 64; index++ {
+		transfers = append(transfers,
+			db.Transfer{ID: fmt.Sprintf("in-%03d", index), Network: network, FromAddress: fmt.Sprintf("source-%03d", index), ToAddress: hub, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, AmountBaseUnits: strconv.Itoa(100 + index), BlockTimestamp: now.Add(time.Duration(index) * time.Minute)},
+			db.Transfer{ID: fmt.Sprintf("out-%03d", index), Network: network, FromAddress: hub, ToAddress: fmt.Sprintf("destination-%03d", index), Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, AmountBaseUnits: strconv.Itoa(200 + index), BlockTimestamp: now.Add(48*time.Hour + time.Duration(index)*time.Minute)},
+		)
+	}
+	leads, runs := rules.Evaluate(network, transfers, now.Add(72*time.Hour))
+	var fanIn, fanOut *rules.Lead
+	for index := range leads {
+		switch leads[index].RuleID {
+		case "fan-in-consolidation":
+			fanIn = &leads[index]
+		case "fan-out-dispersion":
+			fanOut = &leads[index]
+		}
+	}
+	if fanIn == nil || fanOut == nil || len(fanIn.TransferIDs) != 3 || len(fanOut.TransferIDs) != 3 || len(runs) == 0 || len(runs[0].InputTransferIDs) != len(transfers) {
+		t.Fatalf("large fan findings = %#v", leads)
+	}
+	if err := database.SaveRuleRuns(ctx, runs); err != nil {
+		t.Fatal(err)
+	}
+	var stored int
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, network).Scan(&stored); err != nil || stored != len(runs) {
+		t.Fatalf("persisted runs = %d want %d err=%v", stored, len(runs), err)
+	}
+}
