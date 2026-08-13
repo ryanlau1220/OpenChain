@@ -157,6 +157,46 @@ test('replays a deterministic queued trace through finding, package export, and 
 	await expect(page.getByRole('button', { name: 'Print' })).toBeEnabled();
 });
 
+test('preserves Base58 address casing while polling an expansion', async ({ page }) => {
+	const root = 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj';
+	let polledAddress = '';
+	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) =>
+		route.fulfill(
+			connectJSON({
+				seedAddress: root,
+				nodes: [{ id: root, label: 'TRON seed', isSeed: true }],
+				hasMore: true,
+				sourceStatus: { source: 'test-fixture', isComplete: true },
+			}),
+		),
+	);
+	await page.route('**/openchain.v1.TracingService/ExpandNode', (route) =>
+		route.fulfill(connectJSON({ pending: true })),
+	);
+	await page.route('**/openchain.v1.TracingService/GetTraceStatus', async (route) => {
+		polledAddress = JSON.parse(route.request().postData() || '{}').address;
+		await route.fulfill(
+			connectJSON({
+				seedAddress: root,
+				nodes: [{ id: root, label: 'TRON seed', isSeed: true }],
+				sourceStatus: { source: 'test-fixture', isComplete: true },
+			}),
+		);
+	});
+	await page.route('**/openchain.v1.LookupService/LookupAddress', (route) =>
+		route.fulfill(connectJSON({})),
+	);
+	await page.route('**/openchain.v1.LabelService/GetLabels', (route) =>
+		route.fulfill(connectJSON({})),
+	);
+	await page.goto('/');
+	await selectNetwork(page, 'TRON Mainnet');
+	await page.getByPlaceholder('Search target address').fill(root);
+	await page.getByLabel('Investigate address').click();
+	await page.getByRole('button', { name: 'Expand' }).click();
+	await expect.poll(() => polledAddress, { timeout: 10_000 }).toBe(root);
+});
+
 test('verifies and replays an imported frozen evidence package locally', async ({ page }) => {
 	const root = '0x0000000000000000000000000000000000000001';
 	const packageJSON = frozenEvidencePackage(root, 'ethereum-mainnet:tx:tx');

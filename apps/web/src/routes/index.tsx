@@ -118,7 +118,7 @@ function Index() {
 					updatedAt: new Date().toISOString(),
 				}));
 				setBranchPages({
-					[graph.seedAddress.toLowerCase()]: { cursor: graph.nextCursor, hasMore: graph.hasMore },
+					[graph.seedAddress]: { cursor: graph.nextCursor, hasMore: graph.hasMore },
 				});
 				if (!preserveCurrentGraph)
 					void lookupAddress(target, targetNetwork).then((lookup) => {
@@ -209,7 +209,7 @@ function Index() {
 
 	const handleExpand = useCallback(
 		async (nodeAddress: string, retry = true) => {
-			const key = nodeAddress.toLowerCase();
+			const key = nodeAddress;
 			const page = branchPages[key];
 			if (
 				!graphData ||
@@ -292,7 +292,7 @@ function Index() {
 	}, [handleExpand, pendingExpansion]);
 
 	const activeAddress = selectedNode?.id || graphData?.seedAddress || '';
-	const activeBranch = branchPages[activeAddress.toLowerCase()];
+	const activeBranch = branchPages[activeAddress];
 	const canExpand = Boolean(activeAddress) && (!activeBranch || activeBranch.hasMore);
 	const selectTransfer = useCallback((edge: GraphEdge) => {
 		setSelectedEdge(edge);
@@ -402,8 +402,7 @@ function Index() {
 						onExpandNode={handleExpand}
 						canExpand={canExpand}
 						expanding={
-							expandingAddress === activeAddress.toLowerCase() ||
-							pendingExpansion === activeAddress.toLowerCase()
+							expandingAddress === activeAddress || pendingExpansion === activeAddress
 						}
 						graphOptions={graphOptions}
 						onGraphOptionsChange={(options) => {
