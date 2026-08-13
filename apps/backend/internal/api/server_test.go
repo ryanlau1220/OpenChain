@@ -215,7 +215,7 @@ func TestTraceRejectsUnspecifiedNetwork(t *testing.T) {
 }
 
 func TestGraphProtoCarriesDirectLabelEvidence(t *testing.T) {
-	nodes, _ := toGraphProto(&tracing.GraphResult{Nodes: []tracing.GraphNode{{ID: testAddress, Labels: []labels.LabelItem{{ID: "router", Address: testAddress, Network: "ethereum-mainnet", Label: "Uniswap V2 Router", Category: "DeFi", EvidenceURL: "https://example.test/proof", Source: "test source", SourceVersion: "v1", Visibility: "public", TrustTier: 1}}}}})
+	nodes, _ := toGraphProto(&tracing.GraphResult{Nodes: []tracing.GraphNode{{ID: testAddress, Labels: []labels.LabelItem{{ID: "router", Address: testAddress, Network: "ethereum-mainnet", Label: "Uniswap V2 Router", Category: labels.CategoryDeFiService, EvidenceURL: "https://example.test/proof", Source: "test source", SourceVersion: "v1", Visibility: "public", TrustTier: 1}}}}})
 	if len(nodes) != 1 || len(nodes[0].GetLabels()) != 1 || nodes[0].GetLabels()[0].GetEvidenceUrl() != "https://example.test/proof" || nodes[0].GetLabels()[0].GetVisibility() != pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC {
 		t.Fatalf("graph labels = %#v", nodes)
 	}

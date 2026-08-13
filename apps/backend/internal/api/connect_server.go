@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"strings"
 
 	connect "connectrpc.com/connect"
 	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
@@ -171,7 +170,7 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 	if h.server.labels != nil {
 		if items, labelErr := h.server.labels.GetLabels(ctx, runtime.Engine.Network(), address); labelErr == nil && len(items) > 0 {
 			label = items[0].Label
-			if strings.EqualFold(items[0].Category, "exchange") {
+			if items[0].Category == labels.CategoryExchange {
 				entityType = pb.EntityType_ENTITY_TYPE_EXCHANGE
 			}
 		}
@@ -220,7 +219,7 @@ func toSourceStatus(status adapter.SourceStatus) *pb.SourceStatus {
 type connectLabelHandler struct{ server *Server }
 
 func toLabelProto(item labels.LabelItem) *pb.AddressLabel {
-	return &pb.AddressLabel{Id: item.ID, Address: item.Address, Network: protoNetwork(item.Network), Category: item.Category, Label: item.Label, Confidence: item.Confidence, EvidenceUrl: item.EvidenceURL, Source: item.Source, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt.Unix(), TrustTier: pb.TrustTier(item.TrustTier), SourceVersion: item.SourceVersion, Visibility: pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC}
+	return &pb.AddressLabel{Id: item.ID, Address: item.Address, Network: protoNetwork(item.Network), Category: string(item.Category), Label: item.Label, Confidence: item.Confidence, EvidenceUrl: item.EvidenceURL, Source: item.Source, CreatedBy: item.CreatedBy, CreatedAt: item.CreatedAt.Unix(), TrustTier: pb.TrustTier(item.TrustTier), SourceVersion: item.SourceVersion, Visibility: pb.LabelVisibility_LABEL_VISIBILITY_PUBLIC}
 }
 
 func protoNetwork(network string) pb.Network {
@@ -267,6 +266,9 @@ func (h *connectLabelHandler) GetLabels(ctx context.Context, req *connect.Reques
 func (h *connectLabelHandler) SearchLabels(ctx context.Context, req *connect.Request[pb.SearchLabelsRequest]) (*connect.Response[pb.SearchLabelsResponse], error) {
 	if len(req.Msg.GetQuery()) > 100 || len(req.Msg.GetCategory()) > 64 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("label search is too long"))
+	}
+	if req.Msg.GetCategory() != "" && !labels.ValidCategory(labels.EntityCategory(req.Msg.GetCategory())) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unsupported entity category"))
 	}
 	limit := int(req.Msg.GetLimit())
 	if limit <= 0 || limit > 50 {

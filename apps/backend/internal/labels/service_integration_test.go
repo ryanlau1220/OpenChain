@@ -37,7 +37,7 @@ func TestSeedImportIsIdempotentAndSearchable(t *testing.T) {
 	if len(items) != 1 || items[0].Label != "Uniswap V2 Router" || items[0].SourceVersion == "" {
 		t.Fatalf("imported labels = %#v", items)
 	}
-	search, err := service.SearchLabels(ctx, "ethereum-mainnet", "Uniswap", "DeFi", 10)
+	search, err := service.SearchLabels(ctx, "ethereum-mainnet", "Uniswap", string(CategoryDeFiService), 10)
 	if err != nil {
 		t.Fatal(err)
 	}

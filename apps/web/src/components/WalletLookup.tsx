@@ -20,6 +20,31 @@ interface WalletLookupProps {
 	network: SupportedNetwork;
 }
 
+export function entityCategoryName(category: string): string {
+	return (
+		{
+			exchange: 'Exchange',
+			bridge: 'Bridge',
+			merchant: 'Merchant',
+			otc: 'OTC merchant',
+			mixer: 'Mixer',
+			'sanctioned-service': 'Sanctioned service',
+			'high-risk-service': 'High-risk service',
+			'defi-service': 'DeFi service',
+			'burn-address': 'Burn address',
+		}[category] || category
+	);
+}
+
+const evidenceLink = (value: string) => {
+	try {
+		const url = new URL(value);
+		return url.protocol === 'https:' ? url.href : '';
+	} catch {
+		return '';
+	}
+};
+
 export const WalletLookup: React.FC<WalletLookupProps> = ({
 	summary,
 	labels,
@@ -148,15 +173,20 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					</button>
 				)}
 
-				{/* Curated labels always carry their evidence and import version. */}
+				{/* Verified labels are evidence-backed registry data, never local case notes. */}
 				{safeLabels.length > 0 && (
 					<div className="space-y-1 pt-1">
 						<span className="text-[9px] uppercase font-bold text-[var(--ink-3)] block">
-							Curated labels
+							Verified entity labels
 						</span>
+						<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
+							Evidence-backed registry entries; separate from local annotations and findings.
+						</p>
 						<div className="flex flex-col gap-1">
 							{safeLabels.map((l) => {
 								const tier = l.trustTier ?? 1;
+								const confidence = Math.round(Math.min(1, Math.max(0, l.confidence)) * 100);
+								const proof = evidenceLink(l.evidenceUrl);
 								return (
 									<div
 										key={l.id}
@@ -180,7 +210,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 											<Shield className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
 											<div>
 												<span className="font-semibold block text-[var(--ink)]">
-													{l.category}: {l.label}
+													{entityCategoryName(l.category)}: {l.label}
 												</span>
 												<span className="text-[9px] text-[var(--ink-3)]">
 													{tier === 1
@@ -188,19 +218,22 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 														: tier === 2
 															? 'Tier 2 Community Verified'
 															: 'Tier 3 Workspace'}{' '}
-													· {l.source || 'Unknown source'}
+													· {confidence}% confidence
 												</span>
-												{l.sourceVersion && (
-													<span className="text-[9px] text-[var(--ink-3)] block">
-														{l.visibility === LabelVisibility.PUBLIC ? 'Public' : 'Unspecified'} ·{' '}
-														{l.sourceVersion}
-													</span>
-												)}
+												<span className="text-[9px] text-[var(--ink-3)] block">
+													Source: {l.source || 'Unavailable'} ·{' '}
+													{l.sourceVersion || 'Version unavailable'}
+												</span>
+												<span className="text-[9px] text-[var(--ink-3)] block">
+													{l.visibility === LabelVisibility.PUBLIC
+														? 'Public registry entry'
+														: 'Unspecified visibility'}
+												</span>
 											</div>
 										</div>
-										{l.evidenceUrl && (
+										{proof && (
 											<a
-												href={l.evidenceUrl}
+												href={proof}
 												target="_blank"
 												rel="noreferrer"
 												className="text-indigo-600 hover:underline flex items-center gap-0.5 text-[9px]"

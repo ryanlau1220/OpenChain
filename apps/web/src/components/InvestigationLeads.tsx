@@ -37,11 +37,12 @@ export const InvestigationLeads: React.FC<{
 					className="text-[10px] uppercase font-bold tracking-widest"
 					style={{ color: 'var(--ink-3)' }}
 				>
-					Investigation leads
+					Investigation findings
 				</h3>
 			</div>
 			<p className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
-				Finalized evidence only; leads require human interpretation.
+				Rule-derived patterns from finalized evidence; not verified entity labels or investigator
+				annotations.
 			</p>
 			{leads.map((lead) => {
 				const evidence = lead.transferIds.map((id) => edgesByID.get(id)).filter(Boolean);

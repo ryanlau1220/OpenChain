@@ -141,10 +141,24 @@ export const CaseWorkspace: React.FC<Props> = ({
 				</button>
 			</div>
 			{caseFile.annotations.length > 0 && (
-				<p className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
-					{caseFile.annotations.length} saved annotation
-					{caseFile.annotations.length === 1 ? '' : 's'}
-				</p>
+				<div className="space-y-1 rounded-lg p-2" style={{ background: 'var(--slate)' }}>
+					<p className="text-[9px] uppercase font-bold" style={{ color: 'var(--ink-3)' }}>
+						Investigator annotations · local only
+					</p>
+					<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
+						Not verified entity labels or rule-derived findings.
+					</p>
+					{caseFile.annotations.slice(-3).map((item) => (
+						<p key={item.id} className="text-[10px]" style={{ color: 'var(--ink-2)' }}>
+							<span className="font-mono">{item.target.kind}</span> · {item.note}
+						</p>
+					))}
+					{caseFile.annotations.length > 3 && (
+						<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
+							Showing the 3 most recent of {caseFile.annotations.length} annotations.
+						</p>
+					)}
+				</div>
 			)}
 			<div className="grid grid-cols-3 gap-2">
 				<button

@@ -344,7 +344,7 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 		if items, err := e.labelRegistry.GetLabels(ctx, e.Network(), address); err == nil && len(items) > 0 {
 			label = items[0].Label
 			nodeLabels = items
-			if strings.EqualFold(items[0].Category, "exchange") {
+			if items[0].Category == labels.CategoryExchange {
 				entityType = "EXCHANGE"
 			}
 		}
