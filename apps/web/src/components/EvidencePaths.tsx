@@ -97,7 +97,7 @@ export const EvidencePaths: React.FC<{
 						from a requested page of {coverage.requestedPageSize}.
 					</p>
 					<p className="mt-1">
-						{coverage.finalizedTransferCount} time-window finalized ·{' '}
+						{coverage.confirmationBackedTransferCount} confirmation-backed ·{' '}
 						{coverage.provisionalTransferCount} provisional ·{' '}
 						{coverage.hasMore
 							? 'additional provider pages available'

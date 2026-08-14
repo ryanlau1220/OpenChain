@@ -32,8 +32,8 @@ export const CrossChainPaths: React.FC<{
 				</h3>
 			</div>
 			<p className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
-				Known bridge and matching transfer evidence only. This does not establish cross-chain
-				address ownership.
+				Shown only with a canonical token route and bridge-specific event or message evidence. This
+				does not establish cross-chain address ownership.
 			</p>
 			{transitions.map((transition) => {
 				const sourceNetwork = transition.sourceNetwork as SupportedNetwork;

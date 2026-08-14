@@ -30,7 +30,7 @@ func TestEvaluateFindsFanInAndRecordsVersionedRuns(t *testing.T) {
 	if lead.SubjectAddress != hub || !reflect.DeepEqual(lead.TransferIDs, []string{"fan-in-1", "fan-in-2", "fan-in-3"}) {
 		t.Fatalf("fan-in lead = %#v", lead)
 	}
-	if len(runs) != len(Catalog())-1 || runs[0].RuleVersion != "1.0.0" || !reflect.DeepEqual(runs[0].InputTransferIDs, []string{"fan-in-1", "fan-in-2", "fan-in-3"}) {
+	if len(runs) != len(Catalog()) || runs[0].RuleVersion != "1.0.0" || !reflect.DeepEqual(runs[0].InputTransferIDs, []string{"fan-in-1", "fan-in-2", "fan-in-3"}) {
 		t.Fatalf("rule runs = %#v", runs)
 	}
 	if !json.Valid(runs[0].Result) || !json.Valid(runs[0].Parameters) || runs[0].StartedAt != runs[0].CompletedAt {
@@ -188,16 +188,6 @@ func TestEvaluateIgnoresProvisionalTransfers(t *testing.T) {
 	leads, runs := Evaluate("ethereum-mainnet", transfers, time.Now().UTC())
 	if hasLead(leads, "fan-in-consolidation") || !reflect.DeepEqual(runs[0].InputTransferIDs, []string{"provisional-1", "provisional-2"}) {
 		t.Fatalf("provisional transfer influenced rule evaluation: leads=%#v runs=%#v", leads, runs)
-	}
-}
-
-func TestEvaluateBridgeProducesQualifiedEvidenceLead(t *testing.T) {
-	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	source := ruleTransfer("source", alice, hub, 0)
-	destination := ruleTransfer("destination", hub, alice, time.Hour)
-	leads, runs := EvaluateBridge("ethereum-mainnet", []BridgeCandidate{{BridgeName: "Base Standard Bridge", DestinationNetwork: "base-mainnet", Source: source, Destination: destination}}, now.Add(2*time.Hour))
-	if len(leads) != 1 || len(runs) != 1 || len(leads[0].TransferIDs) != 2 || leads[0].RuleID != "op-stack-bridge-correlation" {
-		t.Fatalf("leads=%#v runs=%#v", leads, runs)
 	}
 }
 

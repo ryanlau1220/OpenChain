@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 )
@@ -59,6 +60,31 @@ type TransferPage struct {
 func PageStatus(status SourceStatus, hasMore bool) SourceStatus {
 	if hasMore {
 		status.IsComplete = false
+	}
+	return status
+}
+
+// withEVMChainHead adds the chain height used to classify confirmations. A
+// trace remains usable if the extra RPC call fails, but its observations must
+// remain provisional rather than becoming evidence-backed by elapsed time.
+func withEVMChainHead(ctx context.Context, status SourceStatus, client *EVMClient) SourceStatus {
+	if client == nil {
+		return withFinalityWarning(status)
+	}
+	latest, err := client.GetLatestBlockNumber(ctx)
+	if err != nil || latest > math.MaxInt64 {
+		return withFinalityWarning(status)
+	}
+	status.LatestChainBlock = int64(latest)
+	return status
+}
+
+func withFinalityWarning(status SourceStatus) SourceStatus {
+	const warning = "Chain confirmation height is unavailable; observations remain provisional."
+	if status.Warning == "" {
+		status.Warning = warning
+	} else {
+		status.Warning += " " + warning
 	}
 	return status
 }

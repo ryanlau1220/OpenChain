@@ -160,6 +160,7 @@ func (a *BlockscoutChainAdapter) ListTransfers(ctx context.Context, address stri
 			status.Warning = "Blockscout internal transfer history is temporarily unavailable; showing the available transfer evidence."
 		}
 	}
+	status = withEVMChainHead(ctx, status, a.evmClient)
 	hasMore := nextCursor != ""
 	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: PageStatus(status, hasMore)}, nil
 }

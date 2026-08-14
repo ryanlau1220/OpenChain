@@ -435,9 +435,9 @@ export class InvestigationLead extends Message<InvestigationLead> {
 }
 
 /**
- * A conservative continuation between two chains through a known bridge.
- * It records matching transfer evidence only; it never asserts that addresses
- * on the two chains share an owner.
+ * A bridge continuation requires a bridge-specific event or message identifier
+ * and a canonical token route. It records transfer evidence only; it never
+ * asserts that addresses on the two chains share an owner.
  *
  * @generated from message openchain.v1.CrossChainTransition
  */
@@ -764,9 +764,9 @@ export class TraceCoverage extends Message<TraceCoverage> {
   graphTransferCount = 0;
 
   /**
-   * @generated from field: uint32 finalized_transfer_count = 4;
+   * @generated from field: uint32 confirmation_backed_transfer_count = 4;
    */
-  finalizedTransferCount = 0;
+  confirmationBackedTransferCount = 0;
 
   /**
    * @generated from field: uint32 provisional_transfer_count = 5;
@@ -804,7 +804,7 @@ export class TraceCoverage extends Message<TraceCoverage> {
     { no: 1, name: "requested_page_size", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 2, name: "observed_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 3, name: "graph_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
-    { no: 4, name: "finalized_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "confirmation_backed_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "provisional_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 6, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },

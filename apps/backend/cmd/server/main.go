@@ -126,14 +126,6 @@ func main() {
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)
 	}
-	bridgeChains := make(map[string]adapter.ChainAdapter, len(runtimes))
-	for _, runtime := range runtimes {
-		bridgeChains[runtime.Engine.Network()] = runtime.Chain
-	}
-	bridgeCorrelator := tracing.NewBridgeCorrelator(bridgeChains)
-	for _, runtime := range runtimes {
-		runtime.Engine.SetBridgeCorrelator(bridgeCorrelator)
-	}
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	for _, queue := range queues {
 		queue.Start(workerContext)

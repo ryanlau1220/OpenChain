@@ -56,6 +56,11 @@ func TestQueueIntegrationTraceFindingAndEvidenceExport(t *testing.T) {
 			`{"hash":"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","blockNumber":"12","timeStamp":"7300","from":"` + from + `","to":"` + toC + `","value":"44"}]}`))
 	}))
 	defer etherscan.Close()
+	rpc := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x1000"}`))
+	}))
+	defer rpc.Close()
 
 	database, err := db.NewDB(db.DefaultConfig(os.Getenv("DATABASE_URL")))
 	if err != nil {
@@ -96,7 +101,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 		t.Fatal(err)
 	}
 
-	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", nil)
+	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", etherscan.URL, "test-key", adapter.NewEVMClient(rpc.URL))
 	registry := labels.NewService(database)
 	engine := tracing.NewEngine(chain, database, registry)
 	queue := tracing.NewQueue(engine, database, 2, 1)
@@ -146,13 +151,14 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_scope_transfers WHERE transfer_id = $1`, "ethereum-mainnet:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:tx").Scan(&links); err != nil {
 				t.Fatal(err)
 			}
-			// The failed request is retained in its own scope. The three successful
-			// provider responses are scoped to their shared page, not each transfer.
-			if snapshots != 4 || blobs != 3 || links != 1 {
+			// The failed request is retained in its own scope. The four successful
+			// provider responses, including the confirmation-height read, are scoped to
+			// their shared page rather than each transfer individually.
+			if snapshots != 5 || blobs != 4 || links != 1 {
 				t.Fatalf("snapshots = %d, blobs = %d, scope links = %d", snapshots, blobs, links)
 			}
 			var ruleRuns int
-			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, "ethereum-mainnet").Scan(&ruleRuns); err != nil || ruleRuns != len(rules.Catalog())-1 {
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, "ethereum-mainnet").Scan(&ruleRuns); err != nil || ruleRuns != len(rules.Catalog()) {
 				t.Fatalf("rule runs = %d err = %v", ruleRuns, err)
 			}
 			var version string
@@ -166,7 +172,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 				transferIDs = append(transferIDs, edge.GetId())
 			}
 			exported, err := database.ExportEvidence(ctx, "ethereum-mainnet", transferIDs)
-			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 3 || len(exported.Scopes) != 1 || len(exported.ScopeTransfers) != 3 || len(exported.ScopeSnapshots) != 3 || len(exported.RuleRuns) != len(rules.Catalog())-1 {
+			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 4 || len(exported.Scopes) != 1 || len(exported.ScopeTransfers) != 3 || len(exported.ScopeSnapshots) != 4 || len(exported.RuleRuns) != len(rules.Catalog()) {
 				t.Fatalf("evidence export = %#v err=%v", exported, err)
 			}
 			packageResponse, err := evidenceClient.ExportEvidencePackage(ctx, connect.NewRequest(&pb.ExportEvidencePackageRequest{Network: pb.Network_NETWORK_ETHEREUM_MAINNET, TransferIds: transferIDs, CaseJson: `{"version":1,"title":"Integration case"}`}))

@@ -28,7 +28,10 @@ export function TransferInspector({
 		['Event ID', edge.eventId],
 		['Block', String(edge.blockNumber)],
 		['Block hash', edge.blockHash || 'Unavailable from source'],
-		['Finality', edge.provisional ? 'Provisional observation' : 'Finalized observation'],
+		[
+			'Confirmation',
+			edge.provisional ? 'Provisional observation' : 'Confirmation-backed observation',
+		],
 		['Source', edge.sourceName],
 		['Retrieved', edge.retrievedAt ? formatObservationTime(edge.retrievedAt) : 'Unknown'],
 	];

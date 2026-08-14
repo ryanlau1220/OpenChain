@@ -27,91 +27,37 @@ type Lead struct {
 
 type Run = db.RuleRun
 
-// BridgeCandidate is a strictly observed source/destination bridge pair.
-// It is intentionally distinct from the behavioural investigation rules.
-type BridgeCandidate struct {
-	BridgeName, DestinationNetwork string
-	Source, Destination            db.Transfer
-}
-
 func Evaluate(network string, transfers []db.Transfer, completedAt time.Time) ([]Lead, []Run) {
-	finalized := finalizedTransfers(transfers)
+	confirmationBacked := confirmationBackedTransfers(transfers)
 	definitions := Catalog()
 	leads := make([]Lead, 0)
 	runs := make([]Run, 0, len(definitions))
 	for _, definition := range definitions {
-		if definition.ID == "op-stack-bridge-correlation" {
-			continue
-		}
 		var detected []Lead
 		switch definition.ID {
 		case "fan-in-consolidation":
-			detected = fanIn(definition, finalized)
+			detected = fanIn(definition, confirmationBacked)
 		case "fan-out-dispersion":
-			detected = fanOut(definition, finalized)
+			detected = fanOut(definition, confirmationBacked)
 		case "rapid-onward-transfer":
-			detected = rapidOnward(definition, finalized)
+			detected = rapidOnward(definition, confirmationBacked)
 		case "repeated-equal-amount-dispersion":
-			detected = repeatedEqualAmount(definition, finalized)
+			detected = repeatedEqualAmount(definition, confirmationBacked)
 		case "sequential-decreasing-transfer":
-			detected = sequentialDecreasing(definition, finalized)
+			detected = sequentialDecreasing(definition, confirmationBacked)
 		case "brief-intermediary-pass-through":
-			detected = briefIntermediary(definition, finalized)
+			detected = briefIntermediary(definition, confirmationBacked)
 		}
 		sort.Slice(detected, func(left, right int) bool { return detected[left].ID < detected[right].ID })
 		result, _ := json.Marshal(detected)
-		runs = append(runs, Run{Network: network, RuleID: definition.ID, RuleVersion: definition.Version, Parameters: definition.DefaultParameters, InputTransferIDs: transferIDs(finalized), Result: result, StartedAt: completedAt, CompletedAt: completedAt})
+		runs = append(runs, Run{Network: network, RuleID: definition.ID, RuleVersion: definition.Version, Parameters: definition.DefaultParameters, InputTransferIDs: transferIDs(confirmationBacked), Result: result, StartedAt: completedAt, CompletedAt: completedAt})
 		leads = append(leads, detected...)
 	}
 	sort.Slice(leads, func(left, right int) bool { return leads[left].ID < leads[right].ID })
 	return leads, runs
 }
 
-func EvaluateBridge(network string, candidates []BridgeCandidate, completedAt time.Time) ([]Lead, []Run) {
-	definition, ok := catalogDefinition("op-stack-bridge-correlation")
-	if !ok {
-		return nil, nil
-	}
-	leads := make([]Lead, 0, len(candidates))
-	inputIDs := make([]string, 0, len(candidates)*2)
-	for _, candidate := range candidates {
-		if candidate.Source.Provisional || candidate.Destination.Provisional || candidate.Source.BlockTimestamp.IsZero() || candidate.Destination.BlockTimestamp.IsZero() {
-			continue
-		}
-		ids := transferIDs([]db.Transfer{candidate.Source, candidate.Destination})
-		inputIDs = append(inputIDs, ids...)
-		leads = append(leads, lead(definition, candidate.Source.FromAddress, "OP Stack bridge correlation", "Observed a transfer to "+candidate.BridgeName+" on "+network+" followed by a transfer from the corresponding bridge on "+candidate.DestinationNetwork+" with the same reported asset kind, symbol, decimals, raw amount, recipient, and a qualifying time window.", ids))
-	}
-	if len(leads) == 0 {
-		return nil, nil
-	}
-	result, _ := json.Marshal(leads)
-	return leads, []Run{{Network: network, RuleID: definition.ID, RuleVersion: definition.Version, Parameters: definition.DefaultParameters, InputTransferIDs: uniqueTransferIDs(inputIDs), Result: result, StartedAt: completedAt, CompletedAt: completedAt}}
-}
-
-func catalogDefinition(id string) (Definition, bool) {
-	for _, definition := range Catalog() {
-		if definition.ID == id {
-			return definition, true
-		}
-	}
-	return Definition{}, false
-}
-
-func uniqueTransferIDs(ids []string) []string {
-	unique := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		unique[id] = struct{}{}
-	}
-	result := make([]string, 0, len(unique))
-	for id := range unique {
-		result = append(result, id)
-	}
-	sort.Strings(result)
-	return result
-}
-
-func finalizedTransfers(transfers []db.Transfer) []db.Transfer {
+func confirmationBackedTransfers(transfers []db.Transfer) []db.Transfer {
 	result := make([]db.Transfer, 0, len(transfers))
 	for _, transfer := range transfers {
 		if !transfer.Provisional && !transfer.BlockTimestamp.IsZero() {

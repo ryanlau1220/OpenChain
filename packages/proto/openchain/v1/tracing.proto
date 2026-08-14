@@ -59,9 +59,9 @@ message InvestigationLead {
   string parameters_json = 9;
 }
 
-// A conservative continuation between two chains through a known bridge.
-// It records matching transfer evidence only; it never asserts that addresses
-// on the two chains share an owner.
+// A bridge continuation requires a bridge-specific event or message identifier
+// and a canonical token route. It records transfer evidence only; it never
+// asserts that addresses on the two chains share an owner.
 message CrossChainTransition {
   string id = 1;
   string bridge_name = 2;
@@ -123,7 +123,7 @@ message TraceCoverage {
   uint32 requested_page_size = 1;
   uint32 observed_transfer_count = 2;
   uint32 graph_transfer_count = 3;
-  uint32 finalized_transfer_count = 4;
+  uint32 confirmation_backed_transfer_count = 4;
   uint32 provisional_transfer_count = 5;
   string cursor = 6;
   bool has_more = 7;

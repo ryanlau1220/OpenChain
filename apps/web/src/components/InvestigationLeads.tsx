@@ -41,8 +41,8 @@ export const InvestigationLeads: React.FC<{
 				</h3>
 			</div>
 			<p className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
-				Rule-derived patterns from finalized transfers within the retrieved graph scope; not
-				verified entity labels or investigator annotations.
+				Rule-derived patterns from confirmation-backed transfers within the retrieved graph scope;
+				not verified entity labels or investigator annotations.
 			</p>
 			{leads.map((lead) => {
 				const evidence = lead.transferIds.map((id) => edgesByID.get(id)).filter(Boolean);

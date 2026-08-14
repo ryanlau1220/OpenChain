@@ -307,8 +307,8 @@ func TestGraphProtoCarriesFinalityState(t *testing.T) {
 }
 
 func TestGraphProtoCarriesRetrievedScopeCoverage(t *testing.T) {
-	coverage := toCoverageProto(tracing.TraceCoverage{RequestedPageSize: 50, ObservedTransferCount: 50, GraphTransferCount: 10, FinalizedTransferCount: 8, ProvisionalTransferCount: 2, Cursor: "page-2", HasMore: true, ProviderComplete: false, Limitation: "retrieved provider page only"})
-	if coverage.GetRequestedPageSize() != 50 || coverage.GetObservedTransferCount() != 50 || coverage.GetGraphTransferCount() != 10 || coverage.GetFinalizedTransferCount() != 8 || coverage.GetProvisionalTransferCount() != 2 || !coverage.GetHasMore() || coverage.GetProviderComplete() || coverage.GetCursor() != "page-2" || coverage.GetLimitation() == "" {
+	coverage := toCoverageProto(tracing.TraceCoverage{RequestedPageSize: 50, ObservedTransferCount: 50, GraphTransferCount: 10, ConfirmationBackedTransferCount: 8, ProvisionalTransferCount: 2, Cursor: "page-2", HasMore: true, ProviderComplete: false, Limitation: "retrieved provider page only"})
+	if coverage.GetRequestedPageSize() != 50 || coverage.GetObservedTransferCount() != 50 || coverage.GetGraphTransferCount() != 10 || coverage.GetConfirmationBackedTransferCount() != 8 || coverage.GetProvisionalTransferCount() != 2 || !coverage.GetHasMore() || coverage.GetProviderComplete() || coverage.GetCursor() != "page-2" || coverage.GetLimitation() == "" {
 		t.Fatalf("coverage = %#v", coverage)
 	}
 }
@@ -317,13 +317,6 @@ func TestGraphProtoCarriesBlockHash(t *testing.T) {
 	_, edges := toGraphProto(&tracing.GraphResult{Edges: []tracing.GraphEdge{{ID: "block", BlockHash: "0xblock"}}})
 	if len(edges) != 1 || edges[0].GetBlockHash() != "0xblock" {
 		t.Fatalf("edge block hash = %#v", edges)
-	}
-}
-
-func TestGraphProtoCarriesQualifiedCrossChainEvidence(t *testing.T) {
-	transitions := toCrossChainProto([]tracing.CrossChainTransition{{ID: "cross-chain:source:destination", BridgeName: "Base Standard Bridge", SourceNetwork: "ethereum-mainnet", DestinationNetwork: "base-mainnet", Source: db.Transfer{ID: "source", TransactionHash: "0xsource", Asset: adapter.Asset{Kind: "ERC20", Symbol: "USDC", Decimals: 6}, AmountBaseUnits: "1000000", BlockTimestamp: time.Unix(100, 0)}, Destination: db.Transfer{ID: "destination", TransactionHash: "0xdestination", BlockTimestamp: time.Unix(200, 0)}, SourceBridgeAddress: "0xsourcebridge", DestinationBridgeAddress: "0xdestinationbridge", Limitations: "does not establish cross-chain address ownership"}})
-	if len(transitions) != 1 || transitions[0].GetSourceNetwork() != pb.Network_NETWORK_ETHEREUM_MAINNET || transitions[0].GetDestinationNetwork() != pb.Network_NETWORK_BASE_MAINNET || transitions[0].GetAsset().GetSymbol() != "USDC" || transitions[0].GetLimitations() == "" {
-		t.Fatalf("transitions = %#v", transitions)
 	}
 }
 

@@ -34,13 +34,29 @@ func TestTransferIDIncludesNetwork(t *testing.T) {
 	}
 }
 
-func TestFinalityWindowsMarkRecentObservationsProvisional(t *testing.T) {
-	now := time.Now().UTC()
-	if !isProvisional("ethereum-mainnet", now, now) || isProvisional("ethereum-mainnet", now.Add(-16*time.Minute), now) {
-		t.Fatal("Ethereum finality window was not applied")
+func TestConfirmationBackedObservationsRequireCurrentChainHeight(t *testing.T) {
+	source := adapter.SourceStatus{LatestChainBlock: 1_000}
+	if isProvisional("ethereum-mainnet", 936, source) {
+		t.Fatal("64 Ethereum confirmations should be confirmation-backed")
 	}
-	if !isProvisional("solana-mainnet", now, now) || isProvisional("solana-mainnet", now.Add(-2*time.Minute), now) {
-		t.Fatal("Solana finality window was not applied")
+	if !isProvisional("ethereum-mainnet", 937, source) {
+		t.Fatal("63 Ethereum confirmations must remain provisional")
+	}
+	if !isProvisional("ethereum-mainnet", 900, adapter.SourceStatus{}) {
+		t.Fatal("missing current chain height must remain provisional")
+	}
+	if !isProvisional("solana-mainnet", 900, source) {
+		t.Fatal("unsupported confirmation source must remain provisional")
+	}
+}
+
+func TestConfirmationStatusWarnsWhenAChainHeadIsUnavailable(t *testing.T) {
+	status := confirmationSourceStatus("solana-mainnet", adapter.SourceStatus{Source: "test"})
+	if status.Warning == "" {
+		t.Fatal("unsupported confirmation status must be visible to investigators")
+	}
+	if confirmationSourceStatus("ethereum-mainnet", adapter.SourceStatus{LatestChainBlock: 1}).Warning != "" {
+		t.Fatal("available EVM confirmation height must not add a warning")
 	}
 }
 
@@ -127,7 +143,7 @@ func TestTraceCoverageDescribesRetrievedScope(t *testing.T) {
 		},
 	}
 	coverage := traceCoverage(50, "start", page, []db.Transfer{{Provisional: false}, {Provisional: true}})
-	if coverage.RequestedPageSize != 50 || coverage.ObservedTransferCount != 3 || coverage.GraphTransferCount != 2 || coverage.FinalizedTransferCount != 1 || coverage.ProvisionalTransferCount != 1 || !coverage.HasMore || coverage.ProviderComplete || coverage.Cursor != "start" || coverage.Limitation == "" {
+	if coverage.RequestedPageSize != 50 || coverage.ObservedTransferCount != 3 || coverage.GraphTransferCount != 2 || coverage.ConfirmationBackedTransferCount != 1 || coverage.ProvisionalTransferCount != 1 || !coverage.HasMore || coverage.ProviderComplete || coverage.Cursor != "start" || coverage.Limitation == "" {
 		t.Fatalf("coverage = %#v", coverage)
 	}
 }

@@ -69,7 +69,7 @@ func (c *stubChain) GetContractMetadata(context.Context, string) (*adapter.Contr
 }
 
 func (c *stubChain) SourceStatus() adapter.SourceStatus {
-	return adapter.SourceStatus{Source: "load-test-stub", IsComplete: true}
+	return adapter.SourceStatus{Source: "load-test-stub", LatestChainBlock: 100, IsComplete: true}
 }
 
 func (c *stubChain) LookupTransaction(ctx context.Context, hash string) (*adapter.TransactionItem, adapter.SourceStatus, error) {
@@ -97,7 +97,7 @@ func (c *stubChain) ListTransfers(ctx context.Context, address string, _ uint32,
 			BlockHash:       "0x" + strings.Repeat("2", 64),
 			Timestamp:       now,
 		}},
-		SourceStatus: adapter.SourceStatus{Source: "load-test-stub", RetrievedAt: now, IsComplete: true},
+		SourceStatus: adapter.SourceStatus{Source: "load-test-stub", RetrievedAt: now, LatestChainBlock: 100, IsComplete: true},
 	}, nil
 }
 

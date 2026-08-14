@@ -66,26 +66,22 @@ type GraphResult struct {
 	SourceStatus           adapter.SourceStatus
 	Coverage               TraceCoverage
 	Leads                  []rules.Lead
-	CrossChainTransitions  []CrossChainTransition
 }
 
 type TraceCoverage struct {
-	RequestedPageSize, ObservedTransferCount, GraphTransferCount, FinalizedTransferCount, ProvisionalTransferCount uint32
-	Cursor                                                                                                         string
-	HasMore, ProviderComplete                                                                                      bool
-	Limitation                                                                                                     string
+	RequestedPageSize, ObservedTransferCount, GraphTransferCount, ConfirmationBackedTransferCount, ProvisionalTransferCount uint32
+	Cursor                                                                                                                  string
+	HasMore, ProviderComplete                                                                                               bool
+	Limitation                                                                                                              string
 }
 
-const retrievedScopeLimitation = "This graph and its findings are limited to the retrieved provider page after the selected direction and counterparty scope. Finality is a conservative time-window classification, not chain-confirmation evidence."
+const retrievedScopeLimitation = "This graph and its findings are limited to the retrieved provider page after the selected direction and counterparty scope. An observation is confirmation-backed only when OpenChain obtained a current chain height and the network confirmation threshold was met; this is not an evidentiary finality claim."
 
 type Engine struct {
-	chainAdapter     adapter.ChainAdapter
-	database         *db.DB
-	labelRegistry    *labels.Service
-	bridgeCorrelator *BridgeCorrelator
+	chainAdapter  adapter.ChainAdapter
+	database      *db.DB
+	labelRegistry *labels.Service
 }
-
-func (e *Engine) SetBridgeCorrelator(correlator *BridgeCorrelator) { e.bridgeCorrelator = correlator }
 
 func NewEngine(chainAdapter adapter.ChainAdapter, database *db.DB, labels *labels.Service) *Engine {
 	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels}
@@ -115,6 +111,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		}
 		return nil, err
 	}
+	page.SourceStatus = confirmationSourceStatus(e.Network(), page.SourceStatus)
 	filtered := filterTransfers(page.Transfers, address, direction)
 	transfers := selectCounterpartyTransfersWithKnown(filtered, address, maxCounterparties, ranking, e.knownCounterparties(ctx, filtered, address, ranking))
 	result := e.graph(ctx, address, transfers, page)
@@ -135,29 +132,6 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
 			return nil, err
 		}
-	}
-	if e.bridgeCorrelator != nil {
-		bridgeEvidence := e.bridgeCorrelator.Correlate(ctx, e.Network(), persistedTransfers)
-		candidates := make([]rules.BridgeCandidate, 0, len(bridgeEvidence))
-		for _, evidence := range bridgeEvidence {
-			if e.database != nil {
-				if err := e.database.SaveEvidenceGraph(ctx, evidence.Scope, evidence.Addresses, evidence.Transfers, evidence.Acquisitions); err != nil {
-					return nil, err
-				}
-			}
-			candidates = append(candidates, evidence.Candidate)
-			result.CrossChainTransitions = append(result.CrossChainTransitions, evidence.Transition)
-		}
-		bridgeLeads, bridgeRuns := rules.EvaluateBridge(e.Network(), candidates, completedAt)
-		if e.database != nil {
-			if err := e.database.SaveRuleRuns(ctx, bridgeRuns); err != nil {
-				return nil, err
-			}
-		}
-		result.Leads = append(result.Leads, bridgeLeads...)
-		sort.Slice(result.CrossChainTransitions, func(left, right int) bool {
-			return result.CrossChainTransitions[left].ID < result.CrossChainTransitions[right].ID
-		})
 	}
 	return result, nil
 }
@@ -396,7 +370,7 @@ func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.Tra
 			addAssetVolume(volumes, from, key, amount)
 			addAssetVolume(volumes, to, key, amount)
 		}
-		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), BlockHash: transfer.BlockHash, Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix(), Provisional: isProvisional(e.Network(), transfer.Timestamp, page.SourceStatus.RetrievedAt)})
+		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), BlockHash: transfer.BlockHash, Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix(), Provisional: isProvisional(e.Network(), transfer.BlockNumber, page.SourceStatus)})
 	}
 	graphNodes := make([]GraphNode, 0, len(nodes))
 	for id, node := range nodes {
@@ -479,7 +453,7 @@ func filterTransfers(transfers []adapter.TransferItem, address string, direction
 func (e *Engine) toTransfers(items []adapter.TransferItem, source adapter.SourceStatus) []db.Transfer {
 	transfers := make([]db.Transfer, 0, len(items))
 	for _, item := range items {
-		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: e.normalizeAddress(item.From), ToAddress: e.normalizeAddress(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockHash: item.BlockHash, BlockTimestamp: item.Timestamp, Provisional: isProvisional(e.Network(), item.Timestamp, source.RetrievedAt), Source: source.Source, RetrievedAt: source.RetrievedAt})
+		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: e.normalizeAddress(item.From), ToAddress: e.normalizeAddress(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockHash: item.BlockHash, BlockTimestamp: item.Timestamp, Provisional: isProvisional(e.Network(), item.BlockNumber, source), Source: source.Source, RetrievedAt: source.RetrievedAt})
 	}
 	return transfers
 }
@@ -498,21 +472,45 @@ func traceCoverage(limit uint32, cursor string, page *adapter.TransferPage, tran
 		if transfer.Provisional {
 			coverage.ProvisionalTransferCount++
 		} else {
-			coverage.FinalizedTransferCount++
+			coverage.ConfirmationBackedTransferCount++
 		}
 	}
 	return coverage
 }
 
-func isProvisional(network string, blockTimestamp, retrievedAt time.Time) bool {
-	if blockTimestamp.IsZero() {
+func isProvisional(network string, blockNumber int64, source adapter.SourceStatus) bool {
+	threshold, supported := confirmationThreshold(network)
+	if !supported || blockNumber <= 0 || source.LatestChainBlock <= 0 || source.LatestChainBlock < blockNumber {
 		return true
 	}
-	window := 15 * time.Minute
-	if network == "solana-mainnet" || network == "tron-mainnet" {
-		window = time.Minute
+	return source.LatestChainBlock-blockNumber < threshold
+}
+
+func confirmationThreshold(network string) (int64, bool) {
+	switch network {
+	case "ethereum-mainnet", "bnb-chain":
+		return 64, true
+	case "base-mainnet", "optimism-mainnet", "arbitrum-one":
+		return 120, true
+	case "polygon-mainnet":
+		return 256, true
+	default:
+		return 0, false
 	}
-	return retrievedAt.Before(blockTimestamp.Add(window))
+}
+
+func confirmationSourceStatus(network string, status adapter.SourceStatus) adapter.SourceStatus {
+	if _, supported := confirmationThreshold(network); supported && status.LatestChainBlock > 0 {
+		return status
+	}
+	const warning = "Confirmation-backed status is unavailable for this network; observations remain provisional."
+	if !strings.Contains(status.Warning, "observations remain provisional") {
+		if status.Warning != "" {
+			status.Warning += " "
+		}
+		status.Warning += warning
+	}
+	return status
 }
 
 func (e *Engine) toAddresses(nodes []GraphNode) []db.Address {

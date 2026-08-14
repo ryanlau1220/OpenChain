@@ -131,7 +131,8 @@ func (a *AlchemyEVMChainAdapter) ListTransfers(ctx context.Context, address stri
 		nextCursor = base64.RawURLEncoding.EncodeToString(encoded)
 	}
 	hasMore := nextCursor != ""
-	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: PageStatus(a.SourceStatus(), hasMore)}, nil
+	status := withEVMChainHead(ctx, a.SourceStatus(), a.evmClient)
+	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: PageStatus(status, hasMore)}, nil
 }
 
 func (a *AlchemyEVMChainAdapter) transferPage(ctx context.Context, address string, outbound bool, limit uint32, pageKey string) ([]TransferItem, string, error) {
