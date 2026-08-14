@@ -686,7 +686,7 @@ function Index() {
 									fieldStatuses={fieldStatuses}
 									loading={loading}
 									network={network}
-									coverage={graphData.coverage}
+									coverage={graphData?.coverage}
 									targetSeedAddress={address}
 									onTraceAddress={(value) => {
 										setAddress(value);

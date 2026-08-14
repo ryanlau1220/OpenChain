@@ -18,6 +18,10 @@ const (
 	maxPageSize              = 50
 	DefaultCounterpartyLimit = 10
 	MaxCounterpartyLimit     = 25
+	DefaultGraphDepth        = 1
+	MaxGraphDepth            = 3
+	maxGraphTraversalNodes   = 100
+	maxGraphTraversalEdges   = 250
 )
 
 type Direction string
@@ -87,7 +91,7 @@ func NewEngine(chainAdapter adapter.ChainAdapter, database *db.DB, labels *label
 	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels}
 }
 
-func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking) (*GraphResult, error) {
+func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking, maxDepth uint32) (*GraphResult, error) {
 	if e.chainAdapter == nil {
 		return nil, fmt.Errorf("trace data source is not configured")
 	}
@@ -100,6 +104,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		limit = maxPageSize
 	}
 	maxCounterparties, ranking = graphControls(maxCounterparties, ranking)
+	maxDepth = graphDepth(maxDepth)
 	acquisitionContext, recorder := adapter.WithAcquisitionRecorder(ctx)
 	page, err := e.chainAdapter.ListTransfers(acquisitionContext, address, limit, cursor)
 	if err != nil {
@@ -114,12 +119,10 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	page.SourceStatus = confirmationSourceStatus(e.Network(), page.SourceStatus)
 	filtered := filterTransfers(page.Transfers, address, direction)
 	transfers := selectCounterpartyTransfersWithKnown(filtered, address, maxCounterparties, ranking, e.knownCounterparties(ctx, filtered, address, ranking))
-	result := e.graph(ctx, address, transfers, page)
 	persistedTransfers := e.toTransfers(transfers, page.SourceStatus)
-	result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers)
 	completedAt := time.Now().UTC()
 	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, completedAt)
-	result.Leads = leads
+	result := e.graph(ctx, address, transfers, page)
 	if e.database != nil {
 		retrievedAt := page.SourceStatus.RetrievedAt
 		if retrievedAt.IsZero() {
@@ -129,10 +132,18 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		if err := e.database.SaveEvidenceGraph(ctx, scope, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items()); err != nil {
 			return nil, err
 		}
+		storedTransfers, err := e.traverseStoredGraph(ctx, address, direction, limit, maxCounterparties, ranking, maxDepth)
+		if err != nil {
+			return nil, err
+		}
+		result = e.graphFromStored(ctx, address, storedTransfers, page)
 		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
 			return nil, err
 		}
 	}
+	result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers)
+	result.Coverage.Limitation = retrievedScopeLimitation + " AGE traversal only includes persisted observations within the selected depth and bounded per-address graph scope."
+	result.Leads = leads
 	return result, nil
 }
 
@@ -149,6 +160,16 @@ func graphControls(maxCounterparties uint32, ranking Ranking) (uint32, Ranking) 
 		ranking = RankingMostRecent
 	}
 	return maxCounterparties, ranking
+}
+
+func graphDepth(depth uint32) uint32 {
+	if depth == 0 {
+		return DefaultGraphDepth
+	}
+	if depth > MaxGraphDepth {
+		return MaxGraphDepth
+	}
+	return depth
 }
 
 type counterpartyStats struct {
@@ -299,6 +320,70 @@ func (e *Engine) knownCounterparties(ctx context.Context, transfers []adapter.Tr
 	return known
 }
 
+// traverseStoredGraph performs a bounded breadth-first traversal over AGE.
+// Every returned relationship is an already-persisted transfer, so callers can
+// still export the exact relational evidence and acquisition scope behind it.
+func (e *Engine) traverseStoredGraph(ctx context.Context, seed string, direction Direction, limit, maxCounterparties uint32, ranking Ranking, maxDepth uint32) ([]db.Transfer, error) {
+	if e.database == nil {
+		return nil, nil
+	}
+	seed = e.normalizeAddress(seed)
+	depth := graphDepth(maxDepth)
+	frontier := []string{seed}
+	visited := map[string]struct{}{seed: {}}
+	stored := make(map[string]db.Transfer)
+	for hop := uint32(0); hop < depth && len(frontier) > 0 && len(stored) < maxGraphTraversalEdges; hop++ {
+		next := make([]string, 0, len(frontier)*int(maxCounterparties))
+		for _, current := range frontier {
+			if len(stored) >= maxGraphTraversalEdges || len(visited) >= maxGraphTraversalNodes {
+				break
+			}
+			neighbors, err := e.database.GraphNeighbors(ctx, e.Network(), current, string(direction), int(limit))
+			if err != nil {
+				return nil, err
+			}
+			items := storedItems(neighbors)
+			items = filterTransfers(items, current, direction)
+			selected := selectCounterpartyTransfersWithKnown(items, current, maxCounterparties, ranking, e.knownCounterparties(ctx, items, current, ranking))
+			selectedIDs := make(map[string]struct{}, len(selected))
+			for _, transfer := range selected {
+				selectedIDs[transferID(e.Network(), transfer.Hash, transfer.EventID)] = struct{}{}
+			}
+			for _, transfer := range neighbors {
+				if _, ok := selectedIDs[transfer.ID]; !ok {
+					continue
+				}
+				stored[transfer.ID] = transfer
+				neighbor := transfer.ToAddress
+				if strings.EqualFold(neighbor, current) {
+					neighbor = transfer.FromAddress
+				}
+				neighbor = e.normalizeAddress(neighbor)
+				if _, seen := visited[neighbor]; !seen && len(visited) < maxGraphTraversalNodes {
+					visited[neighbor] = struct{}{}
+					next = append(next, neighbor)
+				}
+			}
+		}
+		sort.Strings(next)
+		frontier = next
+	}
+	result := make([]db.Transfer, 0, len(stored))
+	for _, transfer := range stored {
+		result = append(result, transfer)
+	}
+	sort.Slice(result, func(left, right int) bool { return result[left].ID < result[right].ID })
+	return result, nil
+}
+
+func storedItems(transfers []db.Transfer) []adapter.TransferItem {
+	items := make([]adapter.TransferItem, 0, len(transfers))
+	for _, transfer := range transfers {
+		items = append(items, adapter.TransferItem{Hash: transfer.TransactionHash, EventID: transfer.EventID, TransferKind: transfer.TransferKind, From: transfer.FromAddress, To: transfer.ToAddress, AmountBaseUnits: transfer.AmountBaseUnits, Asset: transfer.Asset, BlockNumber: transfer.BlockNumber, BlockHash: transfer.BlockHash, Timestamp: transfer.BlockTimestamp})
+	}
+	return items
+}
+
 func (e *Engine) PendingGraph(address, warning string) *GraphResult {
 	seed := e.normalizeAddress(address)
 	return &GraphResult{
@@ -348,14 +433,29 @@ func (e *Engine) ExportEvidence(ctx context.Context, transferIDs []string) (*db.
 }
 
 func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.TransferItem, page *adapter.TransferPage) *GraphResult {
+	edges := make([]GraphEdge, 0, len(transfers))
+	for _, transfer := range transfers {
+		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: e.normalizeAddress(transfer.From), Target: e.normalizeAddress(transfer.To), AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), BlockHash: transfer.BlockHash, Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix(), Provisional: isProvisional(e.Network(), transfer.BlockNumber, page.SourceStatus)})
+	}
+	return e.graphFromEdges(ctx, seed, edges, page)
+}
+
+func (e *Engine) graphFromStored(ctx context.Context, seed string, transfers []db.Transfer, page *adapter.TransferPage) *GraphResult {
+	edges := make([]GraphEdge, 0, len(transfers))
+	for _, transfer := range transfers {
+		edges = append(edges, GraphEdge{ID: transfer.ID, Source: e.normalizeAddress(transfer.FromAddress), Target: e.normalizeAddress(transfer.ToAddress), AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.TransactionHash, TransferKind: transfer.TransferKind, SourceName: transfer.Source, BlockNumber: uint64(transfer.BlockNumber), BlockHash: transfer.BlockHash, Timestamp: transfer.BlockTimestamp.Unix(), RetrievedAt: transfer.RetrievedAt.Unix(), Provisional: transfer.Provisional})
+	}
+	return e.graphFromEdges(ctx, seed, edges, page)
+}
+
+func (e *Engine) graphFromEdges(ctx context.Context, seed string, edges []GraphEdge, page *adapter.TransferPage) *GraphResult {
 	seed = e.normalizeAddress(seed)
 	nodes := map[string]GraphNode{seed: e.node(ctx, seed, true)}
 	inCounts, outCounts := map[string]uint32{}, map[string]uint32{}
 	volumes := map[string]map[string]*big.Int{}
 	assets := map[string]adapter.Asset{}
-	edges := make([]GraphEdge, 0, len(transfers))
-	for _, transfer := range transfers {
-		from, to := e.normalizeAddress(transfer.From), e.normalizeAddress(transfer.To)
+	for _, edge := range edges {
+		from, to := e.normalizeAddress(edge.Source), e.normalizeAddress(edge.Target)
 		if _, ok := nodes[from]; !ok {
 			nodes[from] = e.node(ctx, from, from == seed)
 		}
@@ -364,13 +464,12 @@ func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.Tra
 		}
 		outCounts[from]++
 		inCounts[to]++
-		if amount, ok := new(big.Int).SetString(transfer.AmountBaseUnits, 10); ok {
-			key := assetKey(transfer.Asset)
-			assets[key] = transfer.Asset
+		if amount, ok := new(big.Int).SetString(edge.AmountBaseUnits, 10); ok {
+			key := assetKey(edge.Asset)
+			assets[key] = edge.Asset
 			addAssetVolume(volumes, from, key, amount)
 			addAssetVolume(volumes, to, key, amount)
 		}
-		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), BlockHash: transfer.BlockHash, Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix(), Provisional: isProvisional(e.Network(), transfer.BlockNumber, page.SourceStatus)})
 	}
 	graphNodes := make([]GraphNode, 0, len(nodes))
 	for id, node := range nodes {

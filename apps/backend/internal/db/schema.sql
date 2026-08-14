@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS public.trace_jobs (
   page_size INTEGER NOT NULL,
   counterparty_limit INTEGER NOT NULL DEFAULT 10,
   ranking TEXT NOT NULL DEFAULT 'most_recent',
+	max_depth INTEGER NOT NULL DEFAULT 1,
   client_key TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
   result_json JSONB,
@@ -175,14 +176,17 @@ CREATE TABLE IF NOT EXISTS public.trace_jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ,
-  UNIQUE (network, address, direction, cursor, page_size, counterparty_limit, ranking)
+	UNIQUE (network, address, direction, cursor, page_size, counterparty_limit, ranking, max_depth)
 );
 
 ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS client_key TEXT NOT NULL DEFAULT '';
 ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS counterparty_limit INTEGER NOT NULL DEFAULT 10;
 ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS ranking TEXT NOT NULL DEFAULT 'most_recent';
+ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS max_depth INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE public.trace_jobs DROP CONSTRAINT IF EXISTS trace_jobs_network_address_direction_cursor_page_size_key;
-CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_query_idx ON public.trace_jobs (network, address, direction, cursor, page_size, counterparty_limit, ranking);
+ALTER TABLE public.trace_jobs DROP CONSTRAINT IF EXISTS trace_jobs_network_address_direction_cursor_page_size_count_key;
+DROP INDEX IF EXISTS public.trace_jobs_query_idx;
+CREATE UNIQUE INDEX trace_jobs_query_idx ON public.trace_jobs (network, address, direction, cursor, page_size, counterparty_limit, ranking, max_depth);
 
 CREATE INDEX IF NOT EXISTS trace_jobs_queued_idx ON public.trace_jobs (created_at) WHERE status = 'queued';
 CREATE INDEX IF NOT EXISTS trace_jobs_client_queued_idx ON public.trace_jobs (client_key) WHERE status = 'queued';

@@ -68,12 +68,13 @@ func (q *Queue) Wait() {
 	}
 }
 
-func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking, retry bool, clientKey string) (*GraphResult, error) {
+func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking, maxDepth uint32, retry bool, clientKey string) (*GraphResult, error) {
 	if q.database == nil {
-		return q.engine.ResolveGraph(ctx, address, direction, limit, cursor, maxCounterparties, ranking)
+		return q.engine.ResolveGraph(ctx, address, direction, limit, cursor, maxCounterparties, ranking, maxDepth)
 	}
 	maxCounterparties, ranking = graphControls(maxCounterparties, ranking)
-	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit, CounterpartyLimit: maxCounterparties, Ranking: string(ranking), ClientKey: clientKey}, retry, q.maxQueued, q.maxQueuedPerClient)
+	maxDepth = graphDepth(maxDepth)
+	job, err := q.database.EnqueueTraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit, CounterpartyLimit: maxCounterparties, Ranking: string(ranking), MaxDepth: maxDepth, ClientKey: clientKey}, retry, q.maxQueued, q.maxQueuedPerClient)
 	if err != nil {
 		return nil, fmt.Errorf("queue trace job: %w", err)
 	}
@@ -82,12 +83,13 @@ func (q *Queue) TraceGraph(ctx context.Context, address string, direction Direct
 
 // TraceStatus reads an existing durable job. It is deliberately separate from
 // TraceGraph so client polling cannot create queue work or consume work budget.
-func (q *Queue) TraceStatus(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking) (*GraphResult, error) {
+func (q *Queue) TraceStatus(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking, maxDepth uint32) (*GraphResult, error) {
 	if q.database == nil {
 		return nil, ErrTraceNotFound
 	}
 	maxCounterparties, ranking = graphControls(maxCounterparties, ranking)
-	job, err := q.database.TraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit, CounterpartyLimit: maxCounterparties, Ranking: string(ranking)})
+	maxDepth = graphDepth(maxDepth)
+	job, err := q.database.TraceJob(ctx, db.TraceJobQuery{Network: q.engine.Network(), Address: address, Direction: string(direction), Cursor: cursor, Limit: limit, CounterpartyLimit: maxCounterparties, Ranking: string(ranking), MaxDepth: maxDepth})
 	if err != nil {
 		return nil, fmt.Errorf("get trace job: %w", err)
 	}
@@ -189,7 +191,7 @@ func (q *Queue) runOnce(ctx context.Context) {
 
 func (q *Queue) resolveWithRetry(ctx context.Context, job *db.TraceJob) (*GraphResult, error) {
 	for attempt := 1; attempt <= traceProviderMaxAttempts; attempt++ {
-		result, err := q.engine.ResolveGraph(ctx, job.Query.Address, Direction(job.Query.Direction), job.Query.Limit, job.Query.Cursor, job.Query.CounterpartyLimit, Ranking(job.Query.Ranking))
+		result, err := q.engine.ResolveGraph(ctx, job.Query.Address, Direction(job.Query.Direction), job.Query.Limit, job.Query.Cursor, job.Query.CounterpartyLimit, Ranking(job.Query.Ranking), job.Query.MaxDepth)
 		if err == nil {
 			return result, nil
 		}

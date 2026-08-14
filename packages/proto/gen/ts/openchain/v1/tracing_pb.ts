@@ -603,6 +603,11 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
    */
   ranking = GraphRanking.UNSPECIFIED;
 
+  /**
+   * @generated from field: uint32 max_depth = 9;
+   */
+  maxDepth = 0;
+
   constructor(data?: PartialMessage<TraceGraphRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -619,6 +624,7 @@ export class TraceGraphRequest extends Message<TraceGraphRequest> {
     { no: 6, name: "retry", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 7, name: "max_counterparties", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 8, name: "ranking", kind: "enum", T: proto3.getEnumType(GraphRanking) },
+    { no: 9, name: "max_depth", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphRequest {
@@ -871,6 +877,11 @@ export class TraceStatusRequest extends Message<TraceStatusRequest> {
    */
   ranking = GraphRanking.UNSPECIFIED;
 
+  /**
+   * @generated from field: uint32 max_depth = 8;
+   */
+  maxDepth = 0;
+
   constructor(data?: PartialMessage<TraceStatusRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -886,6 +897,7 @@ export class TraceStatusRequest extends Message<TraceStatusRequest> {
     { no: 5, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "max_counterparties", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 7, name: "ranking", kind: "enum", T: proto3.getEnumType(GraphRanking) },
+    { no: 8, name: "max_depth", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceStatusRequest {
@@ -949,6 +961,11 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
    */
   ranking = GraphRanking.UNSPECIFIED;
 
+  /**
+   * @generated from field: uint32 max_depth = 9;
+   */
+  maxDepth = 0;
+
   constructor(data?: PartialMessage<ExpandNodeRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -965,6 +982,7 @@ export class ExpandNodeRequest extends Message<ExpandNodeRequest> {
     { no: 6, name: "retry", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 7, name: "max_counterparties", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 8, name: "ranking", kind: "enum", T: proto3.getEnumType(GraphRanking) },
+    { no: 9, name: "max_depth", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeRequest {

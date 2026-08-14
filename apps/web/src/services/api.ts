@@ -265,10 +265,11 @@ export const defaultGraphOptions: GraphOptions = {
 	transferKind: '',
 };
 
-const traceOptions = ({ direction, maxCounterparties, ranking }: GraphOptions) => ({
+const traceOptions = ({ direction, maxCounterparties, ranking, maxDepth }: GraphOptions) => ({
 	direction,
 	maxCounterparties,
 	ranking,
+	maxDepth,
 });
 
 export async function fetchTraceGraph(

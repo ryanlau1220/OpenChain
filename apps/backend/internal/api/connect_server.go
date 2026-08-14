@@ -51,7 +51,7 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetRetry())
+	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetMaxDepth(), req.Msg.GetRetry())
 	if err != nil {
 		if errors.Is(err, errUnsupportedNetwork) {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -77,7 +77,7 @@ func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceStatus(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()))
+	result, err := h.server.traceStatus(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetMaxDepth())
 	if err != nil {
 		if errors.Is(err, tracing.ErrTraceNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("trace job was not found"))
@@ -97,7 +97,7 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetRetry())
+	result, err := h.server.traceGraph(ctx, req.Msg.GetNetwork(), address, traceDirection(req.Msg.GetDirection()), req.Msg.GetLimit(), req.Msg.GetCursor(), req.Msg.GetMaxCounterparties(), graphRanking(req.Msg.GetRanking()), req.Msg.GetMaxDepth(), req.Msg.GetRetry())
 	if err != nil {
 		if errors.Is(err, errUnsupportedNetwork) {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)

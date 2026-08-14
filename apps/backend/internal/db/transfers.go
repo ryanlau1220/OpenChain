@@ -59,8 +59,11 @@ SET flow.network = $network,
     flow.asset_symbol = $asset_symbol,
     flow.amount_base_units = $amount_base_units,
     flow.block_number = $block_number,
+    flow.block_hash = $block_hash,
     flow.block_timestamp = $block_timestamp,
-    flow.source = $source
+    flow.provisional = $provisional,
+    flow.source = $source,
+    flow.retrieved_at = $retrieved_at
 RETURN flow
 $$, $1) AS (result agtype)`
 
@@ -110,7 +113,8 @@ func (d *DB) SaveEvidenceGraph(ctx context.Context, scope AcquisitionScope, addr
 			"id": transfer.ID, "network": transfer.Network, "transaction_hash": transfer.TransactionHash,
 			"event_id": transfer.EventID, "transfer_kind": transfer.TransferKind, "from_address": transfer.FromAddress, "to_address": transfer.ToAddress,
 			"asset_symbol": transfer.Asset.Symbol, "asset_kind": transfer.Asset.Kind, "asset_contract_address": transfer.Asset.ContractAddress, "asset_decimals": transfer.Asset.Decimals, "amount_base_units": transfer.AmountBaseUnits,
-			"block_number": transfer.BlockNumber, "block_timestamp": transfer.BlockTimestamp.Unix(), "source": transfer.Source,
+			"block_number": transfer.BlockNumber, "block_hash": transfer.BlockHash, "block_timestamp": transfer.BlockTimestamp.Unix(), "provisional": transfer.Provisional,
+			"source": transfer.Source, "retrieved_at": transfer.RetrievedAt.Unix(),
 		}); err != nil {
 			return fmt.Errorf("upsert fund flow graph edge: %w", err)
 		}

@@ -76,6 +76,20 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	if relationalCount != 1 || graphFundFlowCount(t, database, transfer.ID) != 1 {
 		t.Fatalf("transfer was not persisted to both stores")
 	}
+	neighbors, err := database.GraphNeighbors(ctx, transfer.Network, from, "outbound", 10)
+	if err != nil {
+		t.Fatalf("AGE neighbors = %#v err=%v", neighbors, err)
+	}
+	neighbor, found := findTransfer(neighbors, transfer.ID)
+	if !found {
+		t.Fatalf("AGE did not return the persisted transfer: %#v", neighbors)
+	}
+	if neighbor.ID != transfer.ID || neighbor.ToAddress != to || neighbor.AmountBaseUnits != "42" || neighbor.Asset.Symbol != "ETH" || neighbor.Provisional || neighbor.BlockHash != "0xblock" || neighbor.Source != "test" {
+		t.Fatalf("AGE edge lost transfer facts: %#v", neighbor)
+	}
+	if incoming, err := database.GraphNeighbors(ctx, transfer.Network, to, "inbound", 10); err != nil || !containsTransfer(incoming, transfer.ID) {
+		t.Fatalf("AGE inbound neighbors = %#v err=%v", incoming, err)
+	}
 	expectedHash := sha256.Sum256(rawResponse)
 	var acquisitionID int64
 	var responseHash string
@@ -111,6 +125,20 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM assets WHERE network = $1 AND contract_address = $2`, transfer.Network, "").Scan(&assetCount); err != nil || assetCount != 1 {
 		t.Fatalf("asset was not persisted: count=%d err=%v", assetCount, err)
 	}
+}
+
+func findTransfer(transfers []Transfer, id string) (Transfer, bool) {
+	for _, transfer := range transfers {
+		if transfer.ID == id {
+			return transfer, true
+		}
+	}
+	return Transfer{}, false
+}
+
+func containsTransfer(transfers []Transfer, id string) bool {
+	_, found := findTransfer(transfers, id)
+	return found
 }
 
 func TestTraceJobIntegration(t *testing.T) {
@@ -160,6 +188,12 @@ func TestTraceJobIntegration(t *testing.T) {
 	distinct, err := database.EnqueueTraceJob(ctx, selected, false, 3, 3)
 	if err != nil || distinct.ID == queued.ID {
 		t.Fatalf("graph controls must identify a distinct job: %#v, err=%v", distinct, err)
+	}
+	deeper := query
+	deeper.MaxDepth = 2
+	depthJob, err := database.EnqueueTraceJob(ctx, deeper, false, 4, 4)
+	if err != nil || depthJob.ID == queued.ID {
+		t.Fatalf("graph depth must identify a distinct job: %#v, err=%v", depthJob, err)
 	}
 
 	claimed, err := database.ClaimTraceJob(ctx, query.Network, time.Minute)
