@@ -689,13 +689,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			const palette = cluster ? { bg: '#334155', border: '#94A3B8', text: '#fff' } : nodePalette(n);
 			const badge = cluster ? `${cluster.direction.toUpperCase()} CLUSTER` : nodeBadge(n);
 			const counts = nodeCounts.get(n.id) || { inbound: n.inTxCount, outbound: n.outTxCount };
+			const addressLabel = shortAddress(n.id);
+			const hasShortAddressLabel = n.label === addressLabel;
 			const displayLabel = cluster
 				? `${cluster.memberIds.length} counterparties\n${cluster.transferCount} transfers · ${formatRelationshipAmount(cluster.totalAmount, cluster.representative)}\nClick to expand`
-				: n.label || shortAddress(n.id);
+				: n.label || addressLabel;
 			const normalLabel = `${badge}\n${displayLabel}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`;
 			const detailLabel = cluster
 				? normalLabel
-				: `${badge}\n${n.label ? `${n.label}\n` : ''}${n.id}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`;
+				: `${badge}\n${n.label && !hasShortAddressLabel ? `${n.label}\n` : ''}${n.id}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`;
 
 			elements.push({
 				group: 'nodes',
@@ -927,14 +929,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			],
 			layout: { name: 'preset' },
 		});
+		cy.minZoom(0.3);
+		cy.maxZoom(2.0);
 		layoutAndFit(cy, effectiveLayout, traceDirection);
 
 		applyNodeStyles(cy, selectedNode?.id);
 		applyEvidenceStyles(cy, highlightedIDs);
 		applyGraphDensity(cy);
-
-		cy.minZoom(0.3);
-		cy.maxZoom(2.0);
 
 		let isPanningCanvas = false;
 		cy.on('pan', () => {

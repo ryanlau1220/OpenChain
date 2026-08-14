@@ -617,16 +617,21 @@ function Index() {
 					style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}
 				>
 					<div
-						className="sticky top-0 z-20 -mx-4 mb-4 px-4 pb-3 pt-0"
+						className="sticky top-0 z-20 -mx-4 mb-2 px-4 pb-2 pt-0"
 						style={{ background: 'rgba(255,255,255,0.96)' }}
 					>
 						<h3
-							className="text-[10px] uppercase font-bold tracking-widest mb-3"
+							className="text-[10px] uppercase font-bold tracking-widest mb-2"
 							style={{ color: 'var(--ink-3)' }}
 						>
 							Address Inspector
 						</h3>
-						<div className="grid grid-cols-4 gap-1" role="tablist" aria-label="Inspector sections">
+						<div
+							className="flex rounded-lg p-1"
+							role="tablist"
+							aria-label="Inspector sections"
+							style={{ background: 'var(--slate)', border: '1px solid var(--border)' }}
+						>
 							{(
 								[
 									['address', 'Address'],
@@ -649,9 +654,9 @@ function Index() {
 									aria-selected={inspectorTab === tab}
 									aria-controls="inspector-panel"
 									onClick={() => setInspectorTab(tab)}
-									className="rounded-md px-1.5 py-1.5 text-[9px] font-semibold"
+									className="min-w-0 flex-1 rounded-md px-1 py-1.5 text-[9px] font-semibold"
 									style={{
-										background: inspectorTab === tab ? 'rgba(136,125,255,0.12)' : 'var(--slate)',
+										background: inspectorTab === tab ? 'var(--white)' : 'transparent',
 										color: inspectorTab === tab ? 'var(--accent)' : 'var(--ink-2)',
 									}}
 								>
