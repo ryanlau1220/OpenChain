@@ -3,10 +3,12 @@ import {
 	ArrowDownToLine,
 	ArrowLeftRight,
 	ArrowUpFromLine,
+	CircleHelp,
 	Filter,
 	GitFork,
 	Layers,
 	LoaderCircle,
+	LocateFixed,
 	Maximize2,
 	PlusCircle,
 	RotateCcw,
@@ -72,6 +74,13 @@ const emptyTransferIDs: readonly string[] = [];
 type PositionedNode = { id: string; x: number; y: number };
 type LayoutName = 'flow' | 'cose' | 'concentric' | 'grid';
 type NodeTransferCounts = { inbound: number; outbound: number };
+type HoveredNode = {
+	title: string;
+	detail: string;
+	counts: NodeTransferCounts;
+	x: number;
+	y: number;
+};
 
 export type GraphCluster = {
 	id: string;
@@ -457,6 +466,17 @@ const applyEvidenceStyles = (cy: cytoscape.Core, transferIDs: ReadonlySet<string
 	});
 };
 
+const applyGraphDensity = (cy: cytoscape.Core) => {
+	const zoom = cy.zoom();
+	const density = zoom < 0.7 ? 'compact' : zoom >= 1.2 ? 'detail' : 'normal';
+	cy.batch(() => {
+		cy.nodes().removeClass('density-compact density-normal density-detail');
+		cy.edges().removeClass('density-compact density-normal density-detail');
+		cy.nodes().addClass(`density-${density}`);
+		cy.edges().addClass(`density-${density}`);
+	});
+};
+
 const applyNodeStyles = (cy: cytoscape.Core, targetNodeId?: string) => {
 	const cleanTarget = targetNodeId?.toLowerCase();
 	cy.batch(() => {
@@ -550,7 +570,10 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const [internalSelectedNode, setInternalSelectedNode] = useState<GraphNode | null>(null);
 	const [layoutName, setLayoutName] = useState<LayoutName>('flow');
 	const [filterOpen, setFilterOpen] = useState(false);
+	const [legendOpen, setLegendOpen] = useState(false);
 	const [expandedClusterIds, setExpandedClusterIds] = useState<ReadonlySet<string>>(new Set());
+	const [hoveredNode, setHoveredNode] = useState<HoveredNode | null>(null);
+	const filterButtonRef = useRef<HTMLButtonElement>(null);
 	const layoutRef = useRef(`${layoutName}:${graphOptions?.direction ?? TraceDirection.BOTH}`);
 
 	const selectedNode = propSelectedNode !== undefined ? propSelectedNode : internalSelectedNode;
@@ -625,6 +648,29 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		if (cyRef.current) applyEvidenceStyles(cyRef.current, highlightedIDs);
 	}, [highlightedIDs]);
 
+	useEffect(() => {
+		if (!containerRef.current) return;
+		const observer = new ResizeObserver(() => cyRef.current?.resize());
+		observer.observe(containerRef.current);
+		return () => observer.disconnect();
+	}, []);
+
+	useEffect(() => {
+		const frame = window.requestAnimationFrame(() => cyRef.current?.resize());
+		return () => window.cancelAnimationFrame(frame);
+	}, [filterOpen]);
+
+	useEffect(() => {
+		if (!filterOpen) return;
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape') return;
+			setFilterOpen(false);
+			filterButtonRef.current?.focus();
+		};
+		window.addEventListener('keydown', closeOnEscape);
+		return () => window.removeEventListener('keydown', closeOnEscape);
+	}, [filterOpen]);
+
 	useEffect(
 		() => () => {
 			cyRef.current?.destroy();
@@ -646,12 +692,18 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			const displayLabel = cluster
 				? `${cluster.memberIds.length} counterparties\n${cluster.transferCount} transfers · ${formatRelationshipAmount(cluster.totalAmount, cluster.representative)}\nClick to expand`
 				: n.label || shortAddress(n.id);
+			const normalLabel = `${badge}\n${displayLabel}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`;
+			const detailLabel = cluster
+				? normalLabel
+				: `${badge}\n${n.label ? `${n.label}\n` : ''}${n.id}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`;
 
 			elements.push({
 				group: 'nodes',
 				data: {
 					id: n.id,
-					label: `${badge}\n${displayLabel}\n↑ ${counts.inbound} in · ↓ ${counts.outbound} out`,
+					compactLabel: n.isSeed ? 'TARGET' : cluster ? `${cluster.memberIds.length} grouped` : '',
+					normalLabel,
+					detailLabel,
 					badge,
 					is_seed: n.isSeed,
 					bg: palette.bg,
@@ -666,13 +718,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		});
 
 		aggregateGraphEdges(displayEdges).forEach((relationship) => {
+			const [summaryLabel] = relationship.label.split('\n');
 			elements.push({
 				group: 'edges',
 				data: {
 					id: relationship.id,
 					source: relationship.source,
 					target: relationship.target,
-					label: relationship.label,
+					normalLabel: summaryLabel,
+					detailLabel: relationship.label,
 					color: relationship.color,
 					provisional: relationship.provisional,
 					raw: relationship,
@@ -709,6 +763,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				}
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
+				applyGraphDensity(cy);
 				return;
 			}
 
@@ -735,6 +790,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				if (isInitialHydration) layoutAndFit(cy, effectiveLayout, traceDirection);
 				applyNodeStyles(cy, selectedNode?.id);
 				applyEvidenceStyles(cy, highlightedIDs);
+				applyGraphDensity(cy);
 				return;
 			}
 
@@ -745,6 +801,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			applyNodeStyles(cy, selectedNode?.id);
 			applyEvidenceStyles(cy, highlightedIDs);
 			layoutAndFit(cy, effectiveLayout, traceDirection);
+			applyGraphDensity(cy);
 			applyNodeStyles(cy, selectedNode?.id);
 			return;
 		}
@@ -757,7 +814,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					selector: 'node',
 					style: {
 						'background-color': 'data(bg)',
-						label: 'data(label)',
+						label: 'data(normalLabel)',
 						color: '#FFFFFF',
 						'font-size': '9px',
 						'font-family': 'Inter, sans-serif',
@@ -773,6 +830,22 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'border-color': 'data(borderColor)',
 						'border-opacity': 1,
 						'overlay-padding': '4px',
+					},
+				},
+				{
+					selector: 'node.density-compact',
+					style: {
+						label: 'data(compactLabel)',
+						'font-size': '7px',
+						'text-margin-y': 7,
+					},
+				},
+				{
+					selector: 'node.density-detail',
+					style: {
+						label: 'data(detailLabel)',
+						'font-size': '8px',
+						'text-max-width': '180px',
 					},
 				},
 				{
@@ -810,7 +883,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						'target-arrow-color': 'data(color)',
 						'target-arrow-shape': 'triangle',
 						'curve-style': 'bezier',
-						label: 'data(label)',
+						label: 'data(normalLabel)',
 						'font-size': '7px',
 						color: '#4B5068',
 						'text-rotation': 'autorotate',
@@ -828,9 +901,18 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					},
 				},
 				{
+					selector: 'edge.density-compact',
+					style: { label: '' },
+				},
+				{
+					selector: 'edge.density-detail',
+					style: { label: 'data(detailLabel)' },
+				},
+				{
 					selector: 'edge.evidence-edge',
 					style: {
 						width: 4,
+						label: 'data(normalLabel)',
 						'line-color': '#F59E0B',
 						'target-arrow-color': '#F59E0B',
 						opacity: 1,
@@ -849,6 +931,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 		applyNodeStyles(cy, selectedNode?.id);
 		applyEvidenceStyles(cy, highlightedIDs);
+		applyGraphDensity(cy);
 
 		cy.minZoom(0.3);
 		cy.maxZoom(2.0);
@@ -860,6 +943,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		cy.on('vmousedown', () => {
 			isPanningCanvas = false;
 		});
+		cy.on('zoom', () => applyGraphDensity(cy));
 
 		cy.on('tap', 'node', (evt) => {
 			const cluster = evt.target.data('cluster') as GraphCluster | undefined;
@@ -875,6 +959,22 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			onNodeSelectRef.current(nData);
 			applyNodeStyles(cy, nData.id);
 		});
+
+		cy.on('mouseover', 'node', (evt) => {
+			const cluster = evt.target.data('cluster') as GraphCluster | undefined;
+			const node = evt.target.data('raw') as GraphNode | undefined;
+			const counts = nodeCounts.get(evt.target.id()) || { inbound: 0, outbound: 0 };
+			setHoveredNode({
+				title: cluster
+					? `${cluster.memberIds.length} counterparties`
+					: node?.label || 'Unknown address',
+				detail: cluster ? 'Click to expand this grouped branch.' : node?.id || evt.target.id(),
+				counts,
+				x: evt.renderedPosition.x,
+				y: evt.renderedPosition.y,
+			});
+		});
+		cy.on('mouseout', 'node', () => setHoveredNode(null));
 
 		cy.on('tap', 'edge', (evt) => {
 			const relationship = evt.target.data('raw') as GraphRelationship;
@@ -910,6 +1010,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const handleReset = () => {
 		cyRef.current?.reset();
 		cyRef.current?.fit();
+	};
+	const handleCenterTarget = () => {
+		const target = cyRef.current?.nodes('[?is_seed]');
+		if (target?.length) cyRef.current?.center(target);
+	};
+	const handleCanvasKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+		if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+		const nodes = displayNodes.filter((node) => !clusteredGraph.clusters.has(node.id));
+		if (nodes.length === 0) return;
+		event.preventDefault();
+		const currentIndex = nodes.findIndex((node) => node.id === selectedNode?.id);
+		const offset = event.key === 'ArrowRight' ? 1 : -1;
+		const next = nodes[(currentIndex + offset + nodes.length) % nodes.length];
+		setInternalSelectedNode(next);
+		onEdgeSelectRef.current?.(null);
+		onRelationshipSelectRef.current?.([]);
+		onNodeSelectRef.current(next);
+		const cy = cyRef.current;
+		if (!cy) return;
+		applyNodeStyles(cy, next.id);
+		cy.center(cy.getElementById(next.id));
 	};
 
 	const seedNode = (graphData?.nodes || []).find((n) => n.isSeed);
@@ -1005,11 +1126,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						)}
 					</div>
 					<div className="ml-auto flex items-center gap-1.5 shrink-0">
+						{graphData?.sourceStatus?.source && (
+							<span
+								className="hidden xl:inline font-mono text-[10px]"
+								style={{ color: 'var(--ink-3)' }}
+								title="Graph data source and finality state"
+							>
+								{graphData.sourceStatus.source} ·{' '}
+								{graphData.sourceStatus.isComplete ? 'finalized' : 'provisional'}
+							</span>
+						)}
 						{graphOptions && onGraphOptionsChange && (
 							<button
+								ref={filterButtonRef}
 								type="button"
 								aria-label="Filters"
 								aria-expanded={filterOpen}
+								aria-controls="investigation-filters"
 								onClick={() => setFilterOpen((open) => !open)}
 								className="list-none cursor-pointer rounded-lg p-1.5 text-xs"
 								style={{
@@ -1022,12 +1155,27 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								<Filter className="h-3.5 w-3.5" />
 							</button>
 						)}
+						<button
+							type="button"
+							aria-label="Graph legend"
+							aria-expanded={legendOpen}
+							onClick={() => setLegendOpen((open) => !open)}
+							className="list-none cursor-pointer rounded-lg p-1.5 text-xs"
+							style={{
+								background: 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: 'var(--ink-2)',
+							}}
+							title="Graph legend"
+						>
+							<CircleHelp className="h-3.5 w-3.5" />
+						</button>
 						<GitFork className="h-3.5 w-3.5 text-[var(--ink-3)]" aria-hidden="true" />
 						<select
 							aria-label="Graph layout"
 							value={layoutName}
 							onChange={(e) => setLayoutName(e.target.value as LayoutName)}
-							className="w-28 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+							className="w-28 text-xs rounded-lg px-2.5 py-1"
 							style={{
 								background: 'var(--slate)',
 								border: '1px solid var(--border)',
@@ -1043,8 +1191,39 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					</div>
 				</div>
 			</div>
-			{filterOpen && (
+			{legendOpen && (
 				<div
+					className="absolute right-4 top-12 z-30 w-52 rounded-xl p-3 text-[10px] shadow-lg"
+					style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
+				>
+					<p className="font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-3)' }}>
+						Graph legend
+					</p>
+					<div className="mt-2 space-y-1.5" style={{ color: 'var(--ink-2)' }}>
+						<p>
+							<span className="mr-1 inline-block h-2 w-2 rounded-full bg-[#887DFF]" />
+							Target address
+						</p>
+						<p>
+							<span className="mr-1 inline-block h-2 w-2 rounded-full bg-[#0F766E]" />
+							Labelled service
+						</p>
+						<p>
+							<span className="mr-1 inline-block h-2 w-2 rounded-full bg-[#4B5068]" />
+							Unknown address
+						</p>
+						<p>
+							<span className="mr-1 inline-block h-2 w-2 rounded-full bg-[#F59E0B]" />
+							Evidence path
+						</p>
+						<p>Dashed edges are provisional observations.</p>
+					</div>
+				</div>
+			)}
+			{filterOpen && (
+				<section
+					id="investigation-filters"
+					aria-label="Investigation filters"
 					className="shrink-0 border-b px-4 py-3"
 					style={{ borderColor: 'var(--border)', background: 'var(--white)' }}
 				>
@@ -1214,14 +1393,41 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							the trace scope.
 						</p>
 					</div>
-				</div>
+				</section>
 			)}
 
 			{/* Cytoscape canvas */}
-			<div
-				ref={containerRef}
-				className="min-h-0 flex-1 w-full cursor-grab active:cursor-grabbing"
-			/>
+			<div className="relative min-h-0 flex-1 w-full cursor-grab active:cursor-grabbing">
+				<div ref={containerRef} className="absolute inset-0" />
+				<button
+					type="button"
+					onKeyDown={handleCanvasKeyDown}
+					className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-30"
+				>
+					Navigate graph addresses with left and right arrow keys
+				</button>
+				{hoveredNode && (
+					<div
+						className="pointer-events-none absolute z-20 w-72 rounded-lg p-2 text-[10px] shadow-lg"
+						style={{
+							left: `min(${hoveredNode.x + 12}px, calc(100% - 18.5rem))`,
+							top: `min(${hoveredNode.y + 12}px, calc(100% - 6.5rem))`,
+							background: 'rgba(255,255,255,0.96)',
+							border: '1px solid var(--border)',
+						}}
+					>
+						<p className="font-semibold" style={{ color: 'var(--ink)' }}>
+							{hoveredNode.title}
+						</p>
+						<p className="mt-1 break-all font-mono text-[9px]" style={{ color: 'var(--ink-2)' }}>
+							{hoveredNode.detail}
+						</p>
+						<p className="mt-1" style={{ color: 'var(--ink-3)' }}>
+							↑ {hoveredNode.counts.inbound} inbound · ↓ {hoveredNode.counts.outbound} outbound
+						</p>
+					</div>
+				)}
+			</div>
 
 			{/* Floating zoom controls */}
 			<div
@@ -1236,10 +1442,22 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				{[
 					{ icon: <ZoomIn className="w-4 h-4" />, action: handleZoomIn, title: 'Zoom In' },
 					{ icon: <ZoomOut className="w-4 h-4" />, action: handleZoomOut, title: 'Zoom Out' },
+					{
+						icon: <LocateFixed className="w-4 h-4" />,
+						action: handleCenterTarget,
+						title: 'Center Target',
+					},
 					{ icon: <Maximize2 className="w-4 h-4" />, action: handleFit, title: 'Fit View' },
 					{ icon: <RotateCcw className="w-4 h-4" />, action: handleReset, title: 'Reset' },
 				].map(({ icon, action, title }) => (
-					<button key={title} type="button" onClick={action} className={toolBtn} title={title}>
+					<button
+						key={title}
+						type="button"
+						onClick={action}
+						className={toolBtn}
+						title={title}
+						aria-label={title}
+					>
 						{icon}
 					</button>
 				))}
@@ -1269,7 +1487,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 				</div>
 			)}
 			{showLoading && (
-				<div
+				<output
+					aria-live="polite"
 					className="absolute inset-0 z-20 grid place-items-center pointer-events-none"
 					style={{ background: 'rgba(250,250,252,0.82)' }}
 				>
@@ -1282,7 +1501,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 							Retrieving address flow…
 						</p>
 					</div>
-				</div>
+				</output>
 			)}
 		</div>
 	);
