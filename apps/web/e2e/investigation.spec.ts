@@ -111,7 +111,7 @@ test('provides focused graph filters without leaving the investigation workspace
 	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('1');
 	await page.getByLabel('Counterparty ranking').selectOption('4');
 	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('4');
-	await page.getByText('Filters', { exact: true }).click();
+	await page.getByRole('button', { name: 'Filters' }).click();
 	await expect(page.getByLabel('From date')).toBeVisible();
 	await expect(page.getByLabel('To date')).toBeVisible();
 	await expect(page.getByLabel('Asset')).toBeVisible();

@@ -1,7 +1,10 @@
 import cytoscape from 'cytoscape';
 import {
+	ArrowDownToLine,
 	ArrowLeftRight,
+	ArrowUpFromLine,
 	Filter,
+	GitFork,
 	Layers,
 	LoaderCircle,
 	Maximize2,
@@ -925,195 +928,208 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 		<div className="relative w-full h-full flex flex-col" style={{ background: 'var(--snow)' }}>
 			{/* Toolbar */}
 			<div
-				className="h-11 px-4 flex items-center justify-between text-xs shrink-0"
+				className="shrink-0 text-xs"
 				style={{
 					background: 'rgba(255,255,255,0.85)',
 					borderBottom: '1px solid var(--border)',
 					backdropFilter: 'blur(8px)',
 				}}
 			>
-				{/* Left: selected + expand */}
-				<div className="flex items-center gap-3">
-					<div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--ink-2)' }}>
-						<Layers className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
-						<span>Selected:</span>
-						<span
-							className="font-mono px-2 py-0.5 rounded text-[11px]"
-							style={{
-								background: selectedNode ? 'rgba(52, 211, 153, 0.12)' : 'rgba(136, 125, 255, 0.12)',
-								color: selectedNode ? '#059669' : 'var(--accent)',
-								border: selectedNode
-									? '1px solid rgba(52, 211, 153, 0.3)'
-									: '1px solid rgba(136, 125, 255, 0.3)',
-							}}
+				<div className="h-11 px-4 flex items-center gap-3">
+					<div className="flex items-center gap-3 min-w-0">
+						<div
+							className="flex items-center gap-1.5 font-medium"
+							style={{ color: 'var(--ink-2)' }}
 						>
-							{selectedNode
-								? `${selectedNode.id.substring(0, 6)}…${selectedNode.id.substring(38)}`
-								: 'Target Seed'}
-						</span>
-					</div>
+							<Layers className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent)' }} />
+							<span>Selected:</span>
+							<span
+								className="font-mono px-2 py-0.5 rounded text-[11px] truncate"
+								style={{
+									background: selectedNode
+										? 'rgba(52, 211, 153, 0.12)'
+										: 'rgba(136, 125, 255, 0.12)',
+									color: selectedNode ? '#059669' : 'var(--accent)',
+									border: selectedNode
+										? '1px solid rgba(52, 211, 153, 0.3)'
+										: '1px solid rgba(136, 125, 255, 0.3)',
+								}}
+							>
+								{selectedNode
+									? `${selectedNode.id.substring(0, 6)}…${selectedNode.id.substring(38)}`
+									: 'Target Seed'}
+							</span>
+						</div>
 
-					<div
-						className="flex items-center gap-1.5 ml-1 pl-3"
-						style={{ borderLeft: '1px solid var(--border)' }}
-					>
-						<button
-							type="button"
-							disabled={!activeTargetAddress || !canExpand || expanding}
-							onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress)}
-							className="btn-outline text-[11px] flex items-center gap-1 transition font-medium"
-							style={{ padding: '0.25rem 0.625rem' }}
-							title={
-								selectedNode
-									? `Expand counterparty transfers for ${selectedNode.id}`
-									: 'Expand transfers'
-							}
+						<div
+							className="flex items-center gap-1.5 ml-1 pl-3"
+							style={{ borderLeft: '1px solid var(--border)' }}
 						>
-							<PlusCircle className="w-3.5 h-3.5 text-[var(--accent)]" />
-							{expanding ? 'Expanding…' : 'Expand'}
-						</button>
-					</div>
-					{graphData && onTraceDirection && (
-						<div className="flex items-center gap-1.5">
 							<button
 								type="button"
-								onClick={() => onTraceDirection(TraceDirection.INBOUND)}
-								className="btn-outline text-[11px] transition font-medium"
+								disabled={!activeTargetAddress || !canExpand || expanding}
+								onClick={() => activeTargetAddress && onExpandNode?.(activeTargetAddress)}
+								className="btn-outline text-[11px] flex items-center gap-1 transition font-medium"
 								style={{ padding: '0.25rem 0.625rem' }}
-								title="Reload the target with incoming transfers only."
+								title={
+									selectedNode
+										? `Expand counterparty transfers for ${selectedNode.id}`
+										: 'Expand transfers'
+								}
 							>
-								Trace source of funds
-							</button>
-							<button
-								type="button"
-								onClick={() => onTraceDirection(TraceDirection.OUTBOUND)}
-								className="btn-outline text-[11px] transition font-medium"
-								style={{ padding: '0.25rem 0.625rem' }}
-								title="Reload the target with outgoing transfers only."
-							>
-								Trace destination of funds
+								<PlusCircle className="w-3.5 h-3.5 text-[var(--accent)]" />
+								{expanding ? 'Expanding…' : 'Expand'}
 							</button>
 						</div>
-					)}
+						{graphData && onTraceDirection && (
+							<div className="flex items-center gap-1">
+								<button
+									type="button"
+									onClick={() => onTraceDirection(TraceDirection.INBOUND)}
+									aria-label="Trace source of funds"
+									className="btn-outline p-1.5 transition"
+									title="Reload the target with incoming transfers only."
+								>
+									<ArrowDownToLine className="h-3.5 w-3.5" />
+								</button>
+								<button
+									type="button"
+									onClick={() => onTraceDirection(TraceDirection.OUTBOUND)}
+									aria-label="Trace destination of funds"
+									className="btn-outline p-1.5 transition"
+									title="Reload the target with outgoing transfers only."
+								>
+									<ArrowUpFromLine className="h-3.5 w-3.5" />
+								</button>
+							</div>
+						)}
+					</div>
+					<div className="ml-auto flex items-center gap-1.5 shrink-0">
+						<GitFork className="h-3.5 w-3.5 text-[var(--ink-3)]" aria-hidden="true" />
+						<select
+							aria-label="Graph layout"
+							value={layoutName}
+							onChange={(e) => setLayoutName(e.target.value as LayoutName)}
+							className="w-28 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+							style={{
+								background: 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: 'var(--ink-2)',
+							}}
+							title="Choose how addresses are arranged on the canvas."
+						>
+							<option value="flow">Flow</option>
+							<option value="cose">Force</option>
+							<option value="concentric">Concentric</option>
+							<option value="grid">Grid</option>
+						</select>
+					</div>
 				</div>
-				<div className="flex items-center gap-2">
-					{graphOptions && onGraphOptionsChange && (
-						<>
-							<select
-								aria-label="Counterparties per address"
-								value={graphOptions.maxCounterparties}
-								onChange={(event) =>
-									onGraphOptionsChange({
-										...graphOptions,
-										maxCounterparties: Number(event.target.value),
-									})
-								}
-								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-								style={{
-									background: 'var(--slate)',
-									border: '1px solid var(--border)',
-									color: 'var(--ink-2)',
-								}}
-							>
-								<option value={5}>Top 5 counterparties</option>
-								<option value={10}>Top 10 counterparties</option>
-								<option value={25}>Top 25 counterparties</option>
-							</select>
-							<select
-								aria-label="Counterparty ranking"
-								value={graphOptions.ranking}
-								onChange={(event) =>
-									onGraphOptionsChange({
-										...graphOptions,
-										ranking: Number(event.target.value) as GraphRanking,
-									})
-								}
-								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-								style={{
-									background: 'var(--slate)',
-									border: '1px solid var(--border)',
-									color: 'var(--ink-2)',
-								}}
-								title="Ranking is deterministic. Amount ranking is the highest total for one raw on-chain asset, never fiat value."
-							>
-								<option value={GraphRanking.MOST_RECENT}>Most recent</option>
-								<option value={GraphRanking.MOST_ACTIVE}>Most transfers</option>
-								<option value={GraphRanking.TOTAL_RAW_AMOUNT}>Largest total per asset</option>
-								<option value={GraphRanking.KNOWN_ENTITY}>Known labelled entities</option>
-							</select>
-							<select
-								aria-label="Investigation direction"
-								value={graphOptions.direction}
-								onChange={(event) =>
-									onGraphOptionsChange({
-										...graphOptions,
-										direction: Number(event.target.value) as TraceDirection,
-									})
-								}
-								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-								style={{
-									background: 'var(--slate)',
-									border: '1px solid var(--border)',
-									color: 'var(--ink-2)',
-								}}
-							>
-								<option value={TraceDirection.BOTH}>Full flow</option>
-								<option value={TraceDirection.INBOUND}>Source of funds</option>
-								<option value={TraceDirection.OUTBOUND}>Destination of funds</option>
-							</select>
-							<select
-								aria-label="Maximum graph depth"
-								value={graphOptions.maxDepth}
-								onChange={(event) =>
-									onGraphOptionsChange({
-										...graphOptions,
-										maxDepth: Number(event.target.value),
-									})
-								}
-								className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-								style={{
-									background: 'var(--slate)',
-									border: '1px solid var(--border)',
-									color: 'var(--ink-2)',
-								}}
-								title="Manual expansion stops at this distance from the target."
-							>
-								<option value={1}>Depth 1</option>
-								<option value={2}>Depth 2</option>
-								<option value={3}>Depth 3</option>
-							</select>
-						</>
-					)}
-					<button
-						type="button"
-						aria-expanded={filterOpen}
-						onClick={() => setFilterOpen((open) => !open)}
-						className="list-none cursor-pointer rounded-lg px-2.5 py-1 text-xs"
-						style={{
-							background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
-							border: '1px solid var(--border)',
-							color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
-						}}
+				{graphOptions && onGraphOptionsChange && (
+					<div
+						className="min-h-10 px-4 py-1.5 flex flex-wrap items-center justify-end gap-2"
+						style={{ borderTop: '1px solid var(--border)' }}
 					>
-						<Filter className="mr-1 inline h-3.5 w-3.5" />
-						Filters{activeFilterCount ? ` · ${activeFilterCount}` : ''}
-					</button>
-					<select
-						value={layoutName}
-						onChange={(e) => setLayoutName(e.target.value as LayoutName)}
-						className="text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-						style={{
-							background: 'var(--slate)',
-							border: '1px solid var(--border)',
-							color: 'var(--ink-2)',
-						}}
-					>
-						<option value="flow">Flow (source → target → destination)</option>
-						<option value="cose">Force Directed</option>
-						<option value="concentric">Concentric</option>
-						<option value="grid">Grid</option>
-					</select>
-				</div>
+						<select
+							aria-label="Counterparties per address"
+							value={graphOptions.maxCounterparties}
+							onChange={(event) =>
+								onGraphOptionsChange({
+									...graphOptions,
+									maxCounterparties: Number(event.target.value),
+								})
+							}
+							className="w-36 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+							style={{
+								background: 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: 'var(--ink-2)',
+							}}
+						>
+							<option value={5}>Top 5</option>
+							<option value={10}>Top 10</option>
+							<option value={25}>Top 25</option>
+						</select>
+						<select
+							aria-label="Counterparty ranking"
+							value={graphOptions.ranking}
+							onChange={(event) =>
+								onGraphOptionsChange({
+									...graphOptions,
+									ranking: Number(event.target.value) as GraphRanking,
+								})
+							}
+							className="w-32 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+							style={{
+								background: 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: 'var(--ink-2)',
+							}}
+							title="Ranking is deterministic. Amount ranking is the highest total for one raw on-chain asset, never fiat value."
+						>
+							<option value={GraphRanking.MOST_RECENT}>Recent</option>
+							<option value={GraphRanking.MOST_ACTIVE}>Most active</option>
+							<option value={GraphRanking.TOTAL_RAW_AMOUNT}>Largest total</option>
+							<option value={GraphRanking.KNOWN_ENTITY}>Known entities</option>
+						</select>
+						<select
+							aria-label="Investigation direction"
+							value={graphOptions.direction}
+							onChange={(event) =>
+								onGraphOptionsChange({
+									...graphOptions,
+									direction: Number(event.target.value) as TraceDirection,
+								})
+							}
+							className="w-28 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+							style={{
+								background: 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: 'var(--ink-2)',
+							}}
+						>
+							<option value={TraceDirection.BOTH}>Full flow</option>
+							<option value={TraceDirection.INBOUND}>Sources</option>
+							<option value={TraceDirection.OUTBOUND}>Destinations</option>
+						</select>
+						<select
+							aria-label="Maximum graph depth"
+							value={graphOptions.maxDepth}
+							onChange={(event) =>
+								onGraphOptionsChange({
+									...graphOptions,
+									maxDepth: Number(event.target.value),
+								})
+							}
+							className="w-20 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+							style={{
+								background: 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: 'var(--ink-2)',
+							}}
+							title="Manual expansion stops at this distance from the target."
+						>
+							<option value={1}>Depth 1</option>
+							<option value={2}>Depth 2</option>
+							<option value={3}>Depth 3</option>
+						</select>
+						<button
+							type="button"
+							aria-label="Filters"
+							aria-expanded={filterOpen}
+							onClick={() => setFilterOpen((open) => !open)}
+							className="list-none cursor-pointer rounded-lg p-1.5 text-xs"
+							style={{
+								background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
+								border: '1px solid var(--border)',
+								color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
+							}}
+							title={activeFilterCount ? `${activeFilterCount} active filters` : 'Filters'}
+						>
+							<Filter className="h-3.5 w-3.5" />
+						</button>
+					</div>
+				)}
 			</div>
 			{filterOpen && (
 				<div
