@@ -1,4 +1,5 @@
 import { type GraphEdge, type SupportedNetwork, explorerURL } from '../services/api';
+import { formatObservationTime } from '../services/format';
 
 export function TransferInspector({
 	edge,
@@ -29,10 +30,7 @@ export function TransferInspector({
 		['Block hash', edge.blockHash || 'Unavailable from source'],
 		['Finality', edge.provisional ? 'Provisional observation' : 'Finalized observation'],
 		['Source', edge.sourceName],
-		[
-			'Retrieved',
-			edge.retrievedAt ? new Date(Number(edge.retrievedAt) * 1000).toISOString() : 'Unknown',
-		],
+		['Retrieved', edge.retrievedAt ? formatObservationTime(edge.retrievedAt) : 'Unknown'],
 	];
 	return (
 		<section className="space-y-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>

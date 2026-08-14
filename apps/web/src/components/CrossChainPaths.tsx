@@ -6,11 +6,7 @@ import {
 	explorerURL,
 	networkDetails,
 } from '../services/api';
-
-const observedAt = (timestamp: bigint) => {
-	const date = new Date(Number(timestamp) * 1000);
-	return Number.isFinite(date.getTime()) ? date.toISOString() : 'Unknown observation time';
-};
+import { formatObservationTime } from '../services/format';
 
 const elapsed = (source: bigint, destination: bigint) => {
 	const seconds = Number(destination - source);
@@ -71,7 +67,8 @@ export const CrossChainPaths: React.FC<{
 								Source transaction <ExternalLink className="h-3 w-3 shrink-0" />
 							</a>
 							<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
-								{observedAt(transition.sourceTimestamp)} · bridge {transition.sourceBridgeAddress}
+								{formatObservationTime(transition.sourceTimestamp)} · bridge{' '}
+								{transition.sourceBridgeAddress}
 							</p>
 							<a
 								href={explorerURL(destinationNetwork, 'tx', transition.destinationTransactionHash)}
@@ -83,7 +80,7 @@ export const CrossChainPaths: React.FC<{
 								Destination transaction <ExternalLink className="h-3 w-3 shrink-0" />
 							</a>
 							<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
-								{observedAt(transition.destinationTimestamp)} · bridge{' '}
+								{formatObservationTime(transition.destinationTimestamp)} · bridge{' '}
 								{transition.destinationBridgeAddress}
 							</p>
 						</div>
