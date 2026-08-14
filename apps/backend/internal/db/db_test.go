@@ -241,7 +241,7 @@ func TestTraceJobIntegration(t *testing.T) {
 	if err != nil || stored.ID != completed.ID || stored.Status != "succeeded" {
 		t.Fatalf("stored job = %#v, err = %v", stored, err)
 	}
-	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', result_json = NULL WHERE id = $1`, completed.ID); err != nil {
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', result_json = NULL, completed_at = now() WHERE id = $1`, completed.ID); err != nil {
 		t.Fatal(err)
 	}
 	failed, err := database.EnqueueTraceJob(ctx, query, false, 2, 2)
@@ -257,6 +257,27 @@ func TestTraceJobIntegration(t *testing.T) {
 	}
 	if retried.Status != "queued" {
 		t.Fatalf("explicit retry = %#v", retried)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', completed_at = now() - interval '16 minutes' WHERE id = $1`, otherNetwork.ID); err != nil {
+		t.Fatal(err)
+	}
+	if stats, err := database.TraceJobStats(ctx, baseQuery.Network); err != nil || stats.Failed != 0 {
+		t.Fatalf("old failed jobs must not degrade health: %#v err=%v", stats, err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET completed_at = now() - interval '1 minute' WHERE id = $1`, otherNetwork.ID); err != nil {
+		t.Fatal(err)
+	}
+	if stats, err := database.TraceJobStats(ctx, baseQuery.Network); err != nil || stats.Failed != 1 {
+		t.Fatalf("recent failed jobs must be visible: %#v err=%v", stats, err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE trace_jobs SET completed_at = now() - interval '25 hours' WHERE id = $1`, otherNetwork.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.PruneFinishedTraceJobs(ctx, baseQuery.Network, 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.TraceJob(ctx, baseQuery); !errors.Is(err, ErrTraceJobNotFound) {
+		t.Fatalf("expired finished job was retained: %v", err)
 	}
 	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "test", Address: "other-trace-job", Direction: "both", Limit: 1}, false, 1, 2); !errors.Is(err, ErrTraceQueueFull) {
 		t.Fatalf("queue capacity error = %v", err)
@@ -342,6 +363,15 @@ func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
 	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM trace_jobs`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "network-a", Address: "capacity-a", Direction: "both", Limit: 1}, false, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "network-b", Address: "capacity-b", Direction: "both", Limit: 1}, false, 1, 1); err != nil {
+		t.Fatalf("network queues must not consume one another's capacity: %v", err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM trace_jobs`); err != nil {
+		t.Fatal(err)
+	}
 
 	start = make(chan struct{})
 	errs = make(chan error, 2)
@@ -369,6 +399,15 @@ func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
 	}
 	if accepted != 1 || rejected != 1 {
 		t.Fatalf("queue capacity accepted=%d rejected=%d", accepted, rejected)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM trace_jobs`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "network-a", Address: "client-capacity-a", Direction: "both", Limit: 1, ClientKey: "client-a"}, false, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.EnqueueTraceJob(ctx, TraceJobQuery{Network: "network-b", Address: "client-capacity-b", Direction: "both", Limit: 1, ClientKey: "client-a"}, false, 1, 1); err != nil {
+		t.Fatalf("a client budget must be scoped to its network: %v", err)
 	}
 	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM trace_jobs`); err != nil {
 		t.Fatal(err)

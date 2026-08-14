@@ -77,7 +77,6 @@ func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service,
 }
 
 func (s *Server) queueClientKey(ctx context.Context) string {
-	// ponytail: reuses the required server-only provider key; rotating it only resets the five-minute queue accounting window.
 	mac := hmac.New(sha256.New, s.queueClientSecret)
 	_, _ = mac.Write([]byte(clientKey(ctx)))
 	return hex.EncodeToString(mac.Sum(nil))
@@ -191,25 +190,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func healthAlerts(networks []healthNetwork, runtimes map[pb.Network]NetworkRuntime) []HealthAlert {
 	alerts := make([]HealthAlert, 0)
-	capacity := 0
-	var queued int64
-	for _, runtime := range runtimes {
-		if runtime.Queue != nil && runtime.Queue.Capacity() > 0 {
-			capacity = runtime.Queue.Capacity()
-			break
+	for _, network := range networks {
+		capacity := queueCapacity(network.Network, runtimes)
+		if capacity > 0 && network.Queue.Queued >= int64(capacity) {
+			alerts = append(alerts, HealthAlert{Code: "trace_queue_full", Severity: "critical", Network: network.Network, Message: "Trace queue for this network is at capacity; new investigations are rejected."})
+		} else if capacity > 0 && network.Queue.Queued*100 >= int64(capacity*80) {
+			alerts = append(alerts, HealthAlert{Code: "trace_queue_near_capacity", Severity: "warning", Network: network.Network, Message: "Trace queue for this network is at least 80% full."})
 		}
-	}
-	for _, network := range networks {
-		queued += network.Queue.Queued
-	}
-	if capacity > 0 && queued >= int64(capacity) {
-		alerts = append(alerts, HealthAlert{Code: "trace_queue_full", Severity: "critical", Message: "Trace queue is at capacity; new investigations are rejected."})
-	} else if capacity > 0 && queued*100 >= int64(capacity*80) {
-		alerts = append(alerts, HealthAlert{Code: "trace_queue_near_capacity", Severity: "warning", Message: "Trace queue is at least 80% full."})
-	}
-	for _, network := range networks {
 		if network.Queue.Failed > 0 {
-			alerts = append(alerts, HealthAlert{Code: "trace_jobs_failed", Severity: "warning", Network: network.Network, Message: "One or more trace jobs require a user retry."})
+			alerts = append(alerts, HealthAlert{Code: "trace_jobs_failed", Severity: "warning", Network: network.Network, Message: "One or more trace jobs failed in the last 15 minutes and require a user retry."})
 		}
 		for _, provider := range network.Providers {
 			if provider.LastFailureAt != nil && (provider.LastSuccessAt == nil || provider.LastFailureAt.After(*provider.LastSuccessAt)) {
@@ -218,6 +207,15 @@ func healthAlerts(networks []healthNetwork, runtimes map[pb.Network]NetworkRunti
 		}
 	}
 	return alerts
+}
+
+func queueCapacity(network string, runtimes map[pb.Network]NetworkRuntime) int {
+	for _, runtime := range runtimes {
+		if runtime.Engine != nil && runtime.Engine.Network() == network && runtime.Queue != nil {
+			return runtime.Queue.Capacity()
+		}
+	}
+	return 0
 }
 
 func shortAddress(address string) string {

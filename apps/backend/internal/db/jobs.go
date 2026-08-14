@@ -10,6 +10,7 @@ import (
 )
 
 const traceResultCacheTTL = 5 * time.Minute
+const traceFailureWindow = 15 * time.Minute
 
 var (
 	ErrTraceQueueFull       = errors.New("trace queue is full")
@@ -41,7 +42,9 @@ func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry boo
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", int64(807_841)); err != nil {
+	// ponytail: per-network lock preserves a strict bounded queue; replace it
+	// with token rows only if one network's enqueue rate becomes a bottleneck.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 807841))`, query.Network); err != nil {
 		return nil, err
 	}
 	var exists bool
@@ -50,14 +53,14 @@ func (d *DB) EnqueueTraceJob(ctx context.Context, query TraceJobQuery, retry boo
 	}
 	if !exists {
 		var queued int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs WHERE status = 'queued'`).Scan(&queued); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs WHERE network = $1 AND status = 'queued'`, query.Network).Scan(&queued); err != nil {
 			return nil, err
 		}
 		if queued >= maxQueued {
 			return nil, ErrTraceQueueFull
 		}
 		var clientQueued int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs WHERE status = 'queued' AND client_key = $1`, query.ClientKey).Scan(&clientQueued); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trace_jobs WHERE network = $1 AND status = 'queued' AND client_key = $2`, query.Network, query.ClientKey).Scan(&clientQueued); err != nil {
 			return nil, err
 		}
 		if clientQueued >= maxQueuedPerClient {
@@ -115,7 +118,7 @@ type TraceJobStats struct {
 
 func (d *DB) TraceJobStats(ctx context.Context, network string) (TraceJobStats, error) {
 	stats := TraceJobStats{}
-	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed') FROM trace_jobs WHERE network = $1`, network).Scan(&stats.Queued, &stats.Running, &stats.Failed)
+	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed' AND completed_at >= now() - $2::interval) FROM trace_jobs WHERE network = $1`, network, traceFailureWindow.String()).Scan(&stats.Queued, &stats.Running, &stats.Failed)
 	return stats, err
 }
 
@@ -150,7 +153,12 @@ func (d *DB) CompleteTraceJob(ctx context.Context, id int64, result []byte) erro
 }
 
 func (d *DB) FailTraceJob(ctx context.Context, id int64, message string) error {
-	_, err := d.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', error_message = $2, lease_expires_at = NULL, updated_at = now() WHERE id = $1 AND status = 'running'`, id, message)
+	_, err := d.SQL.ExecContext(ctx, `UPDATE trace_jobs SET status = 'failed', error_message = $2, lease_expires_at = NULL, completed_at = now(), updated_at = now() WHERE id = $1 AND status = 'running'`, id, message)
+	return err
+}
+
+func (d *DB) PruneFinishedTraceJobs(ctx context.Context, network string, retention time.Duration) error {
+	_, err := d.SQL.ExecContext(ctx, `DELETE FROM trace_jobs WHERE network = $1 AND status IN ('succeeded', 'failed') AND completed_at < now() - $2::interval`, network, retention.String())
 	return err
 }
 

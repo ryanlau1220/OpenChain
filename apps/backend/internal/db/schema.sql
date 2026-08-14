@@ -183,13 +183,16 @@ ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS client_key TEXT NOT NULL 
 ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS counterparty_limit INTEGER NOT NULL DEFAULT 10;
 ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS ranking TEXT NOT NULL DEFAULT 'most_recent';
 ALTER TABLE public.trace_jobs ADD COLUMN IF NOT EXISTS max_depth INTEGER NOT NULL DEFAULT 1;
+UPDATE public.trace_jobs SET completed_at = updated_at WHERE status = 'failed' AND completed_at IS NULL;
 ALTER TABLE public.trace_jobs DROP CONSTRAINT IF EXISTS trace_jobs_network_address_direction_cursor_page_size_key;
 ALTER TABLE public.trace_jobs DROP CONSTRAINT IF EXISTS trace_jobs_network_address_direction_cursor_page_size_count_key;
 DROP INDEX IF EXISTS public.trace_jobs_query_idx;
 CREATE UNIQUE INDEX trace_jobs_query_idx ON public.trace_jobs (network, address, direction, cursor, page_size, counterparty_limit, ranking, max_depth);
 
 CREATE INDEX IF NOT EXISTS trace_jobs_queued_idx ON public.trace_jobs (created_at) WHERE status = 'queued';
-CREATE INDEX IF NOT EXISTS trace_jobs_client_queued_idx ON public.trace_jobs (client_key) WHERE status = 'queued';
+DROP INDEX IF EXISTS trace_jobs_client_queued_idx;
+CREATE INDEX IF NOT EXISTS trace_jobs_network_client_queued_idx ON public.trace_jobs (network, client_key) WHERE status = 'queued';
+CREATE INDEX IF NOT EXISTS trace_jobs_finished_retention_idx ON public.trace_jobs (network, completed_at) WHERE status IN ('succeeded', 'failed');
 DROP INDEX IF EXISTS public.trace_jobs_one_running_idx;
 CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_one_running_per_network_idx ON public.trace_jobs (network) WHERE status = 'running';
 

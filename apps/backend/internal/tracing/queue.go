@@ -18,6 +18,8 @@ const (
 	traceJobTimeout          = time.Minute
 	traceJobLease            = 2 * time.Minute
 	traceProviderMaxAttempts = 3
+	traceJobRetention        = 24 * time.Hour
+	traceJobPruneInterval    = 5 * time.Minute
 )
 
 var ErrQueueFull = db.ErrTraceQueueFull
@@ -31,6 +33,7 @@ type Queue struct {
 	maxQueuedPerClient int
 	done               chan struct{}
 	start              sync.Once
+	lastPrunedAt       time.Time
 }
 
 func NewQueue(engine *Engine, database *db.DB, maxQueued, maxQueuedPerClient int) *Queue {
@@ -40,22 +43,24 @@ func NewQueue(engine *Engine, database *db.DB, maxQueued, maxQueuedPerClient int
 func (q *Queue) Start(ctx context.Context) {
 	q.start.Do(func() {
 		q.done = make(chan struct{})
-		// One worker per network is intentional: each adapter also permits one
-		// in-flight provider request, keeping unknown provider plans within quota.
+		// Workers are sequential per network; each adapter enforces the provider's
+		// own request gap, so completed jobs do not wait for the next poll tick.
 		go func() {
 			defer close(q.done)
 			if q.database == nil {
 				return
 			}
-			q.runOnce(ctx)
-			ticker := time.NewTicker(traceWorkerPollInterval)
-			defer ticker.Stop()
 			for {
+				q.pruneFinished(ctx)
+				if q.runOnce(ctx) {
+					continue
+				}
+				timer := time.NewTimer(traceWorkerPollInterval)
 				select {
 				case <-ctx.Done():
+					timer.Stop()
 					return
-				case <-ticker.C:
-					q.runOnce(ctx)
+				case <-timer.C:
 				}
 			}
 		}()
@@ -130,8 +135,7 @@ func (q *Queue) Stats(ctx context.Context) (Stats, error) {
 	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed}, err
 }
 
-// Capacity is the durable shared queue limit. It is exposed only to
-// operational health reporting; callers cannot change the queue policy.
+// Capacity is the durable per-network queue limit.
 func (q *Queue) Capacity() int {
 	if q == nil {
 		return 0
@@ -139,18 +143,28 @@ func (q *Queue) Capacity() int {
 	return q.maxQueued
 }
 
-func (q *Queue) runOnce(ctx context.Context) {
+func (q *Queue) pruneFinished(ctx context.Context) {
+	if time.Since(q.lastPrunedAt) < traceJobPruneInterval {
+		return
+	}
+	q.lastPrunedAt = time.Now()
+	if err := q.database.PruneFinishedTraceJobs(ctx, q.engine.Network(), traceJobRetention); err != nil {
+		slog.Error("prune finished trace jobs", "error", err)
+	}
+}
+
+func (q *Queue) runOnce(ctx context.Context) bool {
 	if err := q.database.RecoverExpiredTraceJobs(ctx, q.engine.Network()); err != nil {
 		slog.Error("recover trace jobs", "error", err)
-		return
+		return false
 	}
 	job, err := q.database.ClaimTraceJob(ctx, q.engine.Network(), traceJobLease)
 	if err != nil {
 		slog.Error("claim trace job", "error", err)
-		return
+		return false
 	}
 	if job == nil {
-		return
+		return false
 	}
 
 	jobContext, cancel := context.WithTimeout(ctx, traceJobTimeout)
@@ -164,7 +178,7 @@ func (q *Queue) runOnce(ctx context.Context) {
 			if requeueErr := q.database.RequeueTraceJob(writeContext, job.ID); requeueErr != nil {
 				slog.Error("requeue interrupted trace job", "job_id", job.ID, "error", requeueErr)
 			}
-			return
+			return true
 		}
 		slog.Warn("trace_job_failed", "job_id", job.ID, "network", job.Query.Network, "error", err)
 		message := "Trace retrieval failed: " + err.Error()
@@ -174,19 +188,20 @@ func (q *Queue) runOnce(ctx context.Context) {
 		if failErr := q.database.FailTraceJob(writeContext, job.ID, message); failErr != nil {
 			slog.Error("mark trace job failed", "job_id", job.ID, "error", failErr)
 		}
-		return
+		return true
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		slog.Error("encode trace job result", "job_id", job.ID, "error", err)
 		_ = q.database.FailTraceJob(ctx, job.ID, "Trace retrieval did not complete. Search again to retry.")
-		return
+		return true
 	}
 	if err := q.database.CompleteTraceJob(ctx, job.ID, encoded); err != nil {
 		slog.Error("complete trace job", "job_id", job.ID, "error", err)
-		return
+		return true
 	}
 	slog.Info("trace_job_completed", "job_id", job.ID, "network", job.Query.Network, "nodes", result.TotalNodes, "edges", result.TotalEdges)
+	return true
 }
 
 func (q *Queue) resolveWithRetry(ctx context.Context, job *db.TraceJob) (*GraphResult, error) {

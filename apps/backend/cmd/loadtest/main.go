@@ -143,7 +143,7 @@ func main() {
 	cancel()
 	chain := &stubChain{delay: time.Duration(positiveEnv("OPENCHAIN_LOAD_TEST_PROVIDER_DELAY_MS", 250)) * time.Millisecond}
 	engine := tracing.NewEngine(chain, nil, nil)
-	queue := tracing.NewQueue(engine, database, positiveEnv("OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS", 4), positiveEnv("OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_CLIENT", 2))
+	queue := tracing.NewQueue(engine, database, positiveEnv("OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_NETWORK", 4), positiveEnv("OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_CLIENT_PER_NETWORK", 2))
 	workerContext, stopWorker := context.WithCancel(context.Background())
 	queue.Start(workerContext)
 	server := api.NewServer(map[pb.Network]api.NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine, Queue: queue}}, nil, cfg.WebOrigin, positiveEnv("OPENCHAIN_LOAD_TEST_REQUESTS_PER_MINUTE", 8), true, "openchain-load-test")

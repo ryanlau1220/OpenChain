@@ -183,21 +183,26 @@ func TestHealthAlertsExposeQueueAndProviderThresholds(t *testing.T) {
 			LastFailureAt: &failedAt,
 		}},
 	}}, runtimes)
-	if len(alerts) != 3 || alerts[0].Code != "trace_queue_full" || alerts[0].Severity != "critical" || alerts[1].Code != "trace_jobs_failed" || alerts[2].Code != "provider_unhealthy" {
+	if len(alerts) != 3 || alerts[0].Code != "trace_queue_full" || alerts[0].Severity != "critical" || alerts[0].Network != "ethereum-mainnet" || alerts[1].Code != "trace_jobs_failed" || alerts[2].Code != "provider_unhealthy" {
 		t.Fatalf("alerts = %#v", alerts)
 	}
 }
 
-func TestHealthAlertsUseSharedQueueCapacity(t *testing.T) {
+func TestHealthAlertsUsePerNetworkQueueCapacity(t *testing.T) {
 	registry := labels.NewService(nil)
-	runtime := testNetworks(registry)[pb.Network_NETWORK_ETHEREUM_MAINNET]
-	runtime.Queue = tracing.NewQueue(runtime.Engine, nil, 10, 1)
+	runtimes := testNetworks(registry)
+	ethereum := runtimes[pb.Network_NETWORK_ETHEREUM_MAINNET]
+	ethereum.Queue = tracing.NewQueue(ethereum.Engine, nil, 10, 1)
+	runtimes[pb.Network_NETWORK_ETHEREUM_MAINNET] = ethereum
+	base := runtimes[pb.Network_NETWORK_BASE_MAINNET]
+	base.Queue = tracing.NewQueue(base.Engine, nil, 10, 1)
+	runtimes[pb.Network_NETWORK_BASE_MAINNET] = base
 	alerts := healthAlerts([]healthNetwork{
-		{Network: "ethereum-mainnet", Queue: tracing.Stats{Enabled: true, Queued: 5}},
+		{Network: "ethereum-mainnet", Queue: tracing.Stats{Enabled: true, Queued: 10}},
 		{Network: "base-mainnet", Queue: tracing.Stats{Enabled: true, Queued: 5}},
-	}, map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: runtime})
-	if len(alerts) != 1 || alerts[0].Code != "trace_queue_full" || alerts[0].Network != "" {
-		t.Fatalf("shared queue alerts = %#v", alerts)
+	}, runtimes)
+	if len(alerts) != 1 || alerts[0].Code != "trace_queue_full" || alerts[0].Network != "ethereum-mainnet" {
+		t.Fatalf("per-network queue alerts = %#v", alerts)
 	}
 }
 

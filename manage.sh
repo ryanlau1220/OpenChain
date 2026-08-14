@@ -54,8 +54,8 @@ backup_database() {
 
 case "$1" in
     dev)
-        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${BASE_MAINNET_RPC_URL:-}" ] || [ -z "${SOLANA_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ] || [ -z "${BLOCKSCOUT_API_KEY:-}" ] || [ -z "${TRONGRID_API_KEY:-}" ] || [ -z "${TONAPI_KEY:-}" ] || [ -z "${BLOCKFROST_PROJECT_ID:-}" ]; then
-            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL, BASE_MAINNET_RPC_URL, SOLANA_MAINNET_RPC_URL, ETHERSCAN_API_KEY, BLOCKSCOUT_API_KEY, TRONGRID_API_KEY, TONAPI_KEY, and BLOCKFROST_PROJECT_ID are required.${RESET}"
+        if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${BASE_MAINNET_RPC_URL:-}" ] || [ -z "${SOLANA_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ] || [ -z "${BLOCKSCOUT_API_KEY:-}" ] || [ -z "${TRONGRID_API_KEY:-}" ] || [ -z "${TONAPI_KEY:-}" ] || [ -z "${BLOCKFROST_PROJECT_ID:-}" ] || [ -z "${QUEUE_CLIENT_SECRET:-}" ]; then
+            echo -e "${RED}ETHEREUM_MAINNET_RPC_URL, BASE_MAINNET_RPC_URL, SOLANA_MAINNET_RPC_URL, ETHERSCAN_API_KEY, BLOCKSCOUT_API_KEY, TRONGRID_API_KEY, TONAPI_KEY, BLOCKFROST_PROJECT_ID, and QUEUE_CLIENT_SECRET are required.${RESET}"
             exit 1
         fi
 
@@ -245,8 +245,8 @@ case "$1" in
         GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go build -o "${load_test_binary}" ./apps/backend/cmd/loadtest
         OPENCHAIN_LOAD_TEST_PORT="${load_test_port}" \
             OPENCHAIN_LOAD_TEST_REQUESTS_PER_MINUTE=8 \
-            OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS=4 \
-            OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_CLIENT=2 \
+            OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_NETWORK=4 \
+            OPENCHAIN_LOAD_TEST_MAX_QUEUED_JOBS_PER_CLIENT_PER_NETWORK=2 \
             OPENCHAIN_LOAD_TEST_PROVIDER_DELAY_MS=250 \
             "${load_test_binary}" >/tmp/openchain-loadtest.log 2>&1 &
         load_test_pid="$!"

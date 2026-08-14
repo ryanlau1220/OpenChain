@@ -57,10 +57,10 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 		if errors.Is(err, tracing.ErrQueueFull) {
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("this network trace queue is full; try again shortly"))
 		}
 		if errors.Is(err, tracing.ErrClientQueueFull) {
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("your trace queue is full; wait for a queued trace to start"))
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("your queue share for this network is full; wait for a queued trace to start"))
 		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
@@ -103,10 +103,10 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 		if errors.Is(err, tracing.ErrQueueFull) {
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("trace queue is full; try again shortly"))
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("this network trace queue is full; try again shortly"))
 		}
 		if errors.Is(err, tracing.ErrClientQueueFull) {
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("your trace queue is full; wait for a queued trace to start"))
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("your queue share for this network is full; wait for a queued trace to start"))
 		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
