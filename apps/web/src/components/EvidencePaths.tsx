@@ -1,11 +1,13 @@
 import { Link2, Pin } from 'lucide-react';
 import type React from 'react';
+import { useState } from 'react';
 import {
 	type GraphEdge,
 	type GraphNode,
 	type SupportedNetwork,
 	explorerURL,
 } from '../services/api';
+import { formatObservationTime } from '../services/format';
 
 export type EvidencePath = {
 	label: string;
@@ -15,11 +17,6 @@ export type EvidencePath = {
 	asset: string;
 	amount: string;
 	provenance: string;
-};
-
-const evidenceTime = (timestamp: bigint) => {
-	const date = new Date(Number(timestamp) * 1000);
-	return Number.isFinite(date.getTime()) ? date.toISOString() : 'Unknown observation time';
 };
 
 export function evidencePaths(
@@ -45,7 +42,7 @@ export function evidencePaths(
 					timestamp: edge.lastTxTimestamp,
 					asset: edge.asset?.symbol || 'Unknown asset',
 					amount: edge.amountFormatted || `${edge.amountBaseUnits || 'Unknown amount'} raw units`,
-					provenance: `${edge.sourceName || 'Unknown provider'} · retrieved ${evidenceTime(edge.retrievedAt)}`,
+					provenance: `${edge.sourceName || 'Unknown provider'} · retrieved ${formatObservationTime(edge.retrievedAt)}`,
 				},
 			];
 		});
@@ -69,12 +66,15 @@ export const EvidencePaths: React.FC<{
 	pinnedTransferIds: readonly string[];
 	onTogglePin: (transferId: string) => void;
 }> = ({ nodes, edges, network, pinnedTransferIds, onTogglePin }) => {
+	const [showAll, setShowAll] = useState(false);
 	const paths = orderedEvidencePaths(evidencePaths(nodes, edges), pinnedTransferIds);
 	const pinned = new Set(pinnedTransferIds);
-	const visiblePaths = [
-		...paths.filter((path) => pinned.has(path.transferId)),
-		...paths.filter((path) => !pinned.has(path.transferId)).slice(0, 5),
-	];
+	const visiblePaths = showAll
+		? paths
+		: [
+				...paths.filter((path) => pinned.has(path.transferId)),
+				...paths.filter((path) => !pinned.has(path.transferId)).slice(0, 5),
+			];
 	if (visiblePaths.length === 0) return null;
 	return (
 		<section className="space-y-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
@@ -129,13 +129,33 @@ export const EvidencePaths: React.FC<{
 						{path.asset} · {path.amount}
 					</p>
 					<p className="mt-1 text-[9px]" style={{ color: 'var(--ink-3)' }}>
-						Observed {evidenceTime(path.timestamp)}
+						Observed {formatObservationTime(path.timestamp)}
 					</p>
 					<p className="mt-1 break-all text-[9px]" style={{ color: 'var(--ink-3)' }}>
 						Provenance: {path.provenance}
 					</p>
 				</div>
 			))}
+			{paths.length > visiblePaths.length && (
+				<button
+					type="button"
+					onClick={() => setShowAll(true)}
+					className="w-full rounded-lg border px-2 py-1.5 text-[10px] font-medium"
+					style={{ borderColor: 'var(--border)', color: 'var(--accent)' }}
+				>
+					Show all {paths.length} evidence paths
+				</button>
+			)}
+			{showAll && paths.length > 5 && (
+				<button
+					type="button"
+					onClick={() => setShowAll(false)}
+					className="w-full text-[10px]"
+					style={{ color: 'var(--ink-3)' }}
+				>
+					Show fewer evidence paths
+				</button>
+			)}
 		</section>
 	);
 };
