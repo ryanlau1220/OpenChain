@@ -103,7 +103,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 		<div className="space-y-3 text-xs rise-in">
 			{/* Address header */}
 			<div
-				className="p-3 rounded-xl space-y-2"
+				className="sticky top-0 z-10 p-3 rounded-xl space-y-2"
 				style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
 			>
 				<div className="flex items-center justify-between">
@@ -134,7 +134,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 							{copied ? (
 								<>
 									<Check className="w-3 h-3 text-emerald-600" />
-									<span>Copied</span>
+									<output aria-live="polite">Copied</output>
 								</>
 							) : (
 								<>

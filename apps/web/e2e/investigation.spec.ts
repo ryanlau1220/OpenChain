@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByPlaceholder('Search target address')).toBeVisible();
+	await page.getByRole('tab', { name: 'Case' }).click();
 	await expect(page.getByLabel('Case title')).toBeVisible();
 });
 
@@ -94,6 +95,8 @@ test('persists local investigation notes across a reload', async ({ page }) => {
 		.toBe('E2E investigation');
 	await page.reload();
 
+	await page.getByRole('tab', { name: 'Case' }).click();
+	await expect(page.getByRole('tab', { name: 'Case' })).toHaveAttribute('aria-selected', 'true');
 	await expect(page.getByLabel('Case title')).toHaveValue('E2E investigation');
 	await expect(page.getByLabel('Case notes')).toHaveValue('Verified in Chromium.');
 });
@@ -117,6 +120,35 @@ test('provides focused graph filters without leaving the investigation workspace
 	await expect(page.getByLabel('Asset')).toBeVisible();
 	await expect(page.getByLabel('Minimum amount')).toBeVisible();
 	await expect(page.getByLabel('Transfer type')).toBeVisible();
+});
+
+test('restores a shareable investigation scope from the URL', async ({ page }) => {
+	const root = '0x0000000000000000000000000000000000000001';
+	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) =>
+		route.fulfill(
+			connectJSON({
+				seedAddress: root,
+				nodes: [{ id: root, label: 'Shared target', isSeed: true }],
+				sourceStatus: { source: 'test-fixture', isComplete: true },
+			}),
+		),
+	);
+	await page.route('**/openchain.v1.LookupService/LookupAddress', (route) =>
+		route.fulfill(connectJSON({})),
+	);
+	await page.route('**/openchain.v1.LabelService/GetLabels', (route) =>
+		route.fulfill(connectJSON({})),
+	);
+	await page.goto(
+		`/?network=base-mainnet&address=${root}&counterparties=5&ranking=2&direction=3&depth=2`,
+	);
+	await expect(page.getByLabel('Network')).toContainText('Base Mainnet');
+	await expect(page.getByPlaceholder('Search target address')).toHaveValue(root);
+	await page.getByRole('button', { name: 'Filters' }).click();
+	await expect(page.getByLabel('Counterparties per address')).toHaveValue('5');
+	await expect(page.getByLabel('Counterparty ranking')).toHaveValue('2');
+	await expect(page.getByLabel('Investigation direction')).toHaveValue('3');
+	await expect(page.getByLabel('Maximum graph depth')).toHaveValue('2');
 });
 
 test('guides source and destination tracing from the target address', async ({ page }) => {
@@ -218,7 +250,9 @@ test('replays a deterministic queued trace through finding, package export, and 
 	await page.getByPlaceholder('Search target address').fill(root);
 	await page.getByLabel('Investigate address').click();
 	await expect(page.getByText('Retrieving address flow…')).toBeVisible();
+	await page.getByRole('tab', { name: /Findings/ }).click();
 	await expect(page.getByText('Fan-out dispersion lead')).toBeVisible({ timeout: 10_000 });
+	expect(await page.locator('canvas').first().evaluate((canvas) => canvas.getBoundingClientRect().height)).toBeGreaterThan(200);
 	expect(statusRequests).toBe(1);
 	await page.getByRole('button', { name: 'Trace source of funds' }).click();
 	await expect.poll(() => statusRequests, { timeout: 10_000 }).toBe(2);
@@ -226,6 +260,7 @@ test('replays a deterministic queued trace through finding, package export, and 
 	await page.getByRole('button', { name: 'Expand' }).click();
 	await expect.poll(() => expansionRequests).toBe(1);
 	await expect(page.getByRole('button', { name: 'Expand' })).toBeDisabled();
+	await page.getByRole('tab', { name: 'Case' }).click();
 	const download = page.waitForEvent('download');
 	await page.getByRole('button', { name: 'Package' }).click();
 	expect((await download).suggestedFilename()).toBe('openchain-evidence-package.json');

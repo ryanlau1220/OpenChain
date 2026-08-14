@@ -1,4 +1,4 @@
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, LoaderCircle, Search } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -15,6 +15,7 @@ interface HeaderProps {
 	onSearch: (address: string, detectedNetwork?: SupportedNetwork) => void;
 	network: SupportedNetwork;
 	onNetworkChange: (network: SupportedNetwork) => void;
+	loading?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,11 +23,13 @@ export const Header: React.FC<HeaderProps> = ({
 	onSearch,
 	network,
 	onNetworkChange,
+	loading = false,
 }) => {
 	const [singleInput, setSingleInput] = useState(currentAddress);
 	const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
 	const [networkQuery, setNetworkQuery] = useState('');
 	const networkMenuRef = useRef<HTMLDivElement>(null);
+	const networkTriggerRef = useRef<HTMLButtonElement>(null);
 
 	useEffect(() => {
 		if (!networkMenuOpen) return;
@@ -35,6 +38,16 @@ export const Header: React.FC<HeaderProps> = ({
 		};
 		document.addEventListener('pointerdown', closeOutsideMenu);
 		return () => document.removeEventListener('pointerdown', closeOutsideMenu);
+	}, [networkMenuOpen]);
+	useEffect(() => {
+		if (!networkMenuOpen) return;
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape') return;
+			setNetworkMenuOpen(false);
+			networkTriggerRef.current?.focus();
+		};
+		document.addEventListener('keydown', closeOnEscape);
+		return () => document.removeEventListener('keydown', closeOnEscape);
 	}, [networkMenuOpen]);
 	const inputNetwork = (value: string) => {
 		const detected = detectAddressNetwork(value);
@@ -86,6 +99,9 @@ export const Header: React.FC<HeaderProps> = ({
 			}}
 			className="px-5 py-3 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-50 gap-3"
 		>
+			<a href="#investigation-workspace" className="sr-only focus:not-sr-only">
+				Skip to investigation workspace
+			</a>
 			<div className="flex items-center gap-3 shrink-0">
 				<img
 					src="/logo.png"
@@ -105,6 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
 				>
 					<div ref={networkMenuRef} className="relative shrink-0">
 						<button
+							ref={networkTriggerRef}
 							type="button"
 							aria-label="Network"
 							aria-expanded={networkMenuOpen}
@@ -173,18 +190,27 @@ export const Header: React.FC<HeaderProps> = ({
 					</div>
 					<input
 						type="text"
+						name="address"
+						autoComplete="off"
+						spellCheck={false}
+						aria-label="Search target address"
 						value={singleInput}
 						onChange={(event) => handleInputChange(event.target.value)}
 						placeholder="Search target address"
-						className="min-w-0 flex-1 bg-transparent px-3 font-mono text-sm outline-none"
+						className="min-w-0 flex-1 bg-transparent px-3 font-mono text-sm"
 					/>
 					<button
 						type="submit"
+						disabled={loading}
 						className="btn-primary m-1 px-3"
 						title="Investigate Address"
 						aria-label="Investigate address"
 					>
-						<Search className="h-4 w-4" />
+						{loading ? (
+							<LoaderCircle className="h-4 w-4 animate-spin" />
+						) : (
+							<Search className="h-4 w-4" />
+						)}
 					</button>
 				</div>
 			</form>

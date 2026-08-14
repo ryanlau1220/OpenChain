@@ -36,7 +36,9 @@ export const CaseWorkspace: React.FC<Props> = ({
 	const fileInput = useRef<HTMLInputElement>(null);
 	const [annotation, setAnnotation] = useState('');
 	const [error, setError] = useState('');
+	const [notice, setNotice] = useState('');
 	const [exporting, setExporting] = useState(false);
+	const [showAllAnnotations, setShowAllAnnotations] = useState(false);
 	const update = (change: Partial<LocalCase>) =>
 		onChange({ ...caseFile, ...change, updatedAt: new Date().toISOString() });
 	const addAnnotation = () => {
@@ -61,8 +63,10 @@ export const CaseWorkspace: React.FC<Props> = ({
 			await parseEvidencePackage(content);
 			download('openchain-evidence-package.json', content, 'application/json');
 			setError('');
+			setNotice('Evidence package created and verified.');
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : 'Unable to create an evidence package.');
+			setNotice('');
 		} finally {
 			setExporting(false);
 		}
@@ -76,8 +80,10 @@ export const CaseWorkspace: React.FC<Props> = ({
 		try {
 			onImportEvidence(await parseEvidencePackage(await file.text()));
 			setError('');
+			setNotice('Evidence package verified and replayed locally.');
 		} catch {
 			setError('This evidence package is invalid or has been altered.');
+			setNotice('');
 		}
 	};
 	const printable = () => {
@@ -106,12 +112,16 @@ export const CaseWorkspace: React.FC<Props> = ({
 			</div>
 			<input
 				aria-label="Case title"
+				name="case-title"
+				autoComplete="off"
 				value={caseFile.title}
 				onChange={(event) => update({ title: event.target.value })}
 				className="prism-input text-xs font-medium"
 			/>
 			<textarea
 				aria-label="Case notes"
+				name="case-notes"
+				autoComplete="off"
 				value={caseFile.notes}
 				onChange={(event) => update({ notes: event.target.value })}
 				placeholder="Investigation notes…"
@@ -121,6 +131,8 @@ export const CaseWorkspace: React.FC<Props> = ({
 			<div className="space-y-1.5">
 				<input
 					aria-label="Annotation"
+					name="annotation"
+					autoComplete="off"
 					value={annotation}
 					onChange={(event) => setAnnotation(event.target.value)}
 					placeholder={
@@ -148,15 +160,24 @@ export const CaseWorkspace: React.FC<Props> = ({
 					<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
 						Not verified entity labels or rule-derived findings.
 					</p>
-					{caseFile.annotations.slice(-3).map((item) => (
-						<p key={item.id} className="text-[10px]" style={{ color: 'var(--ink-2)' }}>
-							<span className="font-mono">{item.target.kind}</span> · {item.note}
-						</p>
-					))}
+					{(showAllAnnotations ? caseFile.annotations : caseFile.annotations.slice(-3)).map(
+						(item) => (
+							<p key={item.id} className="text-[10px]" style={{ color: 'var(--ink-2)' }}>
+								<span className="font-mono">{item.target.kind}</span> · {item.note}
+							</p>
+						),
+					)}
 					{caseFile.annotations.length > 3 && (
-						<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
-							Showing the 3 most recent of {caseFile.annotations.length} annotations.
-						</p>
+						<button
+							type="button"
+							onClick={() => setShowAllAnnotations((showAll) => !showAll)}
+							className="text-[9px] font-medium"
+							style={{ color: 'var(--accent)' }}
+						>
+							{showAllAnnotations
+								? 'Show fewer annotations'
+								: `Show all ${caseFile.annotations.length} annotations`}
+						</button>
 					)}
 				</div>
 			)}
@@ -193,10 +214,18 @@ export const CaseWorkspace: React.FC<Props> = ({
 				type="file"
 				accept="application/json"
 				className="hidden"
-				onChange={(event) => void importFile(event.target.files?.[0])}
+				onChange={(event) => {
+					void importFile(event.target.files?.[0]);
+					event.target.value = '';
+				}}
 			/>
+			{notice && (
+				<output aria-live="polite" className="text-[10px]" style={{ color: '#047857' }}>
+					{notice}
+				</output>
+			)}
 			{error && (
-				<p className="text-[10px]" style={{ color: '#b91c1c' }}>
+				<p role="alert" className="text-[10px]" style={{ color: '#b91c1c' }}>
 					{error}
 				</p>
 			)}
