@@ -101,6 +101,9 @@ export type ClusteredGraph = {
 const shortAddress = (address: string) =>
 	address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
 
+export const isAbbreviatedAddressLabel = (label: string, address: string) =>
+	label.trim().replace('...', '…') === shortAddress(address);
+
 const formatTransferTime = (timestamp: bigint) => {
 	const date = new Date(Number(timestamp) * 1000);
 	if (!Number.isFinite(date.getTime())) return 'Unknown time';
@@ -690,7 +693,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 			const badge = cluster ? `${cluster.direction.toUpperCase()} CLUSTER` : nodeBadge(n);
 			const counts = nodeCounts.get(n.id) || { inbound: n.inTxCount, outbound: n.outTxCount };
 			const addressLabel = shortAddress(n.id);
-			const hasShortAddressLabel = n.label === addressLabel;
+			const hasShortAddressLabel = isAbbreviatedAddressLabel(n.label, n.id);
 			const displayLabel = cluster
 				? `${cluster.memberIds.length} counterparties\n${cluster.transferCount} transfers · ${formatRelationshipAmount(cluster.totalAmount, cluster.representative)}\nClick to expand`
 				: n.label || addressLabel;

@@ -5,11 +5,18 @@ import {
 	clusterLeafCounterparties,
 	filterGraphEdges,
 	flowNodePositions,
+	isAbbreviatedAddressLabel,
 	positionAddedNodes,
 	transferCountsByNode,
 } from './GraphCanvas';
 
 describe('aggregateGraphEdges', () => {
+	it('recognizes provider abbreviated address labels before showing a full address', () => {
+		const address = '0x08508cb9d8afe770470e5381ebe0766a18fe3b2d';
+		expect(isAbbreviatedAddressLabel('0x0850...3b2d', address)).toBe(true);
+		expect(isAbbreviatedAddressLabel('Named service', address)).toBe(false);
+	});
+
 	it('combines only transfers with the same direction and asset', () => {
 		const edges = [
 			{
