@@ -131,6 +131,44 @@ proto3.util.setEnumType(EntityType, "openchain.v1.EntityType", [
 ]);
 
 /**
+ * @generated from enum openchain.v1.LookupField
+ */
+export enum LookupField {
+  /**
+   * @generated from enum value: LOOKUP_FIELD_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: LOOKUP_FIELD_BALANCE = 1;
+   */
+  BALANCE = 1,
+
+  /**
+   * @generated from enum value: LOOKUP_FIELD_ACTIVITY = 2;
+   */
+  ACTIVITY = 2,
+
+  /**
+   * @generated from enum value: LOOKUP_FIELD_ENTITY_TYPE = 3;
+   */
+  ENTITY_TYPE = 3,
+
+  /**
+   * @generated from enum value: LOOKUP_FIELD_TRANSACTION_STATUS = 4;
+   */
+  TRANSACTION_STATUS = 4,
+}
+// Retrieve enum metadata with: proto3.getEnumType(LookupField)
+proto3.util.setEnumType(LookupField, "openchain.v1.LookupField", [
+  { no: 0, name: "LOOKUP_FIELD_UNSPECIFIED" },
+  { no: 1, name: "LOOKUP_FIELD_BALANCE" },
+  { no: 2, name: "LOOKUP_FIELD_ACTIVITY" },
+  { no: 3, name: "LOOKUP_FIELD_ENTITY_TYPE" },
+  { no: 4, name: "LOOKUP_FIELD_TRANSACTION_STATUS" },
+]);
+
+/**
  * @generated from message openchain.v1.SourceStatus
  */
 export class SourceStatus extends Message<SourceStatus> {
@@ -194,6 +232,55 @@ export class SourceStatus extends Message<SourceStatus> {
 
   static equals(a: SourceStatus | PlainMessage<SourceStatus> | undefined, b: SourceStatus | PlainMessage<SourceStatus> | undefined): boolean {
     return proto3.util.equals(SourceStatus, a, b);
+  }
+}
+
+/**
+ * @generated from message openchain.v1.LookupFieldStatus
+ */
+export class LookupFieldStatus extends Message<LookupFieldStatus> {
+  /**
+   * @generated from field: openchain.v1.LookupField field = 1;
+   */
+  field = LookupField.UNSPECIFIED;
+
+  /**
+   * @generated from field: bool available = 2;
+   */
+  available = false;
+
+  /**
+   * @generated from field: string warning = 3;
+   */
+  warning = "";
+
+  constructor(data?: PartialMessage<LookupFieldStatus>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.LookupFieldStatus";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "field", kind: "enum", T: proto3.getEnumType(LookupField) },
+    { no: 2, name: "available", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "warning", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupFieldStatus {
+    return new LookupFieldStatus().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): LookupFieldStatus {
+    return new LookupFieldStatus().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): LookupFieldStatus {
+    return new LookupFieldStatus().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: LookupFieldStatus | PlainMessage<LookupFieldStatus> | undefined, b: LookupFieldStatus | PlainMessage<LookupFieldStatus> | undefined): boolean {
+    return proto3.util.equals(LookupFieldStatus, a, b);
   }
 }
 

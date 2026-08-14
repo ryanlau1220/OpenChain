@@ -20,6 +20,7 @@ describe('WalletLookup entity evidence', () => {
 						evidenceUrl: 'https://example.test/proof',
 					}),
 				]}
+				fieldStatuses={[]}
 				loading={false}
 				onTraceAddress={() => undefined}
 				network={Network.ETHEREUM_MAINNET}

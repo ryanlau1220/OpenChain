@@ -15,6 +15,7 @@ import {
 	type GraphNode,
 	type GraphOptions,
 	type InvestigationLead,
+	type LookupFieldStatus,
 	Network,
 	type SupportedNetwork,
 	TraceGraphResponse,
@@ -86,6 +87,7 @@ function Index() {
 	const [graphOptions, setGraphOptions] = useState<GraphOptions>(defaultGraphOptions);
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
+	const [fieldStatuses, setFieldStatuses] = useState<LookupFieldStatus[]>([]);
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -180,6 +182,7 @@ function Index() {
 				setHighlightedTransferIds([]);
 				setSummary(null);
 				setLabels([]);
+				setFieldStatuses([]);
 				setBranchPages({});
 				setExpandingAddress(null);
 				setPendingExpansion(null);
@@ -208,6 +211,7 @@ function Index() {
 						if (investigation !== investigationRef.current) return;
 						setSummary(lookup.summary ?? null);
 						setLabels(lookup.labels);
+						setFieldStatuses(lookup.fieldStatuses);
 					});
 			} catch (error) {
 				console.error(error);
@@ -263,6 +267,7 @@ function Index() {
 			setHighlightedTransferIds([]);
 			setSummary(null);
 			setLabels([]);
+			setFieldStatuses([]);
 			setBranchPages({});
 			setExpandingAddress(null);
 			setPendingExpansion(null);
@@ -311,6 +316,7 @@ function Index() {
 				if (selection !== selectionRef.current) return;
 				setSummary(lookup.summary ?? null);
 				setLabels(lookup.labels);
+				setFieldStatuses(lookup.fieldStatuses);
 			} catch (error) {
 				console.error(error);
 			}
@@ -463,6 +469,7 @@ function Index() {
 					if (selection !== selectionRef.current) return;
 					setSummary(lookup.summary ?? null);
 					setLabels(lookup.labels);
+					setFieldStatuses(lookup.fieldStatuses);
 				});
 		},
 		[graphData, network, updateCaseFile],
@@ -503,6 +510,7 @@ function Index() {
 			setHighlightedTransferIds([]);
 			setSummary(null);
 			setLabels([]);
+			setFieldStatuses([]);
 			setBranchPages({});
 			setExpandingAddress(null);
 			setPendingExpansion(null);
@@ -675,6 +683,7 @@ function Index() {
 								<WalletLookup
 									summary={summary}
 									labels={labels}
+									fieldStatuses={fieldStatuses}
 									loading={loading}
 									network={network}
 									targetSeedAddress={address}

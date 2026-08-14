@@ -5,6 +5,8 @@ import {
 	type AddressLabel,
 	type AddressSummary,
 	LabelVisibility,
+	LookupField,
+	type LookupFieldStatus,
 	type SupportedNetwork,
 	entityLabel,
 	explorerURL,
@@ -14,6 +16,7 @@ import {
 interface WalletLookupProps {
 	summary: AddressSummary | null;
 	labels: AddressLabel[];
+	fieldStatuses: LookupFieldStatus[];
 	loading: boolean;
 	onTraceAddress: (addr: string) => void;
 	targetSeedAddress?: string;
@@ -48,6 +51,7 @@ const evidenceLink = (value: string) => {
 export const WalletLookup: React.FC<WalletLookupProps> = ({
 	summary,
 	labels,
+	fieldStatuses,
 	loading,
 	onTraceAddress: _onTraceAddress,
 	targetSeedAddress,
@@ -93,6 +97,10 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	}
 
 	const safeLabels = Array.isArray(labels) ? labels : [];
+	const lookupField = (field: LookupField) =>
+		fieldStatuses.find((status) => status.field === field);
+	const metricValue = (field: LookupField, value: string) =>
+		lookupField(field)?.available ? value : 'Unavailable';
 
 	const isSeedAddress =
 		Boolean(summary.address) &&
@@ -254,24 +262,27 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 				{[
 					{
 						label: 'Balance',
-						value: summary.balanceFormatted || '—',
+						value: metricValue(LookupField.BALANCE, summary.balanceFormatted || '—'),
+						warning: lookupField(LookupField.BALANCE)?.warning,
 						icon: <Wallet className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
 					},
 					...(networkDetails(network).activityLabel
 						? [
 								{
 									label: networkDetails(network).activityLabel,
-									value: String(summary.txCount ?? '—'),
+									value: metricValue(LookupField.ACTIVITY, String(summary.txCount ?? '—')),
+									warning: lookupField(LookupField.ACTIVITY)?.warning,
 									icon: <Clock className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />,
 								},
 							]
 						: []),
 					{
 						label: 'Entity',
-						value: entityLabel(summary.entityType),
+						value: metricValue(LookupField.ENTITY_TYPE, entityLabel(summary.entityType)),
+						warning: lookupField(LookupField.ENTITY_TYPE)?.warning,
 						icon: <Tag className="w-3.5 h-3.5" style={{ color: 'var(--prism-4)' }} />,
 					},
-				].map(({ label, value, icon }) => (
+				].map(({ label, value, warning, icon }) => (
 					<div
 						key={label}
 						className="min-w-0 p-2 rounded-xl space-y-1"
@@ -281,7 +292,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 							className="flex items-center justify-between text-[10px]"
 							style={{ color: 'var(--ink-3)' }}
 						>
-							<span className="truncate" title={label}>
+							<span className="truncate" title={warning || label}>
 								{label}
 							</span>
 							{icon}

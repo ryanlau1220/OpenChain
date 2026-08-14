@@ -5,7 +5,39 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, protoInt64 } from "@bufbuild/protobuf";
-import { AddressSummary, Network, SourceStatus, TokenBalance } from "./common_pb.js";
+import { AddressSummary, LookupFieldStatus, Network, SourceStatus, TokenBalance } from "./common_pb.js";
+
+/**
+ * @generated from enum openchain.v1.TransactionStatus
+ */
+export enum TransactionStatus {
+  /**
+   * @generated from enum value: TRANSACTION_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TRANSACTION_STATUS_SUCCESS = 1;
+   */
+  SUCCESS = 1,
+
+  /**
+   * @generated from enum value: TRANSACTION_STATUS_FAILED = 2;
+   */
+  FAILED = 2,
+
+  /**
+   * @generated from enum value: TRANSACTION_STATUS_UNKNOWN = 3;
+   */
+  UNKNOWN = 3,
+}
+// Retrieve enum metadata with: proto3.getEnumType(TransactionStatus)
+proto3.util.setEnumType(TransactionStatus, "openchain.v1.TransactionStatus", [
+  { no: 0, name: "TRANSACTION_STATUS_UNSPECIFIED" },
+  { no: 1, name: "TRANSACTION_STATUS_SUCCESS" },
+  { no: 2, name: "TRANSACTION_STATUS_FAILED" },
+  { no: 3, name: "TRANSACTION_STATUS_UNKNOWN" },
+]);
 
 /**
  * @generated from message openchain.v1.TransactionItem
@@ -62,9 +94,9 @@ export class TransactionItem extends Message<TransactionItem> {
   isContractCreation = false;
 
   /**
-   * @generated from field: bool status_success = 11;
+   * @generated from field: openchain.v1.TransactionStatus status = 11;
    */
-  statusSuccess = false;
+  status = TransactionStatus.UNSPECIFIED;
 
   /**
    * @generated from field: string method_name = 12;
@@ -94,7 +126,7 @@ export class TransactionItem extends Message<TransactionItem> {
     { no: 8, name: "gas_used", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 9, name: "fee_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 10, name: "is_contract_creation", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 11, name: "status_success", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "status", kind: "enum", T: proto3.getEnumType(TransactionStatus) },
     { no: 12, name: "method_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 13, name: "token_transfers", kind: "message", T: TokenTransferItem, repeated: true },
   ]);
@@ -268,6 +300,11 @@ export class LookupAddressResponse extends Message<LookupAddressResponse> {
    */
   sourceStatus?: SourceStatus;
 
+  /**
+   * @generated from field: repeated openchain.v1.LookupFieldStatus field_statuses = 5;
+   */
+  fieldStatuses: LookupFieldStatus[] = [];
+
   constructor(data?: PartialMessage<LookupAddressResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -280,6 +317,7 @@ export class LookupAddressResponse extends Message<LookupAddressResponse> {
     { no: 2, name: "tokens", kind: "message", T: TokenBalance, repeated: true },
     { no: 3, name: "recent_transactions", kind: "message", T: TransactionItem, repeated: true },
     { no: 4, name: "source_status", kind: "message", T: SourceStatus },
+    { no: 5, name: "field_statuses", kind: "message", T: LookupFieldStatus, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupAddressResponse {
@@ -356,6 +394,11 @@ export class LookupTransactionResponse extends Message<LookupTransactionResponse
    */
   sourceStatus?: SourceStatus;
 
+  /**
+   * @generated from field: repeated openchain.v1.LookupFieldStatus field_statuses = 3;
+   */
+  fieldStatuses: LookupFieldStatus[] = [];
+
   constructor(data?: PartialMessage<LookupTransactionResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -366,6 +409,7 @@ export class LookupTransactionResponse extends Message<LookupTransactionResponse
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "transaction", kind: "message", T: TransactionItem },
     { no: 2, name: "source_status", kind: "message", T: SourceStatus },
+    { no: 3, name: "field_statuses", kind: "message", T: LookupFieldStatus, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): LookupTransactionResponse {

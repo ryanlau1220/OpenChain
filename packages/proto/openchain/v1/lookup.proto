@@ -17,9 +17,16 @@ message TransactionItem {
   string gas_used = 8;
   string fee_base_units = 9;
   bool is_contract_creation = 10;
-  bool status_success = 11;
+  TransactionStatus status = 11;
   string method_name = 12;
   repeated TokenTransferItem token_transfers = 13;
+}
+
+enum TransactionStatus {
+  TRANSACTION_STATUS_UNSPECIFIED = 0;
+  TRANSACTION_STATUS_SUCCESS = 1;
+  TRANSACTION_STATUS_FAILED = 2;
+  TRANSACTION_STATUS_UNKNOWN = 3;
 }
 
 message TokenTransferItem {
@@ -44,6 +51,7 @@ message LookupAddressResponse {
   repeated TokenBalance tokens = 2;
   repeated TransactionItem recent_transactions = 3;
   SourceStatus source_status = 4;
+  repeated LookupFieldStatus field_statuses = 5;
 }
 
 message LookupTransactionRequest {
@@ -54,6 +62,7 @@ message LookupTransactionRequest {
 message LookupTransactionResponse {
   TransactionItem transaction = 1;
   SourceStatus source_status = 2;
+  repeated LookupFieldStatus field_statuses = 3;
 }
 
 service LookupService {

@@ -1,7 +1,7 @@
 import { Code, ConnectError, createClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
-import type { AddressSummary } from '@openchain/proto/openchain/v1/common_pb';
-import { EntityType, Network } from '@openchain/proto/openchain/v1/common_pb';
+import type { AddressSummary, LookupFieldStatus } from '@openchain/proto/openchain/v1/common_pb';
+import { EntityType, LookupField, Network } from '@openchain/proto/openchain/v1/common_pb';
 import { EvidenceService } from '@openchain/proto/openchain/v1/evidence_connect';
 import { LabelService } from '@openchain/proto/openchain/v1/labels_connect';
 import { AddressLabel, LabelVisibility } from '@openchain/proto/openchain/v1/labels_pb';
@@ -28,7 +28,7 @@ export const labelClient = createClient(LabelService, transport);
 export const evidenceClient = createClient(EvidenceService, transport);
 
 // Re-export generated proto types for consumer convenience
-export type { AddressSummary };
+export type { AddressSummary, LookupFieldStatus };
 export {
 	AddressLabel,
 	CrossChainTransition,
@@ -38,6 +38,7 @@ export {
 	GraphRanking,
 	InvestigationLead,
 	LabelVisibility,
+	LookupField,
 	Network,
 	TraceDirection,
 	TraceGraphResponse,
@@ -232,7 +233,7 @@ export function entityLabel(t?: EntityType): string {
 		case EntityType.DEFI_POOL:
 			return 'DEFI POOL';
 		default:
-			return 'EOA';
+			return 'UNKNOWN';
 	}
 }
 
@@ -308,6 +309,7 @@ export async function lookupAddress(address: string, network: SupportedNetwork) 
 	]);
 	return {
 		summary: lookupRes.status === 'fulfilled' ? lookupRes.value.summary : undefined,
+		fieldStatuses: lookupRes.status === 'fulfilled' ? lookupRes.value.fieldStatuses : [],
 		labels: labelsRes.status === 'fulfilled' ? labelsRes.value.labels : [],
 	};
 }

@@ -157,33 +157,48 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	balance := big.NewInt(0)
+	summary := &pb.AddressSummary{Address: address, Network: req.Msg.GetNetwork(), EntityType: pb.EntityType_ENTITY_TYPE_UNSPECIFIED, Label: shortAddress(address)}
+	fieldStatuses := make([]*pb.LookupFieldStatus, 0, 3)
+
+	balanceAvailable := false
 	var txCount uint64
-	var isContract bool
 	if value, callErr := runtime.Chain.GetBalance(ctx, address); callErr == nil {
-		balance = value
+		summary.BalanceBaseUnits = value.String()
+		summary.BalanceFormatted = adapter.FormatAmount(value, runtime.Chain.NativeAsset())
+		balanceAvailable = true
 	}
+	fieldStatuses = append(fieldStatuses, lookupFieldStatus(pb.LookupField_LOOKUP_FIELD_BALANCE, balanceAvailable, "Balance data is temporarily unavailable."))
+
 	if runtime.Chain.ActivityLabel() != "" {
+		activityAvailable := false
 		if value, callErr := runtime.Chain.GetTxCount(ctx, address); callErr == nil {
 			txCount = value
+			activityAvailable = true
 		}
+		summary.TxCount = txCount
+		fieldStatuses = append(fieldStatuses, lookupFieldStatus(pb.LookupField_LOOKUP_FIELD_ACTIVITY, activityAvailable, "Activity data is temporarily unavailable."))
 	}
+
+	entityAvailable := false
 	if value, callErr := runtime.Chain.IsContract(ctx, address); callErr == nil {
-		isContract = value
-	}
-	entityType, label := pb.EntityType_ENTITY_TYPE_EOA, shortAddress(address)
-	if isContract {
-		entityType = pb.EntityType_ENTITY_TYPE_CONTRACT
+		entityAvailable = true
+		if value {
+			summary.EntityType = pb.EntityType_ENTITY_TYPE_CONTRACT
+		} else {
+			summary.EntityType = pb.EntityType_ENTITY_TYPE_EOA
+		}
 	}
 	if h.server.labels != nil {
 		if items, labelErr := h.server.labels.GetLabels(ctx, runtime.Engine.Network(), address); labelErr == nil && len(items) > 0 {
-			label = items[0].Label
+			entityAvailable = true
+			summary.Label = items[0].Label
 			if items[0].Category == labels.CategoryExchange {
-				entityType = pb.EntityType_ENTITY_TYPE_EXCHANGE
+				summary.EntityType = pb.EntityType_ENTITY_TYPE_EXCHANGE
 			}
 		}
 	}
-	return connect.NewResponse(&pb.LookupAddressResponse{Summary: &pb.AddressSummary{Address: address, Network: req.Msg.GetNetwork(), EntityType: entityType, Label: label, BalanceBaseUnits: balance.String(), BalanceFormatted: adapter.FormatAmount(balance, runtime.Chain.NativeAsset()), TxCount: txCount}, SourceStatus: toSourceStatus(runtime.Engine.SourceStatus(ctx))}), nil
+	fieldStatuses = append(fieldStatuses, lookupFieldStatus(pb.LookupField_LOOKUP_FIELD_ENTITY_TYPE, entityAvailable, "Entity type data is temporarily unavailable."))
+	return connect.NewResponse(&pb.LookupAddressResponse{Summary: summary, SourceStatus: toSourceStatus(runtime.Engine.SourceStatus(ctx)), FieldStatuses: fieldStatuses}), nil
 }
 
 func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *connect.Request[pb.LookupTransactionRequest]) (*connect.Response[pb.LookupTransactionResponse], error) {
@@ -199,7 +214,14 @@ func (h *connectLookupHandler) LookupTransaction(ctx context.Context, req *conne
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	return connect.NewResponse(&pb.LookupTransactionResponse{Transaction: &pb.TransactionItem{Hash: transaction.Hash, BlockNumber: uint64(transaction.BlockNumber), Timestamp: transaction.Timestamp.Unix(), FromAddress: transaction.From, ToAddress: transaction.To, ValueBaseUnits: transaction.ValueBaseUnits, ValueFormatted: adapter.FormatAmount(bigInt(transaction.ValueBaseUnits), runtime.Chain.NativeAsset()), StatusSuccess: true}, SourceStatus: toSourceStatus(source)}), nil
+	return connect.NewResponse(&pb.LookupTransactionResponse{Transaction: &pb.TransactionItem{Hash: transaction.Hash, BlockNumber: uint64(transaction.BlockNumber), Timestamp: transaction.Timestamp.Unix(), FromAddress: transaction.From, ToAddress: transaction.To, ValueBaseUnits: transaction.ValueBaseUnits, ValueFormatted: adapter.FormatAmount(bigInt(transaction.ValueBaseUnits), runtime.Chain.NativeAsset()), Status: pb.TransactionStatus_TRANSACTION_STATUS_UNKNOWN}, SourceStatus: toSourceStatus(source), FieldStatuses: []*pb.LookupFieldStatus{lookupFieldStatus(pb.LookupField_LOOKUP_FIELD_TRANSACTION_STATUS, false, "Transaction execution status is unavailable from the configured source.")}}), nil
+}
+
+func lookupFieldStatus(field pb.LookupField, available bool, warning string) *pb.LookupFieldStatus {
+	if available {
+		warning = ""
+	}
+	return &pb.LookupFieldStatus{Field: field, Available: available, Warning: warning}
 }
 
 func bigInt(value string) *big.Int {

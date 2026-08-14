@@ -37,6 +37,20 @@ enum EntityType {
   ENTITY_TYPE_DEFI_POOL = 6;
 }
 
+enum LookupField {
+  LOOKUP_FIELD_UNSPECIFIED = 0;
+  LOOKUP_FIELD_BALANCE = 1;
+  LOOKUP_FIELD_ACTIVITY = 2;
+  LOOKUP_FIELD_ENTITY_TYPE = 3;
+  LOOKUP_FIELD_TRANSACTION_STATUS = 4;
+}
+
+message LookupFieldStatus {
+  LookupField field = 1;
+  bool available = 2;
+  string warning = 3;
+}
+
 message Asset {
   string kind = 1; // NATIVE or ERC20
   string contract_address = 2; // empty for native ETH

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +22,7 @@ import (
 )
 
 const testAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+const testTransactionHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 func setupTestServer() (http.Handler, *Server) {
 	registry := labels.NewService(nil)
@@ -32,6 +34,35 @@ func testNetworks(registry *labels.Service) map[pb.Network]NetworkRuntime {
 	chain := adapter.NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "test-key", nil)
 	engine := tracing.NewEngine(chain, nil, registry)
 	return map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: engine}}
+}
+
+type transactionLookupChain struct{}
+
+func (transactionLookupChain) Network() string                               { return "ethereum-mainnet" }
+func (transactionLookupChain) NormalizeAddress(value string) (string, error) { return value, nil }
+func (transactionLookupChain) NormalizeTransactionHash(value string) (string, error) {
+	return value, nil
+}
+func (transactionLookupChain) NativeAsset() adapter.Asset {
+	return adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}
+}
+func (transactionLookupChain) ActivityLabel() string { return "Outgoing nonce" }
+func (transactionLookupChain) GetBalance(context.Context, string) (*big.Int, error) {
+	return big.NewInt(0), nil
+}
+func (transactionLookupChain) GetTxCount(context.Context, string) (uint64, error) { return 0, nil }
+func (transactionLookupChain) IsContract(context.Context, string) (bool, error)   { return false, nil }
+func (transactionLookupChain) ListTransfers(context.Context, string, uint32, string) (*adapter.TransferPage, error) {
+	return nil, nil
+}
+func (transactionLookupChain) LookupTransaction(context.Context, string) (*adapter.TransactionItem, adapter.SourceStatus, error) {
+	return &adapter.TransactionItem{Hash: testTransactionHash, From: testAddress, To: testAddress, ValueBaseUnits: "0", BlockNumber: 1}, adapter.SourceStatus{Source: "test"}, nil
+}
+func (transactionLookupChain) GetContractMetadata(context.Context, string) (*adapter.ContractMetadata, error) {
+	return &adapter.ContractMetadata{Category: "EOA"}, nil
+}
+func (transactionLookupChain) SourceStatus() adapter.SourceStatus {
+	return adapter.SourceStatus{Source: "test"}
 }
 
 func TestPublicRequestLimitUsesConnectResourceExhausted(t *testing.T) {
@@ -194,6 +225,45 @@ func TestLookupRejectsInvalidAddress(t *testing.T) {
 	_, err := (&connectLookupHandler{server: server}).LookupAddress(context.Background(), connect.NewRequest(&pb.LookupAddressRequest{Address: "invalid"}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v", connect.CodeOf(err))
+	}
+}
+
+func TestLookupMarksUnavailableFieldsInsteadOfReturningZeroFacts(t *testing.T) {
+	_, server := setupTestServer()
+	response, err := (&connectLookupHandler{server: server}).LookupAddress(context.Background(), connect.NewRequest(&pb.LookupAddressRequest{Address: testAddress, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := response.Msg.GetSummary()
+	if summary.GetBalanceBaseUnits() != "" || summary.GetBalanceFormatted() != "" || summary.GetEntityType() != pb.EntityType_ENTITY_TYPE_UNSPECIFIED {
+		t.Fatalf("unavailable fields became facts: %#v", summary)
+	}
+	statuses := map[pb.LookupField]*pb.LookupFieldStatus{}
+	for _, status := range response.Msg.GetFieldStatuses() {
+		statuses[status.GetField()] = status
+	}
+	for _, field := range []pb.LookupField{pb.LookupField_LOOKUP_FIELD_BALANCE, pb.LookupField_LOOKUP_FIELD_ACTIVITY, pb.LookupField_LOOKUP_FIELD_ENTITY_TYPE} {
+		status := statuses[field]
+		if status == nil || status.GetAvailable() || status.GetWarning() == "" {
+			t.Fatalf("field %v status = %#v", field, status)
+		}
+	}
+}
+
+func TestLookupTransactionMarksExecutionStatusUnknown(t *testing.T) {
+	chain := transactionLookupChain{}
+	registry := labels.NewService(nil)
+	server := NewServer(map[pb.Network]NetworkRuntime{pb.Network_NETWORK_ETHEREUM_MAINNET: {Chain: chain, Engine: tracing.NewEngine(chain, nil, registry)}}, registry, "http://localhost:3000", 30, false, "test-key")
+	response, err := (&connectLookupHandler{server: server}).LookupTransaction(context.Background(), connect.NewRequest(&pb.LookupTransactionRequest{Hash: testTransactionHash, Network: pb.Network_NETWORK_ETHEREUM_MAINNET}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Msg.GetTransaction().GetStatus() != pb.TransactionStatus_TRANSACTION_STATUS_UNKNOWN {
+		t.Fatalf("transaction status = %v", response.Msg.GetTransaction().GetStatus())
+	}
+	statuses := response.Msg.GetFieldStatuses()
+	if len(statuses) != 1 || statuses[0].GetField() != pb.LookupField_LOOKUP_FIELD_TRANSACTION_STATUS || statuses[0].GetAvailable() || statuses[0].GetWarning() == "" {
+		t.Fatalf("transaction field statuses = %#v", statuses)
 	}
 }
 
