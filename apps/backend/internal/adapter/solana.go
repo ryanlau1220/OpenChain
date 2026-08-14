@@ -207,7 +207,8 @@ func (a *SolanaAdapter) transferPage(transfers []TransferItem, cursor solanaCurs
 	if err != nil {
 		return &TransferPage{Transfers: transfers, SourceStatus: a.SourceStatus()}
 	}
-	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: next != "", SourceStatus: a.SourceStatus()}
+	hasMore := next != ""
+	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: hasMore, SourceStatus: PageStatus(a.SourceStatus(), hasMore)}
 }
 
 type solanaTransaction struct {

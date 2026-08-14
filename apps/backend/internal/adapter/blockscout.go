@@ -160,7 +160,8 @@ func (a *BlockscoutChainAdapter) ListTransfers(ctx context.Context, address stri
 			status.Warning = "Blockscout internal transfer history is temporarily unavailable; showing the available transfer evidence."
 		}
 	}
-	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: nextCursor != "", SourceStatus: status}, nil
+	hasMore := nextCursor != ""
+	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: PageStatus(status, hasMore)}, nil
 }
 
 func (a *BlockscoutChainAdapter) transactions(ctx context.Context, address string, cursor *blockscoutPageParameters) ([]TransferItem, *blockscoutPageParameters, error) {

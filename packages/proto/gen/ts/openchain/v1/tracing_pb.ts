@@ -10,7 +10,7 @@ import { AddressLabel } from "./labels_pb.js";
 
 /**
  * Counterparty selection is deterministic and scoped to the provider page.
- * "total raw amount" is the highest total for one asset; it is never a fiat valuation.
+ * "total raw amount" ranks counterparties independently for each exact asset; it is never a fiat valuation.
  * "known entity" means a curated label exists; it is not a risk score.
  *
  * @generated from enum openchain.v1.GraphRanking
@@ -109,9 +109,9 @@ export class GraphNode extends Message<GraphNode> {
   isSeed = false;
 
   /**
-   * @generated from field: string total_volume_base_units = 7;
+   * @generated from field: repeated openchain.v1.AssetVolume total_volume_by_asset = 7;
    */
-  totalVolumeBaseUnits = "";
+  totalVolumeByAsset: AssetVolume[] = [];
 
   /**
    * @generated from field: uint32 in_tx_count = 8;
@@ -140,7 +140,7 @@ export class GraphNode extends Message<GraphNode> {
     { no: 2, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "entity_type", kind: "enum", T: proto3.getEnumType(EntityType) },
     { no: 6, name: "is_seed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 7, name: "total_volume_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "total_volume_by_asset", kind: "message", T: AssetVolume, repeated: true },
     { no: 8, name: "in_tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 9, name: "out_tx_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 10, name: "labels", kind: "message", T: AddressLabel, repeated: true },
@@ -160,6 +160,52 @@ export class GraphNode extends Message<GraphNode> {
 
   static equals(a: GraphNode | PlainMessage<GraphNode> | undefined, b: GraphNode | PlainMessage<GraphNode> | undefined): boolean {
     return proto3.util.equals(GraphNode, a, b);
+  }
+}
+
+/**
+ * A node's observed transfer volume for one exact asset in the retrieved graph.
+ * Amounts from different assets are never combined without valuation evidence.
+ *
+ * @generated from message openchain.v1.AssetVolume
+ */
+export class AssetVolume extends Message<AssetVolume> {
+  /**
+   * @generated from field: openchain.v1.Asset asset = 1;
+   */
+  asset?: Asset;
+
+  /**
+   * @generated from field: string amount_base_units = 2;
+   */
+  amountBaseUnits = "";
+
+  constructor(data?: PartialMessage<AssetVolume>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.AssetVolume";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "asset", kind: "message", T: Asset },
+    { no: 2, name: "amount_base_units", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AssetVolume {
+    return new AssetVolume().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AssetVolume {
+    return new AssetVolume().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AssetVolume {
+    return new AssetVolume().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: AssetVolume | PlainMessage<AssetVolume> | undefined, b: AssetVolume | PlainMessage<AssetVolume> | undefined): boolean {
+    return proto3.util.equals(AssetVolume, a, b);
   }
 }
 
@@ -651,6 +697,11 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
    */
   crossChainTransitions: CrossChainTransition[] = [];
 
+  /**
+   * @generated from field: openchain.v1.TraceCoverage coverage = 12;
+   */
+  coverage?: TraceCoverage;
+
   constructor(data?: PartialMessage<TraceGraphResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -670,6 +721,7 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
     { no: 9, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 10, name: "leads", kind: "message", T: InvestigationLead, repeated: true },
     { no: 11, name: "cross_chain_transitions", kind: "message", T: CrossChainTransition, repeated: true },
+    { no: 12, name: "coverage", kind: "message", T: TraceCoverage },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceGraphResponse {
@@ -686,6 +738,94 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
 
   static equals(a: TraceGraphResponse | PlainMessage<TraceGraphResponse> | undefined, b: TraceGraphResponse | PlainMessage<TraceGraphResponse> | undefined): boolean {
     return proto3.util.equals(TraceGraphResponse, a, b);
+  }
+}
+
+/**
+ * Coverage facts for this retrieved provider page and the graph derived from it.
+ * Provider completeness concerns the returned page, not the address's full history.
+ *
+ * @generated from message openchain.v1.TraceCoverage
+ */
+export class TraceCoverage extends Message<TraceCoverage> {
+  /**
+   * @generated from field: uint32 requested_page_size = 1;
+   */
+  requestedPageSize = 0;
+
+  /**
+   * @generated from field: uint32 observed_transfer_count = 2;
+   */
+  observedTransferCount = 0;
+
+  /**
+   * @generated from field: uint32 graph_transfer_count = 3;
+   */
+  graphTransferCount = 0;
+
+  /**
+   * @generated from field: uint32 finalized_transfer_count = 4;
+   */
+  finalizedTransferCount = 0;
+
+  /**
+   * @generated from field: uint32 provisional_transfer_count = 5;
+   */
+  provisionalTransferCount = 0;
+
+  /**
+   * @generated from field: string cursor = 6;
+   */
+  cursor = "";
+
+  /**
+   * @generated from field: bool has_more = 7;
+   */
+  hasMore = false;
+
+  /**
+   * @generated from field: bool provider_complete = 8;
+   */
+  providerComplete = false;
+
+  /**
+   * @generated from field: string limitation = 9;
+   */
+  limitation = "";
+
+  constructor(data?: PartialMessage<TraceCoverage>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "openchain.v1.TraceCoverage";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "requested_page_size", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "observed_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "graph_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "finalized_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "provisional_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 6, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "provider_complete", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 9, name: "limitation", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceCoverage {
+    return new TraceCoverage().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): TraceCoverage {
+    return new TraceCoverage().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): TraceCoverage {
+    return new TraceCoverage().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: TraceCoverage | PlainMessage<TraceCoverage> | undefined, b: TraceCoverage | PlainMessage<TraceCoverage> | undefined): boolean {
+    return proto3.util.equals(TraceCoverage, a, b);
   }
 }
 
@@ -888,6 +1028,11 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
    */
   crossChainTransitions: CrossChainTransition[] = [];
 
+  /**
+   * @generated from field: openchain.v1.TraceCoverage coverage = 9;
+   */
+  coverage?: TraceCoverage;
+
   constructor(data?: PartialMessage<ExpandNodeResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -904,6 +1049,7 @@ export class ExpandNodeResponse extends Message<ExpandNodeResponse> {
     { no: 6, name: "pending", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 7, name: "leads", kind: "message", T: InvestigationLead, repeated: true },
     { no: 8, name: "cross_chain_transitions", kind: "message", T: CrossChainTransition, repeated: true },
+    { no: 9, name: "coverage", kind: "message", T: TraceCoverage },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExpandNodeResponse {

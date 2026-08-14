@@ -65,7 +65,7 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions), Coverage: toCoverageProto(result.Coverage)}), nil
 }
 
 func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect.Request[pb.TraceStatusRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
@@ -85,7 +85,7 @@ func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions), Coverage: toCoverageProto(result.Coverage)}), nil
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
@@ -111,7 +111,7 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions)}), nil
+	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toCrossChainProto(result.CrossChainTransitions), Coverage: toCoverageProto(result.Coverage)}), nil
 }
 
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {
@@ -121,13 +121,21 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 		for _, label := range node.Labels {
 			nodeLabels = append(nodeLabels, toLabelProto(label))
 		}
-		nodes = append(nodes, &pb.GraphNode{Id: node.ID, Label: node.Label, EntityType: parseEntityType(node.EntityType), IsSeed: node.IsSeed, TotalVolumeBaseUnits: node.TotalVolumeBaseUnits, InTxCount: node.InTxCount, OutTxCount: node.OutTxCount, Labels: nodeLabels})
+		volumes := make([]*pb.AssetVolume, 0, len(node.TotalVolumeByAsset))
+		for _, volume := range node.TotalVolumeByAsset {
+			volumes = append(volumes, &pb.AssetVolume{Asset: &pb.Asset{Kind: volume.Asset.Kind, ContractAddress: volume.Asset.ContractAddress, Symbol: volume.Asset.Symbol, Decimals: volume.Asset.Decimals}, AmountBaseUnits: volume.AmountBaseUnits})
+		}
+		nodes = append(nodes, &pb.GraphNode{Id: node.ID, Label: node.Label, EntityType: parseEntityType(node.EntityType), IsSeed: node.IsSeed, TotalVolumeByAsset: volumes, InTxCount: node.InTxCount, OutTxCount: node.OutTxCount, Labels: nodeLabels})
 	}
 	edges := make([]*pb.GraphEdge, 0, len(result.Edges))
 	for _, edge := range result.Edges {
 		edges = append(edges, &pb.GraphEdge{Id: edge.ID, Source: edge.Source, Target: edge.Target, AmountBaseUnits: edge.AmountBaseUnits, AmountFormatted: edge.AmountFormatted, TxCount: edge.TxCount, Asset: &pb.Asset{Kind: edge.Asset.Kind, ContractAddress: edge.Asset.ContractAddress, Symbol: edge.Asset.Symbol, Decimals: edge.Asset.Decimals}, EventId: edge.EventID, BlockNumber: edge.BlockNumber, BlockHash: edge.BlockHash, TransactionHash: edge.TransactionHash, TransferKind: edge.TransferKind, SourceName: edge.SourceName, RetrievedAt: edge.RetrievedAt, FirstTxTimestamp: edge.Timestamp, LastTxTimestamp: edge.Timestamp, Provisional: edge.Provisional})
 	}
 	return nodes, edges
+}
+
+func toCoverageProto(coverage tracing.TraceCoverage) *pb.TraceCoverage {
+	return &pb.TraceCoverage{RequestedPageSize: coverage.RequestedPageSize, ObservedTransferCount: coverage.ObservedTransferCount, GraphTransferCount: coverage.GraphTransferCount, FinalizedTransferCount: coverage.FinalizedTransferCount, ProvisionalTransferCount: coverage.ProvisionalTransferCount, Cursor: coverage.Cursor, HasMore: coverage.HasMore, ProviderComplete: coverage.ProviderComplete, Limitation: coverage.Limitation}
 }
 
 func toLeadProto(leads []rules.Lead) []*pb.InvestigationLead {

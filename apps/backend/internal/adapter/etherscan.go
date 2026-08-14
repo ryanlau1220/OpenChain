@@ -167,7 +167,7 @@ func (a *EVMChainAdapter) ListTransfers(ctx context.Context, address string, lim
 	if hasMore {
 		nextCursor = strconv.FormatUint(page, 10)
 	}
-	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: a.SourceStatus()}, nil
+	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: PageStatus(a.SourceStatus(), hasMore)}, nil
 }
 
 func (a *EVMChainAdapter) listTransferSource(ctx context.Context, query url.Values, limit uint32) ([]etherscanTxResult, bool, error) {

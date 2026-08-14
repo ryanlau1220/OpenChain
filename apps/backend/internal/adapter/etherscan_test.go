@@ -41,7 +41,7 @@ func TestEtherscanListsBoundedTransferFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if client.Network() != "base-mainnet" || len(page.Transfers) != 3 || !page.HasMore || page.NextCursor != "1" || page.SourceStatus.Source != EtherscanSource || !page.SourceStatus.IsComplete {
+	if client.Network() != "base-mainnet" || len(page.Transfers) != 3 || !page.HasMore || page.NextCursor != "1" || page.SourceStatus.Source != EtherscanSource || page.SourceStatus.IsComplete {
 		t.Fatalf("page = %#v", page)
 	}
 	if page.Transfers[0].TransferKind != "ERC20" || page.Transfers[0].EventID != "log:0x9" || page.Transfers[0].Asset.ContractAddress != "0x5555555555555555555555555555555555555555" || page.Transfers[0].Asset.Decimals != 6 || page.Transfers[1].EventID != "trace:0_1" || page.Transfers[2].AmountBaseUnits != "42" {

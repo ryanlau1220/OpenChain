@@ -69,6 +69,20 @@ func TestSelectCounterpartyTransfersUsesDeterministicRequestedRanking(t *testing
 	}
 }
 
+func TestSelectCounterpartyTransfersRanksTotalsPerAsset(t *testing.T) {
+	seed := testTraceAddress
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	transfers := []adapter.TransferItem{
+		{From: seed, To: "eth", AmountBaseUnits: "1000000000000000000", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, Timestamp: now},
+		{From: seed, To: "usdc", AmountBaseUnits: "1000000000", Asset: adapter.Asset{Kind: "ERC20", ContractAddress: "0xusdc", Symbol: "USDC", Decimals: 6}, Timestamp: now.Add(-time.Minute)},
+		{From: seed, To: "smaller-eth", AmountBaseUnits: "2", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, Timestamp: now.Add(-2 * time.Minute)},
+	}
+	got := selectCounterpartyTransfers(transfers, seed, 1, RankingTotalRawAmount)
+	if len(got) != 2 || got[0].To != "eth" || got[1].To != "usdc" {
+		t.Fatalf("asset-specific totals = %#v", got)
+	}
+}
+
 func TestGraphControlsClampAndDefault(t *testing.T) {
 	limit, ranking := graphControls(0, "")
 	if limit != DefaultCounterpartyLimit || ranking != RankingMostRecent {
@@ -97,6 +111,24 @@ func TestGraphAggregatesPerNodeTransferCountsAndOrdersEdges(t *testing.T) {
 	}
 	if graph.Edges[0].ID != "ethereum-mainnet:0xaaa:tx" || graph.Edges[0].AmountFormatted != "1.0000 ETH" || graph.Edges[2].ID != "ethereum-mainnet:0xccc:tx" {
 		t.Fatalf("edges = %#v", graph.Edges)
+	}
+	if volumes := nodes[seed].TotalVolumeByAsset; len(volumes) != 1 || volumes[0].AmountBaseUnits != "6000000000000000000" || volumes[0].Asset.Symbol != "ETH" {
+		t.Fatalf("seed asset volume = %#v", volumes)
+	}
+}
+
+func TestTraceCoverageDescribesRetrievedScope(t *testing.T) {
+	page := &adapter.TransferPage{
+		Transfers:  []adapter.TransferItem{{}, {}, {}},
+		NextCursor: "next",
+		HasMore:    true,
+		SourceStatus: adapter.SourceStatus{
+			IsComplete: false,
+		},
+	}
+	coverage := traceCoverage(50, "start", page, []db.Transfer{{Provisional: false}, {Provisional: true}})
+	if coverage.RequestedPageSize != 50 || coverage.ObservedTransferCount != 3 || coverage.GraphTransferCount != 2 || coverage.FinalizedTransferCount != 1 || coverage.ProvisionalTransferCount != 1 || !coverage.HasMore || coverage.ProviderComplete || coverage.Cursor != "start" || coverage.Limitation == "" {
+		t.Fatalf("coverage = %#v", coverage)
 	}
 }
 

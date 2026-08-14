@@ -5,6 +5,7 @@ import {
 	type GraphEdge,
 	type GraphNode,
 	type SupportedNetwork,
+	type TraceCoverage,
 	explorerURL,
 } from '../services/api';
 import { formatObservationTime } from '../services/format';
@@ -65,7 +66,8 @@ export const EvidencePaths: React.FC<{
 	network: SupportedNetwork;
 	pinnedTransferIds: readonly string[];
 	onTogglePin: (transferId: string) => void;
-}> = ({ nodes, edges, network, pinnedTransferIds, onTogglePin }) => {
+	coverage?: TraceCoverage;
+}> = ({ nodes, edges, network, pinnedTransferIds, onTogglePin, coverage }) => {
 	const [showAll, setShowAll] = useState(false);
 	const paths = orderedEvidencePaths(evidencePaths(nodes, edges), pinnedTransferIds);
 	const pinned = new Set(pinnedTransferIds);
@@ -75,9 +77,43 @@ export const EvidencePaths: React.FC<{
 				...paths.filter((path) => pinned.has(path.transferId)),
 				...paths.filter((path) => !pinned.has(path.transferId)).slice(0, 5),
 			];
-	if (visiblePaths.length === 0) return null;
+	if (visiblePaths.length === 0 && !coverage) return null;
 	return (
 		<section className="space-y-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+			{coverage && coverage.requestedPageSize > 0 && (
+				<div
+					className="rounded-lg p-2 text-[9px]"
+					style={{
+						background: 'var(--slate)',
+						border: '1px solid var(--border)',
+						color: 'var(--ink-2)',
+					}}
+				>
+					<p className="font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-3)' }}>
+						Retrieved scope
+					</p>
+					<p className="mt-1">
+						{coverage.graphTransferCount}/{coverage.observedTransferCount} observed transfers shown
+						from a requested page of {coverage.requestedPageSize}.
+					</p>
+					<p className="mt-1">
+						{coverage.finalizedTransferCount} time-window finalized ·{' '}
+						{coverage.provisionalTransferCount} provisional ·{' '}
+						{coverage.hasMore
+							? 'additional provider pages available'
+							: coverage.providerComplete
+								? 'provider reports this page complete'
+								: 'provider completeness unavailable'}
+						.
+					</p>
+					<p className="mt-1">
+						{coverage.cursor
+							? 'Continuation cursor supplied for this page.'
+							: 'First provider page.'}
+					</p>
+					<p className="mt-1">{coverage.limitation}</p>
+				</div>
+			)}
 			<div className="flex items-center gap-1.5">
 				<Link2 className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
 				<h3

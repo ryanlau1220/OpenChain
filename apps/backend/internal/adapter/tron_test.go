@@ -48,7 +48,7 @@ func TestTronListsConfirmedNativeTransfersWithServerOnlyKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Transfers) != 3 || page.NextCursor == "" || !page.SourceStatus.IsComplete {
+	if len(page.Transfers) != 3 || page.NextCursor == "" || page.SourceStatus.IsComplete {
 		t.Fatalf("page = %#v", page)
 	}
 	items := map[string]TransferItem{}

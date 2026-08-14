@@ -13,6 +13,7 @@ import {
 	GraphNode,
 	GraphRanking,
 	InvestigationLead,
+	TraceCoverage,
 	TraceDirection,
 	TraceGraphResponse,
 } from '@openchain/proto/openchain/v1/tracing_pb';
@@ -32,6 +33,7 @@ export type { AddressSummary, LookupFieldStatus };
 export {
 	AddressLabel,
 	CrossChainTransition,
+	TraceCoverage,
 	EntityType,
 	GraphEdge,
 	GraphNode,

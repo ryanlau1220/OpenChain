@@ -15,7 +15,7 @@ type Definition struct {
 	Limitations       string
 }
 
-const neutralLimitation = "This deterministic pattern is an investigative lead based on the selected on-chain observations. It is not an attribution, risk score, or conclusion about intent."
+const neutralLimitation = "This deterministic pattern is an investigative lead within the retrieved graph scope and finalized observations only. It is not an attribution, risk score, conclusion about intent, or complete address history."
 
 func Catalog() []Definition {
 	return []Definition{
@@ -49,7 +49,7 @@ func Catalog() []Definition {
 			Name:              "Repeated equal-amount dispersion pattern",
 			ParameterSchema:   json.RawMessage(`{"type":"object","properties":{"window_seconds":{"type":"integer","minimum":1,"default":86400},"min_distinct_counterparties":{"type":"integer","minimum":2,"default":3},"include_provisional":{"type":"boolean","default":false}},"additionalProperties":false}`),
 			DefaultParameters: json.RawMessage(`{"window_seconds":86400,"min_distinct_counterparties":3,"include_provisional":false}`),
-			Limitations:       "This deterministic pattern compares equal raw amounts of the same asset in the selected finalized observations. It does not determine whether an amount is small, a fiat value, ownership, or intent.",
+			Limitations:       "This deterministic pattern compares equal raw amounts of the same asset within the retrieved graph scope's finalized observations. It does not determine whether an amount is small, a fiat value, ownership, or intent.",
 		},
 		{
 			ID:                "sequential-decreasing-transfer",
@@ -65,7 +65,7 @@ func Catalog() []Definition {
 			Name:              "Briefly observed intermediary pattern",
 			ParameterSchema:   json.RawMessage(`{"type":"object","properties":{"window_seconds":{"type":"integer","minimum":1,"default":3600},"include_provisional":{"type":"boolean","default":false}},"additionalProperties":false}`),
 			DefaultParameters: json.RawMessage(`{"window_seconds":3600,"include_provisional":false}`),
-			Limitations:       "This deterministic pattern is limited to the selected finalized observations. It identifies a same-amount pass-through, not an address lifetime, ownership, attribution, risk score, or intent.",
+			Limitations:       "This deterministic pattern is limited to the retrieved graph scope's finalized observations. It identifies a same-amount pass-through, not an address lifetime, ownership, attribution, risk score, or intent.",
 		},
 		{
 			ID:                "op-stack-bridge-correlation",
@@ -73,7 +73,7 @@ func Catalog() []Definition {
 			Name:              "OP Stack bridge correlation",
 			ParameterSchema:   json.RawMessage(`{"type":"object","properties":{"max_delay_seconds":{"type":"integer","minimum":1,"default":604800}},"additionalProperties":false}`),
 			DefaultParameters: json.RawMessage(`{"max_delay_seconds":604800}`),
-			Limitations:       "This is a deterministic bridge-transfer match using known bridge contracts, recipient, raw amount, and time window. It does not prove wallet ownership, token equivalence, or intent.",
+			Limitations:       "This is a deterministic bridge-transfer match within retrieved provider pages using known bridge contracts, recipient, raw amount, and time window. It does not prove wallet ownership, token equivalence, or intent.",
 		},
 	}
 }

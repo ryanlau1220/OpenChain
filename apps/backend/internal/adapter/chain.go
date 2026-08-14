@@ -54,6 +54,15 @@ type TransferPage struct {
 	SourceStatus SourceStatus
 }
 
+// PageStatus describes the returned page, not the provider's overall service.
+// A cursor means the observed history is necessarily incomplete.
+func PageStatus(status SourceStatus, hasMore bool) SourceStatus {
+	if hasMore {
+		status.IsComplete = false
+	}
+	return status
+}
+
 // ContractMetadata represents dynamically resolved smart contract metadata
 type ContractMetadata struct {
 	ContractName string `json:"contract_name"`

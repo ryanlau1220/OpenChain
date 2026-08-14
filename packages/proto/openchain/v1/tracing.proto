@@ -12,10 +12,17 @@ message GraphNode {
   string label = 2;
   EntityType entity_type = 3;
   bool is_seed = 6;
-  string total_volume_base_units = 7;
+  repeated AssetVolume total_volume_by_asset = 7;
   uint32 in_tx_count = 8;
   uint32 out_tx_count = 9;
   repeated AddressLabel labels = 10;
+}
+
+// A node's observed transfer volume for one exact asset in the retrieved graph.
+// Amounts from different assets are never combined without valuation evidence.
+message AssetVolume {
+  Asset asset = 1;
+  string amount_base_units = 2;
 }
 
 message GraphEdge {
@@ -74,7 +81,7 @@ message CrossChainTransition {
 }
 
 // Counterparty selection is deterministic and scoped to the provider page.
-// "total raw amount" is the highest total for one asset; it is never a fiat valuation.
+// "total raw amount" ranks counterparties independently for each exact asset; it is never a fiat valuation.
 // "known entity" means a curated label exists; it is not a risk score.
 enum GraphRanking {
   GRAPH_RANKING_UNSPECIFIED = 0;
@@ -107,6 +114,21 @@ message TraceGraphResponse {
   bool pending = 9;
   repeated InvestigationLead leads = 10;
   repeated CrossChainTransition cross_chain_transitions = 11;
+  TraceCoverage coverage = 12;
+}
+
+// Coverage facts for this retrieved provider page and the graph derived from it.
+// Provider completeness concerns the returned page, not the address's full history.
+message TraceCoverage {
+  uint32 requested_page_size = 1;
+  uint32 observed_transfer_count = 2;
+  uint32 graph_transfer_count = 3;
+  uint32 finalized_transfer_count = 4;
+  uint32 provisional_transfer_count = 5;
+  string cursor = 6;
+  bool has_more = 7;
+  bool provider_complete = 8;
+  string limitation = 9;
 }
 
 // TraceStatusRequest only reads the durable job created by TraceGraph or
@@ -141,6 +163,7 @@ message ExpandNodeResponse {
   bool pending = 6;
   repeated InvestigationLead leads = 7;
   repeated CrossChainTransition cross_chain_transitions = 8;
+  TraceCoverage coverage = 9;
 }
 
 service TracingService {

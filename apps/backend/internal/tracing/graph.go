@@ -35,10 +35,16 @@ const (
 )
 
 type GraphNode struct {
-	ID, Label, EntityType, TotalVolumeBaseUnits string
-	IsSeed                                      bool
-	InTxCount, OutTxCount                       uint32
-	Labels                                      []labels.LabelItem
+	ID, Label, EntityType string
+	IsSeed                bool
+	InTxCount, OutTxCount uint32
+	TotalVolumeByAsset    []AssetVolume
+	Labels                []labels.LabelItem
+}
+
+type AssetVolume struct {
+	Asset           adapter.Asset
+	AmountBaseUnits string
 }
 type GraphEdge struct {
 	ID, Source, Target, AmountBaseUnits, AmountFormatted, EventID, TransactionHash, TransferKind, SourceName, BlockHash string
@@ -58,9 +64,19 @@ type GraphResult struct {
 	HasMore                bool
 	Pending                bool
 	SourceStatus           adapter.SourceStatus
+	Coverage               TraceCoverage
 	Leads                  []rules.Lead
 	CrossChainTransitions  []CrossChainTransition
 }
+
+type TraceCoverage struct {
+	RequestedPageSize, ObservedTransferCount, GraphTransferCount, FinalizedTransferCount, ProvisionalTransferCount uint32
+	Cursor                                                                                                         string
+	HasMore, ProviderComplete                                                                                      bool
+	Limitation                                                                                                     string
+}
+
+const retrievedScopeLimitation = "This graph and its findings are limited to the retrieved provider page after the selected direction and counterparty scope. Finality is a conservative time-window classification, not chain-confirmation evidence."
 
 type Engine struct {
 	chainAdapter     adapter.ChainAdapter
@@ -103,6 +119,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	transfers := selectCounterpartyTransfersWithKnown(filtered, address, maxCounterparties, ranking, e.knownCounterparties(ctx, filtered, address, ranking))
 	result := e.graph(ctx, address, transfers, page)
 	persistedTransfers := e.toTransfers(transfers, page.SourceStatus)
+	result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers)
 	completedAt := time.Now().UTC()
 	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, completedAt)
 	result.Leads = leads
@@ -164,8 +181,7 @@ type counterpartyStats struct {
 	address string
 	count   int
 	latest  time.Time
-	largest *big.Rat
-	totals  map[string]*big.Rat
+	totals  map[string]*big.Int
 	known   bool
 }
 
@@ -186,7 +202,7 @@ func selectCounterpartyTransfersWithKnown(transfers []adapter.TransferItem, seed
 		}
 		item := stats[counterparty]
 		if item == nil {
-			item = &counterpartyStats{address: counterparty, largest: big.NewRat(0, 1), totals: make(map[string]*big.Rat), known: known[counterparty]}
+			item = &counterpartyStats{address: counterparty, totals: make(map[string]*big.Int), known: known[counterparty]}
 			stats[counterparty] = item
 		}
 		item.count++
@@ -195,30 +211,25 @@ func selectCounterpartyTransfersWithKnown(transfers []adapter.TransferItem, seed
 		}
 		amount, ok := new(big.Int).SetString(transfer.AmountBaseUnits, 10)
 		if ok {
-			scaled := new(big.Rat).SetFrac(amount, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(transfer.Asset.Decimals)), nil))
-			assetKey := transfer.Asset.Kind + ":" + transfer.Asset.ContractAddress + ":" + transfer.Asset.Symbol
+			assetKey := assetKey(transfer.Asset)
 			total := item.totals[assetKey]
 			if total == nil {
-				total = big.NewRat(0, 1)
+				total = big.NewInt(0)
 				item.totals[assetKey] = total
 			}
-			total.Add(total, scaled)
-			if total.Cmp(item.largest) > 0 {
-				item.largest = new(big.Rat).Set(total)
-			}
+			total.Add(total, amount)
 		}
 	}
 	items := make([]*counterpartyStats, 0, len(stats))
 	for _, item := range stats {
 		items = append(items, item)
 	}
+	if ranking == RankingTotalRawAmount {
+		return selectCounterpartiesByAsset(transfers, stats, maxCounterparties, seed)
+	}
 	sort.Slice(items, func(left, right int) bool {
 		first, second := items[left], items[right]
 		switch ranking {
-		case RankingTotalRawAmount:
-			if compared := first.largest.Cmp(second.largest); compared != 0 {
-				return compared > 0
-			}
 		case RankingMostActive:
 			if first.count != second.count {
 				return first.count > second.count
@@ -236,6 +247,48 @@ func selectCounterpartyTransfersWithKnown(transfers []adapter.TransferItem, seed
 	selected := make(map[string]struct{}, min(int(maxCounterparties), len(items)))
 	for _, item := range items[:min(int(maxCounterparties), len(items))] {
 		selected[item.address] = struct{}{}
+	}
+	result := make([]adapter.TransferItem, 0, len(transfers))
+	for _, transfer := range transfers {
+		counterparty := transfer.From
+		if strings.EqualFold(counterparty, seed) {
+			counterparty = transfer.To
+		}
+		if _, ok := selected[counterparty]; ok {
+			result = append(result, transfer)
+		}
+	}
+	return result
+}
+
+func selectCounterpartiesByAsset(transfers []adapter.TransferItem, stats map[string]*counterpartyStats, limit uint32, seed string) []adapter.TransferItem {
+	byAsset := make(map[string][]*counterpartyStats)
+	for _, item := range stats {
+		for key := range item.totals {
+			byAsset[key] = append(byAsset[key], item)
+		}
+	}
+	keys := make([]string, 0, len(byAsset))
+	for key := range byAsset {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	selected := make(map[string]struct{})
+	for _, key := range keys {
+		items := byAsset[key]
+		sort.Slice(items, func(left, right int) bool {
+			first, second := items[left], items[right]
+			if compared := first.totals[key].Cmp(second.totals[key]); compared != 0 {
+				return compared > 0
+			}
+			if !first.latest.Equal(second.latest) {
+				return first.latest.After(second.latest)
+			}
+			return first.address < second.address
+		})
+		for _, item := range items[:min(int(limit), len(items))] {
+			selected[item.address] = struct{}{}
+		}
 	}
 	result := make([]adapter.TransferItem, 0, len(transfers))
 	for _, transfer := range transfers {
@@ -277,7 +330,7 @@ func (e *Engine) PendingGraph(address, warning string) *GraphResult {
 	return &GraphResult{
 		Network:     e.Network(),
 		SeedAddress: seed,
-		Nodes:       []GraphNode{{ID: seed, Label: shortAddress(seed), EntityType: "EOA", IsSeed: true, TotalVolumeBaseUnits: "0"}},
+		Nodes:       []GraphNode{{ID: seed, Label: shortAddress(seed), EntityType: "EOA", IsSeed: true}},
 		TotalNodes:  1,
 		Pending:     true,
 		SourceStatus: adapter.SourceStatus{
@@ -324,6 +377,8 @@ func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.Tra
 	seed = e.normalizeAddress(seed)
 	nodes := map[string]GraphNode{seed: e.node(ctx, seed, true)}
 	inCounts, outCounts := map[string]uint32{}, map[string]uint32{}
+	volumes := map[string]map[string]*big.Int{}
+	assets := map[string]adapter.Asset{}
 	edges := make([]GraphEdge, 0, len(transfers))
 	for _, transfer := range transfers {
 		from, to := e.normalizeAddress(transfer.From), e.normalizeAddress(transfer.To)
@@ -335,11 +390,18 @@ func (e *Engine) graph(ctx context.Context, seed string, transfers []adapter.Tra
 		}
 		outCounts[from]++
 		inCounts[to]++
+		if amount, ok := new(big.Int).SetString(transfer.AmountBaseUnits, 10); ok {
+			key := assetKey(transfer.Asset)
+			assets[key] = transfer.Asset
+			addAssetVolume(volumes, from, key, amount)
+			addAssetVolume(volumes, to, key, amount)
+		}
 		edges = append(edges, GraphEdge{ID: transferID(e.Network(), transfer.Hash, transfer.EventID), Source: from, Target: to, AmountBaseUnits: transfer.AmountBaseUnits, AmountFormatted: formatAmount(transfer.AmountBaseUnits, transfer.Asset), TxCount: 1, Asset: transfer.Asset, EventID: transfer.EventID, TransactionHash: transfer.Hash, TransferKind: transfer.TransferKind, SourceName: page.SourceStatus.Source, BlockNumber: uint64(transfer.BlockNumber), BlockHash: transfer.BlockHash, Timestamp: transfer.Timestamp.Unix(), RetrievedAt: page.SourceStatus.RetrievedAt.Unix(), Provisional: isProvisional(e.Network(), transfer.Timestamp, page.SourceStatus.RetrievedAt)})
 	}
 	graphNodes := make([]GraphNode, 0, len(nodes))
 	for id, node := range nodes {
 		node.InTxCount, node.OutTxCount = inCounts[id], outCounts[id]
+		node.TotalVolumeByAsset = sortedAssetVolumes(volumes[id], assets)
 		graphNodes = append(graphNodes, node)
 	}
 	sort.Slice(graphNodes, func(i, j int) bool {
@@ -369,7 +431,34 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 			entityType = "CONTRACT"
 		}
 	}
-	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, TotalVolumeBaseUnits: "0", Labels: nodeLabels}
+	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, Labels: nodeLabels}
+}
+
+func addAssetVolume(volumes map[string]map[string]*big.Int, address, key string, amount *big.Int) {
+	if volumes[address] == nil {
+		volumes[address] = make(map[string]*big.Int)
+	}
+	if volumes[address][key] == nil {
+		volumes[address][key] = big.NewInt(0)
+	}
+	volumes[address][key].Add(volumes[address][key], amount)
+}
+
+func sortedAssetVolumes(volumes map[string]*big.Int, assets map[string]adapter.Asset) []AssetVolume {
+	keys := make([]string, 0, len(volumes))
+	for key := range volumes {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]AssetVolume, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, AssetVolume{Asset: assets[key], AmountBaseUnits: volumes[key].String()})
+	}
+	return result
+}
+
+func assetKey(asset adapter.Asset) string {
+	return strings.Join([]string{asset.Kind, asset.ContractAddress, asset.Symbol, fmt.Sprintf("%d", asset.Decimals)}, ":")
 }
 
 func filterTransfers(transfers []adapter.TransferItem, address string, direction Direction) []adapter.TransferItem {
@@ -393,6 +482,26 @@ func (e *Engine) toTransfers(items []adapter.TransferItem, source adapter.Source
 		transfers = append(transfers, db.Transfer{ID: transferID(e.Network(), item.Hash, item.EventID), Network: e.Network(), TransactionHash: item.Hash, EventID: item.EventID, TransferKind: item.TransferKind, FromAddress: e.normalizeAddress(item.From), ToAddress: e.normalizeAddress(item.To), Asset: item.Asset, AmountBaseUnits: item.AmountBaseUnits, BlockNumber: item.BlockNumber, BlockHash: item.BlockHash, BlockTimestamp: item.Timestamp, Provisional: isProvisional(e.Network(), item.Timestamp, source.RetrievedAt), Source: source.Source, RetrievedAt: source.RetrievedAt})
 	}
 	return transfers
+}
+
+func traceCoverage(limit uint32, cursor string, page *adapter.TransferPage, transfers []db.Transfer) TraceCoverage {
+	coverage := TraceCoverage{
+		RequestedPageSize:     limit,
+		ObservedTransferCount: uint32(len(page.Transfers)),
+		GraphTransferCount:    uint32(len(transfers)),
+		Cursor:                cursor,
+		HasMore:               page.HasMore,
+		ProviderComplete:      page.SourceStatus.IsComplete,
+		Limitation:            retrievedScopeLimitation,
+	}
+	for _, transfer := range transfers {
+		if transfer.Provisional {
+			coverage.ProvisionalTransferCount++
+		} else {
+			coverage.FinalizedTransferCount++
+		}
+	}
+	return coverage
 }
 
 func isProvisional(network string, blockTimestamp, retrievedAt time.Time) bool {

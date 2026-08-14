@@ -78,6 +78,7 @@ type HoveredNode = {
 	title: string;
 	detail: string;
 	counts: NodeTransferCounts;
+	volumes: string;
 	x: number;
 	y: number;
 };
@@ -272,8 +273,7 @@ const baseUnits = (value: string) => {
 	}
 };
 
-const formatRelationshipAmount = (amount: bigint, edge: GraphEdge) => {
-	const asset = edge.asset;
+const formatAssetAmount = (amount: bigint, asset?: { symbol: string; decimals: number }) => {
 	if (!asset?.symbol) return `${amount.toString()} units`;
 	const decimals = Math.min(asset.decimals, 30);
 	const divisor = 10n ** BigInt(decimals);
@@ -281,6 +281,15 @@ const formatRelationshipAmount = (amount: bigint, edge: GraphEdge) => {
 	const fraction = (amount % divisor).toString().padStart(decimals, '0').slice(0, 4);
 	return `${whole}${fraction.replace(/0+$/, '') ? `.${fraction.replace(/0+$/, '')}` : ''} ${asset.symbol}`;
 };
+
+const formatRelationshipAmount = (amount: bigint, edge: GraphEdge) =>
+	formatAssetAmount(amount, edge.asset);
+
+const formatNodeVolumes = (node?: GraphNode) =>
+	(node?.totalVolumeByAsset || [])
+		.slice(0, 3)
+		.map((volume) => formatAssetAmount(baseUnits(volume.amountBaseUnits), volume.asset))
+		.join(' · ');
 
 export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelationship[] {
 	const relationships = new Map<
@@ -974,6 +983,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					: node?.label || 'Unknown address',
 				detail: cluster ? 'Click to expand this grouped branch.' : node?.id || evt.target.id(),
 				counts,
+				volumes: cluster ? '' : formatNodeVolumes(node),
 				x: evt.renderedPosition.x,
 				y: evt.renderedPosition.y,
 			});
@@ -1247,9 +1257,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 										}
 										className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
 									>
-										<option value={5}>Top 5 counterparties</option>
-										<option value={10}>Top 10 counterparties</option>
-										<option value={25}>Top 25 counterparties</option>
+										<option value={5}>
+											{graphOptions.ranking === GraphRanking.TOTAL_RAW_AMOUNT
+												? 'Top 5 per asset'
+												: 'Top 5 counterparties'}
+										</option>
+										<option value={10}>
+											{graphOptions.ranking === GraphRanking.TOTAL_RAW_AMOUNT
+												? 'Top 10 per asset'
+												: 'Top 10 counterparties'}
+										</option>
+										<option value={25}>
+											{graphOptions.ranking === GraphRanking.TOTAL_RAW_AMOUNT
+												? 'Top 25 per asset'
+												: 'Top 25 counterparties'}
+										</option>
 									</select>
 									<select
 										aria-label="Counterparty ranking"
@@ -1419,6 +1441,11 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						<p className="mt-1" style={{ color: 'var(--ink-3)' }}>
 							↑ {hoveredNode.counts.inbound} inbound · ↓ {hoveredNode.counts.outbound} outbound
 						</p>
+						{hoveredNode.volumes && (
+							<p className="mt-1" style={{ color: 'var(--ink-3)' }}>
+								Observed volume: {hoveredNode.volumes}
+							</p>
+						)}
 					</div>
 				)}
 			</div>

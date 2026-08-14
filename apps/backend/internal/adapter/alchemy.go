@@ -130,7 +130,8 @@ func (a *AlchemyEVMChainAdapter) ListTransfers(ctx context.Context, address stri
 		encoded, _ := json.Marshal(next)
 		nextCursor = base64.RawURLEncoding.EncodeToString(encoded)
 	}
-	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: nextCursor != "", SourceStatus: a.SourceStatus()}, nil
+	hasMore := nextCursor != ""
+	return &TransferPage{Transfers: transfers, NextCursor: nextCursor, HasMore: hasMore, SourceStatus: PageStatus(a.SourceStatus(), hasMore)}, nil
 }
 
 func (a *AlchemyEVMChainAdapter) transferPage(ctx context.Context, address string, outbound bool, limit uint32, pageKey string) ([]TransferItem, string, error) {

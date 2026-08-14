@@ -157,7 +157,8 @@ func (a *TronAdapter) ListTransfers(ctx context.Context, address string, limit u
 			status.Warning = "TronGrid internal-transfer history is temporarily unavailable; showing the available transfer evidence."
 		}
 	}
-	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: next != "", SourceStatus: status}, nil
+	hasMore := next != ""
+	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: hasMore, SourceStatus: PageStatus(status, hasMore)}, nil
 }
 
 func tronHistoryQuery(limit uint32, cursor string) url.Values {

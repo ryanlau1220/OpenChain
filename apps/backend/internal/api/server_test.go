@@ -306,6 +306,13 @@ func TestGraphProtoCarriesFinalityState(t *testing.T) {
 	}
 }
 
+func TestGraphProtoCarriesRetrievedScopeCoverage(t *testing.T) {
+	coverage := toCoverageProto(tracing.TraceCoverage{RequestedPageSize: 50, ObservedTransferCount: 50, GraphTransferCount: 10, FinalizedTransferCount: 8, ProvisionalTransferCount: 2, Cursor: "page-2", HasMore: true, ProviderComplete: false, Limitation: "retrieved provider page only"})
+	if coverage.GetRequestedPageSize() != 50 || coverage.GetObservedTransferCount() != 50 || coverage.GetGraphTransferCount() != 10 || coverage.GetFinalizedTransferCount() != 8 || coverage.GetProvisionalTransferCount() != 2 || !coverage.GetHasMore() || coverage.GetProviderComplete() || coverage.GetCursor() != "page-2" || coverage.GetLimitation() == "" {
+		t.Fatalf("coverage = %#v", coverage)
+	}
+}
+
 func TestGraphProtoCarriesBlockHash(t *testing.T) {
 	_, edges := toGraphProto(&tracing.GraphResult{Edges: []tracing.GraphEdge{{ID: "block", BlockHash: "0xblock"}}})
 	if len(edges) != 1 || edges[0].GetBlockHash() != "0xblock" {

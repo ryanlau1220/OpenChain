@@ -172,7 +172,8 @@ func (a *TONAdapter) ListTransfers(ctx context.Context, address string, limit ui
 	}
 	// TonAPI returns the next account logical time. It is opaque to callers, but
 	// is passed back as before_lt on the next page.
-	return &TransferPage{Transfers: transfers, NextCursor: r.NextFrom, HasMore: r.NextFrom != "", SourceStatus: a.SourceStatus()}, nil
+	hasMore := r.NextFrom != ""
+	return &TransferPage{Transfers: transfers, NextCursor: r.NextFrom, HasMore: hasMore, SourceStatus: PageStatus(a.SourceStatus(), hasMore)}, nil
 }
 func (a *TONAdapter) LookupTransaction(ctx context.Context, hash string) (*TransactionItem, SourceStatus, error) {
 	var r struct {
@@ -336,7 +337,7 @@ func (a *CardanoAdapter) ListTransfers(ctx context.Context, address string, limi
 	}
 	status := a.SourceStatus()
 	status.Warning = "Cardano UTXO transfers are transaction-level observations; review change outputs before drawing attribution conclusions."
-	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: hasMore, SourceStatus: status}, nil
+	return &TransferPage{Transfers: transfers, NextCursor: next, HasMore: hasMore, SourceStatus: PageStatus(status, hasMore)}, nil
 }
 func (a *CardanoAdapter) transactionTransfers(ctx context.Context, address, hash string, blockHeight, blockTime int64) ([]TransferItem, error) {
 	var transaction struct {

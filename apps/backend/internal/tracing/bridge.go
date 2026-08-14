@@ -13,7 +13,7 @@ import (
 
 const bridgeCorrelationWindow = 7 * 24 * time.Hour
 
-const crossChainTransitionLimitation = "This is matching bridge-transfer evidence based on known bridge contracts, reported asset kind/symbol/decimals, raw amount, recipient, and timing. It does not establish cross-chain address ownership, token equivalence, or intent."
+const crossChainTransitionLimitation = "This is matching bridge-transfer evidence within retrieved provider pages based on known bridge contracts, reported asset kind/symbol/decimals, raw amount, recipient, and timing. It does not establish cross-chain address ownership, token equivalence, or intent."
 
 type bridgeRoute struct {
 	name, sourceNetwork, destinationNetwork string
