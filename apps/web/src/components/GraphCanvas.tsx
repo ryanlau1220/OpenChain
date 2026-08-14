@@ -1126,16 +1126,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						)}
 					</div>
 					<div className="ml-auto flex items-center gap-1.5 shrink-0">
-						{graphData?.sourceStatus?.source && (
-							<span
-								className="hidden xl:inline font-mono text-[10px]"
-								style={{ color: 'var(--ink-3)' }}
-								title="Graph data source and finality state"
-							>
-								{graphData.sourceStatus.source} ·{' '}
-								{graphData.sourceStatus.isComplete ? 'finalized' : 'provisional'}
-							</span>
-						)}
 						{graphOptions && onGraphOptionsChange && (
 							<button
 								ref={filterButtonRef}
@@ -1398,7 +1388,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
 			{/* Cytoscape canvas */}
 			<div className="relative min-h-0 flex-1 w-full cursor-grab active:cursor-grabbing">
-				<div ref={containerRef} className="absolute inset-0" />
+				<div ref={containerRef} className="h-full w-full" />
 				<button
 					type="button"
 					onKeyDown={handleCanvasKeyDown}
