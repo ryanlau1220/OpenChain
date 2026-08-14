@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
+	"github.com/openchain/openchain/apps/backend/internal/bridge"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -56,17 +57,24 @@ CREATE TRIGGER acquisition_scope_snapshots_immutable BEFORE UPDATE OR DELETE ON 
 SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE TABLE %s.bridge_transitions (LIKE public.bridge_transitions INCLUDING ALL);
+CREATE TABLE %s.bridge_transition_acquisitions (LIKE public.bridge_transition_acquisitions INCLUDING ALL);`, schema, schema)); err != nil {
+		t.Fatal(err)
+	}
 	from := "0x1000000000000000000000000000000000000001"
 	to := "0x2000000000000000000000000000000000000002"
 	transfer := Transfer{ID: "ethereum-mainnet:test-graph:tx", Network: "ethereum-mainnet", TransactionHash: "0xtest-graph", EventID: "tx", TransferKind: "NATIVE", FromAddress: from, ToAddress: to, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, AmountBaseUnits: "42", BlockNumber: 1, BlockHash: "0xblock", BlockTimestamp: time.Unix(1, 0), Provisional: false, Source: "test", RetrievedAt: time.Now().UTC()}
 	rawResponse := []byte(`{"status":"1","result":["evidence"]}`)
 	acquisition := adapter.RawAcquisition{Provider: "test-provider", RequestIdentity: "GET https://provider.test/account?address=test", Response: rawResponse, RetrievedAt: time.Now().UTC()}
+	expectedHash := sha256.Sum256(rawResponse)
+	expectedResponseHash := fmt.Sprintf("%x", expectedHash[:])
+	transition := bridge.Transition{ID: "base-standard-bridge:test", Protocol: "base-standard-bridge", BridgeName: "Base Standard Bridge", SourceNetwork: "ethereum-mainnet", DestinationNetwork: "base-mainnet", Lifecycle: bridge.LifecycleFinalized, MessageID: "0xmessage", SourceTransferID: transfer.ID, SourceTransactionHash: transfer.TransactionHash, DestinationTransactionHash: "0xdestination", SourceLogReference: transfer.TransactionHash + ":log:1", DestinationLogReference: "0xdestination:log:2", SourceBridgeAddress: to, DestinationBridgeAddress: "0x4200000000000000000000000000000000000010", Recipient: to, Asset: transfer.Asset, AmountBaseUnits: transfer.AmountBaseUnits, SourceBlockNumber: uint64(transfer.BlockNumber), DestinationBlockNumber: 2, SourceBlockHash: transfer.BlockHash, DestinationBlockHash: "0xdestinationblock", SourceTimestamp: transfer.BlockTimestamp, DestinationTimestamp: transfer.BlockTimestamp.Add(time.Minute), SourceConfirmed: true, DestinationConfirmed: true, Limitations: "No ownership inference.", SourceAcquisitionHashes: []string{expectedResponseHash}}
 	defer func() {
 		cleanupGraph(t, database, transfer.ID, transfer.Network, from, to)
 		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 	}()
 	scope := AcquisitionScope{Network: transfer.Network, Address: from, Cursor: "page-1", RetrievedAt: acquisition.RetrievedAt}
-	if err := database.SaveEvidenceGraph(ctx, scope, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}, []adapter.RawAcquisition{acquisition}); err != nil {
+	if err := database.SaveEvidenceGraph(ctx, scope, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}, []adapter.RawAcquisition{acquisition}, transition); err != nil {
 		t.Fatal(err)
 	}
 	var relationalCount int
@@ -90,11 +98,10 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	if incoming, err := database.GraphNeighbors(ctx, transfer.Network, to, "inbound", 10); err != nil || !containsTransfer(incoming, transfer.ID) {
 		t.Fatalf("AGE inbound neighbors = %#v err=%v", incoming, err)
 	}
-	expectedHash := sha256.Sum256(rawResponse)
 	var acquisitionID int64
 	var responseHash string
 	var provisional bool
-	if err := database.SQL.QueryRowContext(ctx, `SELECT snapshot.id, snapshot.response_sha256, transfer.provisional FROM acquisition_snapshots snapshot JOIN acquisition_scope_snapshots scope_snapshot ON scope_snapshot.acquisition_id = snapshot.id JOIN acquisition_scope_transfers scope_transfer ON scope_transfer.scope_id = scope_snapshot.scope_id JOIN transfers transfer ON transfer.id = scope_transfer.transfer_id WHERE transfer.id = $1`, transfer.ID).Scan(&acquisitionID, &responseHash, &provisional); err != nil || responseHash != fmt.Sprintf("%x", expectedHash[:]) || provisional {
+	if err := database.SQL.QueryRowContext(ctx, `SELECT snapshot.id, snapshot.response_sha256, transfer.provisional FROM acquisition_snapshots snapshot JOIN acquisition_scope_snapshots scope_snapshot ON scope_snapshot.acquisition_id = snapshot.id JOIN acquisition_scope_transfers scope_transfer ON scope_transfer.scope_id = scope_snapshot.scope_id JOIN transfers transfer ON transfer.id = scope_transfer.transfer_id WHERE transfer.id = $1`, transfer.ID).Scan(&acquisitionID, &responseHash, &provisional); err != nil || responseHash != expectedResponseHash || provisional {
 		t.Fatalf("transfer provenance = id:%d hash:%q provisional:%v err:%v", acquisitionID, responseHash, provisional, err)
 	}
 	if _, err := database.SQL.ExecContext(ctx, `UPDATE acquisition_snapshots SET provider = 'changed' WHERE id = $1`, acquisitionID); err == nil {
@@ -118,7 +125,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 		t.Fatal("immutable acquisition blob was updated")
 	}
 	exported, err := database.ExportEvidence(ctx, transfer.Network, []string{transfer.ID})
-	if err != nil || len(exported.Transfers) != 1 || len(exported.Snapshots) != 1 || len(exported.Scopes) != 1 || len(exported.ScopeTransfers) != 1 || len(exported.ScopeSnapshots) != 1 || exported.Snapshots[0].Hash != responseHash {
+	if err != nil || len(exported.Transfers) != 1 || len(exported.Snapshots) != 1 || len(exported.Scopes) != 1 || len(exported.ScopeTransfers) != 1 || len(exported.ScopeSnapshots) != 1 || exported.Snapshots[0].Hash != responseHash || len(exported.BridgeTransitions) != 1 || exported.BridgeTransitions[0].MessageID != "0xmessage" || len(exported.BridgeTransitionAcquisitions) != 1 || exported.BridgeTransitionAcquisitions[0].AcquisitionID != acquisitionID {
 		t.Fatalf("evidence export = %#v err=%v", exported, err)
 	}
 	var assetCount int

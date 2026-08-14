@@ -133,6 +133,58 @@ CREATE TRIGGER acquisition_scope_transfers_immutable BEFORE UPDATE OR DELETE ON 
 DROP TRIGGER IF EXISTS acquisition_scope_snapshots_immutable ON public.acquisition_scope_snapshots;
 CREATE TRIGGER acquisition_scope_snapshots_immutable BEFORE UPDATE OR DELETE ON public.acquisition_scope_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
 
+CREATE TABLE IF NOT EXISTS public.bridge_transitions (
+  id TEXT PRIMARY KEY,
+  protocol TEXT NOT NULL,
+  bridge_name TEXT NOT NULL,
+  source_network TEXT NOT NULL,
+  destination_network TEXT NOT NULL,
+  lifecycle TEXT NOT NULL CHECK (lifecycle IN ('initiated', 'relayed', 'finalized', 'failed', 'unresolved')),
+  message_id TEXT NOT NULL,
+  source_transfer_id TEXT NOT NULL REFERENCES public.transfers(id),
+  destination_transfer_id TEXT REFERENCES public.transfers(id),
+  source_transaction_hash TEXT NOT NULL,
+  destination_transaction_hash TEXT,
+  source_log_reference TEXT NOT NULL,
+  destination_log_reference TEXT,
+  source_bridge_address TEXT NOT NULL,
+  destination_bridge_address TEXT NOT NULL,
+  canonical_source_token TEXT NOT NULL,
+  canonical_destination_token TEXT NOT NULL,
+  recipient TEXT NOT NULL,
+  asset_kind TEXT NOT NULL,
+  asset_contract_address TEXT NOT NULL,
+  asset_symbol TEXT NOT NULL,
+  asset_decimals INTEGER NOT NULL,
+  amount_base_units TEXT NOT NULL,
+  source_block_number BIGINT NOT NULL,
+  destination_block_number BIGINT,
+  source_block_hash TEXT NOT NULL,
+  destination_block_hash TEXT,
+  source_timestamp TIMESTAMPTZ NOT NULL,
+  destination_timestamp TIMESTAMPTZ,
+  source_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+  destination_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+  limitations TEXT NOT NULL,
+  observed_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS bridge_transitions_source_transfer_idx ON public.bridge_transitions (source_transfer_id, source_timestamp DESC);
+CREATE INDEX IF NOT EXISTS bridge_transitions_message_idx ON public.bridge_transitions (protocol, message_id, observed_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.bridge_transition_acquisitions (
+  transition_id TEXT NOT NULL REFERENCES public.bridge_transitions(id),
+  side TEXT NOT NULL CHECK (side IN ('source', 'destination')),
+  acquisition_id BIGINT NOT NULL REFERENCES public.acquisition_snapshots(id),
+  PRIMARY KEY (transition_id, side, acquisition_id)
+);
+
+CREATE INDEX IF NOT EXISTS bridge_transition_acquisitions_snapshot_idx ON public.bridge_transition_acquisitions (acquisition_id);
+DROP TRIGGER IF EXISTS bridge_transitions_immutable ON public.bridge_transitions;
+CREATE TRIGGER bridge_transitions_immutable BEFORE UPDATE OR DELETE ON public.bridge_transitions FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS bridge_transition_acquisitions_immutable ON public.bridge_transition_acquisitions;
+CREATE TRIGGER bridge_transition_acquisitions_immutable BEFORE UPDATE OR DELETE ON public.bridge_transition_acquisitions FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+
 CREATE TABLE IF NOT EXISTS public.rule_catalog (
   rule_id TEXT NOT NULL,
   version TEXT NOT NULL,

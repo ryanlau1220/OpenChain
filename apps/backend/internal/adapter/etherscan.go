@@ -40,7 +40,13 @@ func NewEVMChainAdapter(network, chainID, apiURL, apiKey string, evmClient *EVMC
 
 func (a *EVMChainAdapter) Network() string { return a.network }
 
-func (a *EVMChainAdapter) Capabilities() NetworkCapabilities { return evmCapabilities() }
+func (a *EVMChainAdapter) EVMClient() *EVMClient { return a.evmClient }
+
+func (a *EVMChainAdapter) Capabilities() NetworkCapabilities {
+	capabilities := evmCapabilities()
+	capabilities.BridgeEvidence = a.network == "ethereum-mainnet"
+	return capabilities
+}
 
 func (a *EVMChainAdapter) NormalizeAddress(value string) (string, error) {
 	return normalizeEthereumAddress(value)

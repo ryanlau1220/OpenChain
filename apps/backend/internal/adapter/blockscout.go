@@ -39,7 +39,13 @@ func NewBlockscoutChainAdapter(network, apiURL, apiKey string, evmClient *EVMCli
 
 func (a *BlockscoutChainAdapter) Network() string { return a.network }
 
-func (a *BlockscoutChainAdapter) Capabilities() NetworkCapabilities { return evmCapabilities() }
+func (a *BlockscoutChainAdapter) EVMClient() *EVMClient { return a.evmClient }
+
+func (a *BlockscoutChainAdapter) Capabilities() NetworkCapabilities {
+	capabilities := evmCapabilities()
+	capabilities.BridgeEvidence = a.network == "base-mainnet"
+	return capabilities
+}
 
 func (a *BlockscoutChainAdapter) NormalizeAddress(value string) (string, error) {
 	return normalizeEthereumAddress(value)

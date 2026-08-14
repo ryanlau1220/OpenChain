@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
+	"github.com/openchain/openchain/apps/backend/internal/bridge"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/rules"
@@ -70,6 +71,7 @@ type GraphResult struct {
 	SourceStatus           adapter.SourceStatus
 	Coverage               TraceCoverage
 	Leads                  []rules.Lead
+	CrossChainTransitions  []bridge.Transition
 }
 
 type TraceCoverage struct {
@@ -82,13 +84,14 @@ type TraceCoverage struct {
 const retrievedScopeLimitation = "This graph and its findings are limited to the retrieved provider page after the selected direction and counterparty scope. An observation is confirmation-backed only when OpenChain obtained a current chain height and the network confirmation threshold was met; this is not an evidentiary finality claim."
 
 type Engine struct {
-	chainAdapter  adapter.ChainAdapter
-	database      *db.DB
-	labelRegistry *labels.Service
+	chainAdapter   adapter.ChainAdapter
+	database       *db.DB
+	labelRegistry  *labels.Service
+	bridgeAdapters []bridge.Adapter
 }
 
-func NewEngine(chainAdapter adapter.ChainAdapter, database *db.DB, labels *labels.Service) *Engine {
-	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels}
+func NewEngine(chainAdapter adapter.ChainAdapter, database *db.DB, labels *labels.Service, bridgeAdapters ...bridge.Adapter) *Engine {
+	return &Engine{chainAdapter: chainAdapter, database: database, labelRegistry: labels, bridgeAdapters: bridgeAdapters}
 }
 
 func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Direction, limit uint32, cursor string, maxCounterparties uint32, ranking Ranking, maxDepth uint32) (*GraphResult, error) {
@@ -120,6 +123,10 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	filtered := filterTransfers(page.Transfers, address, direction)
 	transfers := selectCounterpartyTransfersWithKnown(filtered, address, maxCounterparties, ranking, e.knownCounterparties(ctx, filtered, address, ranking))
 	persistedTransfers := e.toTransfers(transfers, page.SourceStatus)
+	transitions, err := e.resolveBridgeTransitions(acquisitionContext, transfers, persistedTransfers)
+	if err != nil {
+		return nil, err
+	}
 	completedAt := time.Now().UTC()
 	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, completedAt)
 	result := e.graph(ctx, address, transfers, page)
@@ -129,7 +136,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 			retrievedAt = completedAt
 		}
 		scope := db.AcquisitionScope{Network: e.Network(), Address: address, Cursor: cursor, RetrievedAt: retrievedAt}
-		if err := e.database.SaveEvidenceGraph(ctx, scope, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items()); err != nil {
+		if err := e.database.SaveEvidenceGraph(ctx, scope, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items(), transitions...); err != nil {
 			return nil, err
 		}
 		storedTransfers, err := e.traverseStoredGraph(ctx, address, direction, limit, maxCounterparties, ranking, maxDepth)
@@ -137,6 +144,11 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 			return nil, err
 		}
 		result = e.graphFromStored(ctx, address, storedTransfers, page)
+		persistedBridgeTransitions, err := e.database.BridgeTransitionsForTransfers(ctx, persistedTransferIDs(persistedTransfers))
+		if err != nil {
+			return nil, err
+		}
+		result.CrossChainTransitions = persistedBridgeTransitions
 		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
 			return nil, err
 		}
@@ -144,7 +156,54 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers)
 	result.Coverage.Limitation = retrievedScopeLimitation + " AGE traversal only includes persisted observations within the selected depth and bounded per-address graph scope."
 	result.Leads = leads
+	if e.database == nil {
+		result.CrossChainTransitions = transitions
+	}
 	return result, nil
+}
+
+func (e *Engine) resolveBridgeTransitions(ctx context.Context, transfers []adapter.TransferItem, persisted []db.Transfer) ([]bridge.Transition, error) {
+	if len(e.bridgeAdapters) == 0 || len(transfers) == 0 {
+		return []bridge.Transition{}, nil
+	}
+	result := make([]bridge.Transition, 0)
+	for _, bridgeAdapter := range e.bridgeAdapters {
+		items, err := bridgeAdapter.Resolve(ctx, e.Network(), transfers)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s evidence: %w", bridgeAdapter.Protocol(), err)
+		}
+		for index := range items {
+			items[index].SourceTransferID = bridgeSourceTransferID(items[index], persisted)
+			if items[index].SourceTransferID == "" {
+				// An exact source event cannot be linked to one persisted observation.
+				// Do not write a bridge assertion with an ambiguous source fact.
+				continue
+			}
+			result = append(result, items[index])
+		}
+	}
+	return result, nil
+}
+
+func bridgeSourceTransferID(transition bridge.Transition, transfers []db.Transfer) string {
+	var matched string
+	for _, transfer := range transfers {
+		if !strings.EqualFold(transfer.TransactionHash, transition.SourceTransactionHash) ||
+			!strings.EqualFold(transfer.ToAddress, transition.SourceBridgeAddress) ||
+			transfer.AmountBaseUnits != transition.AmountBaseUnits ||
+			transfer.Asset.Kind != transition.Asset.Kind {
+			continue
+		}
+		if transition.Asset.ContractAddress != "" &&
+			!strings.EqualFold(transfer.Asset.ContractAddress, transition.CanonicalSourceToken) {
+			continue
+		}
+		if matched != "" {
+			return ""
+		}
+		matched = transfer.ID
+	}
+	return matched
 }
 
 func graphControls(maxCounterparties uint32, ranking Ranking) (uint32, Ranking) {
@@ -626,6 +685,16 @@ func (e *Engine) toAddresses(nodes []GraphNode) []db.Address {
 
 func transferID(network, hash, eventID string) string {
 	return network + ":" + hash + ":" + eventID
+}
+
+func persistedTransferIDs(transfers []db.Transfer) []string {
+	ids := make([]string, 0, len(transfers))
+	for _, transfer := range transfers {
+		if transfer.ID != "" {
+			ids = append(ids, transfer.ID)
+		}
+	}
+	return ids
 }
 func formatAmount(value string, asset adapter.Asset) string {
 	amount, ok := new(big.Int).SetString(value, 10)

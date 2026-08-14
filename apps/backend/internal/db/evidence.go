@@ -41,13 +41,15 @@ type RecordedRuleRun struct {
 }
 
 type EvidenceExport struct {
-	Transfers      []Transfer
-	Snapshots      []AcquisitionSnapshot
-	Scopes         []RecordedAcquisitionScope
-	ScopeTransfers []AcquisitionScopeTransfer
-	ScopeSnapshots []AcquisitionScopeSnapshot
-	RuleRuns       []RecordedRuleRun
-	Labels         []CuratedLabel
+	Transfers                    []Transfer
+	Snapshots                    []AcquisitionSnapshot
+	Scopes                       []RecordedAcquisitionScope
+	ScopeTransfers               []AcquisitionScopeTransfer
+	ScopeSnapshots               []AcquisitionScopeSnapshot
+	RuleRuns                     []RecordedRuleRun
+	Labels                       []CuratedLabel
+	BridgeTransitions            []BridgeTransition
+	BridgeTransitionAcquisitions []BridgeTransitionAcquisition
 }
 
 const maxEvidenceTransferIDs = 250
@@ -96,7 +98,11 @@ func (d *DB) ExportEvidence(ctx context.Context, network string, transferIDs []s
 	if err != nil {
 		return nil, err
 	}
-	return &EvidenceExport{Transfers: transfers, Snapshots: snapshots, Scopes: scopes, ScopeTransfers: scopeTransfers, ScopeSnapshots: scopeSnapshots, RuleRuns: runs, Labels: labels}, nil
+	bridgeTransitions, bridgeLinks, err := d.ExportBridgeTransitions(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	return &EvidenceExport{Transfers: transfers, Snapshots: snapshots, Scopes: scopes, ScopeTransfers: scopeTransfers, ScopeSnapshots: scopeSnapshots, RuleRuns: runs, Labels: labels, BridgeTransitions: bridgeTransitions, BridgeTransitionAcquisitions: bridgeLinks}, nil
 }
 
 func (d *DB) exportTransfers(ctx context.Context, ids []string) ([]Transfer, error) {

@@ -32,12 +32,34 @@ func WithAcquisitionRecorder(ctx context.Context) (context.Context, *acquisition
 	return context.WithValue(ctx, acquisitionContextKey{}, recorder), recorder
 }
 
+// AcquisitionItems returns the responses captured in the current trace context.
+// It intentionally returns a copy so protocol adapters cannot mutate evidence.
+func AcquisitionItems(ctx context.Context) []RawAcquisition {
+	recorder, _ := ctx.Value(acquisitionContextKey{}).(*acquisitionRecorder)
+	if recorder == nil {
+		return nil
+	}
+	return recorder.Items()
+}
+
 func (r *acquisitionRecorder) Items() []RawAcquisition {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	items := make([]RawAcquisition, len(r.items))
 	copy(items, r.items)
 	return items
+}
+
+// AcquisitionResponseHashes returns stable content hashes for exact raw provider
+// responses. Higher-level evidence records use these to link a fact to the
+// acquisition snapshot that established it.
+func AcquisitionResponseHashes(items []RawAcquisition) []string {
+	hashes := make([]string, 0, len(items))
+	for _, item := range items {
+		hash := sha256.Sum256(item.Response)
+		hashes = append(hashes, fmt.Sprintf("%x", hash[:]))
+	}
+	return hashes
 }
 
 func recordAcquisition(ctx context.Context, provider string, request *http.Request, response []byte) {

@@ -167,7 +167,7 @@ func TestHealthAPI(t *testing.T) {
 	if body.Queue.Enabled {
 		t.Fatal("test server unexpectedly has a queue")
 	}
-	if len(body.Networks) != 1 || body.Networks[0].Network != "ethereum-mainnet" || !body.Networks[0].Capabilities.NativeTransfers || !body.Networks[0].Capabilities.TokenTransfers || !body.Networks[0].Capabilities.InternalTransfers || !body.Networks[0].Capabilities.HistoricalPagination || !body.Networks[0].Capabilities.Finality || !body.Networks[0].Capabilities.EntityClassification || !body.Networks[0].Capabilities.ExactRawProvenance || body.Networks[0].Capabilities.TransactionSuccess || body.Networks[0].Capabilities.BridgeEvidence || len(body.Networks[0].Providers) != 1 || body.Networks[0].Providers[0].MaxConcurrent != 1 || body.Networks[0].Providers[0].RequestsPerSecond != 5 {
+	if len(body.Networks) != 1 || body.Networks[0].Network != "ethereum-mainnet" || !body.Networks[0].Capabilities.NativeTransfers || !body.Networks[0].Capabilities.TokenTransfers || !body.Networks[0].Capabilities.InternalTransfers || !body.Networks[0].Capabilities.HistoricalPagination || !body.Networks[0].Capabilities.Finality || !body.Networks[0].Capabilities.EntityClassification || !body.Networks[0].Capabilities.ExactRawProvenance || !body.Networks[0].Capabilities.BridgeEvidence || body.Networks[0].Capabilities.TransactionSuccess || len(body.Networks[0].Providers) != 1 || body.Networks[0].Providers[0].MaxConcurrent != 1 || body.Networks[0].Providers[0].RequestsPerSecond != 5 {
 		t.Fatalf("network health = %#v", body.Networks)
 	}
 }

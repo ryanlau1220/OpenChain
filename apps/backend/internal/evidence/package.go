@@ -13,7 +13,7 @@ import (
 
 const (
 	Format  = "openchain-evidence-package"
-	Version = 2
+	Version = 3
 )
 
 type Package struct {
@@ -29,15 +29,17 @@ type Manifest struct {
 }
 
 type Payload struct {
-	ExportedAt     time.Time          `json:"exported_at"`
-	Case           json.RawMessage    `json:"case"`
-	Transfers      []Transfer         `json:"transfers"`
-	Snapshots      []Snapshot         `json:"acquisition_snapshots"`
-	Scopes         []AcquisitionScope `json:"acquisition_scopes"`
-	ScopeTransfers []ScopeTransfer    `json:"scope_transfers"`
-	ScopeSnapshots []ScopeSnapshot    `json:"scope_snapshots"`
-	RuleRuns       []RuleRun          `json:"rule_runs"`
-	Labels         []Label            `json:"labels"`
+	ExportedAt                   time.Time                     `json:"exported_at"`
+	Case                         json.RawMessage               `json:"case"`
+	Transfers                    []Transfer                    `json:"transfers"`
+	Snapshots                    []Snapshot                    `json:"acquisition_snapshots"`
+	Scopes                       []AcquisitionScope            `json:"acquisition_scopes"`
+	ScopeTransfers               []ScopeTransfer               `json:"scope_transfers"`
+	ScopeSnapshots               []ScopeSnapshot               `json:"scope_snapshots"`
+	RuleRuns                     []RuleRun                     `json:"rule_runs"`
+	Labels                       []Label                       `json:"labels"`
+	BridgeTransitions            []BridgeTransition            `json:"bridge_transitions"`
+	BridgeTransitionAcquisitions []BridgeTransitionAcquisition `json:"bridge_transition_acquisitions"`
 }
 
 type Transfer struct {
@@ -123,6 +125,27 @@ type Label struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type BridgeTransition struct {
+	ID, Protocol, BridgeName, SourceNetwork, DestinationNetwork, Lifecycle, MessageID string
+	SourceTransferID, DestinationTransferID                                           string
+	SourceTransactionHash, DestinationTransactionHash                                 string
+	SourceLogReference, DestinationLogReference                                       string
+	SourceBridgeAddress, DestinationBridgeAddress                                     string
+	CanonicalSourceToken, CanonicalDestinationToken, Recipient, AmountBaseUnits       string
+	Asset                                                                             Asset
+	SourceBlockNumber, DestinationBlockNumber                                         uint64
+	SourceBlockHash, DestinationBlockHash                                             string
+	SourceTimestamp, DestinationTimestamp                                             time.Time
+	SourceConfirmed, DestinationConfirmed                                             bool
+	Limitations                                                                       string
+}
+
+type BridgeTransitionAcquisition struct {
+	TransitionID  string `json:"transition_id"`
+	Side          string `json:"side"`
+	AcquisitionID int64  `json:"acquisition_id"`
+}
+
 func Build(caseJSON []byte, exported *db.EvidenceExport, now time.Time) (*Package, error) {
 	if !json.Valid(caseJSON) || exported == nil {
 		return nil, fmt.Errorf("invalid evidence package input")
@@ -148,6 +171,12 @@ func Build(caseJSON []byte, exported *db.EvidenceExport, now time.Time) (*Packag
 	}
 	for _, label := range exported.Labels {
 		payload.Labels = append(payload.Labels, Label{ID: label.ID, Network: label.Network, Address: label.Address, Category: label.Category, Value: label.Label, Confidence: label.Confidence, EvidenceURL: label.EvidenceURL, Source: label.Source, SourceVersion: label.SourceVersion, Visibility: label.Visibility, TrustTier: label.TrustTier, CreatedBy: label.CreatedBy, CreatedAt: label.CreatedAt.UTC()})
+	}
+	for _, transition := range exported.BridgeTransitions {
+		payload.BridgeTransitions = append(payload.BridgeTransitions, BridgeTransition{ID: transition.ID, Protocol: transition.Protocol, BridgeName: transition.BridgeName, SourceNetwork: transition.SourceNetwork, DestinationNetwork: transition.DestinationNetwork, Lifecycle: transition.Lifecycle, MessageID: transition.MessageID, SourceTransferID: transition.SourceTransferID, DestinationTransferID: transition.DestinationTransferID, SourceTransactionHash: transition.SourceTransactionHash, DestinationTransactionHash: transition.DestinationTransactionHash, SourceLogReference: transition.SourceLogReference, DestinationLogReference: transition.DestinationLogReference, SourceBridgeAddress: transition.SourceBridgeAddress, DestinationBridgeAddress: transition.DestinationBridgeAddress, CanonicalSourceToken: transition.CanonicalSourceToken, CanonicalDestinationToken: transition.CanonicalDestinationToken, Recipient: transition.Recipient, AmountBaseUnits: transition.AmountBaseUnits, Asset: Asset{Kind: transition.Asset.Kind, ContractAddress: transition.Asset.ContractAddress, Symbol: transition.Asset.Symbol, Decimals: transition.Asset.Decimals}, SourceBlockNumber: transition.SourceBlockNumber, DestinationBlockNumber: transition.DestinationBlockNumber, SourceBlockHash: transition.SourceBlockHash, DestinationBlockHash: transition.DestinationBlockHash, SourceTimestamp: transition.SourceTimestamp.UTC(), DestinationTimestamp: transition.DestinationTimestamp.UTC(), SourceConfirmed: transition.SourceConfirmed, DestinationConfirmed: transition.DestinationConfirmed, Limitations: transition.Limitations})
+	}
+	for _, link := range exported.BridgeTransitionAcquisitions {
+		payload.BridgeTransitionAcquisitions = append(payload.BridgeTransitionAcquisitions, BridgeTransitionAcquisition{TransitionID: link.TransitionID, Side: link.Side, AcquisitionID: link.AcquisitionID})
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {

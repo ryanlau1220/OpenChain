@@ -1,7 +1,7 @@
 import { type GraphOptions, type NetworkSlug, defaultGraphOptions, isNetworkSlug } from './api';
 
-export const CASE_FILE_VERSION = 2;
-const STORAGE_KEY = 'openchain.local-case.v2';
+export const CASE_FILE_VERSION = 3;
+const STORAGE_KEY = 'openchain.local-case.v3';
 
 export type CaseAnnotation = {
 	id: string;
@@ -21,6 +21,7 @@ export type LocalCase = {
 	notes: string;
 	selectedAddressIds: string[];
 	selectedTransferIds: string[];
+	pinnedBridgeTransitionIds: string[];
 	annotations: CaseAnnotation[];
 };
 
@@ -37,6 +38,7 @@ export function createLocalCase(): LocalCase {
 		notes: '',
 		selectedAddressIds: [],
 		selectedTransferIds: [],
+		pinnedBridgeTransitionIds: [],
 		annotations: [],
 	};
 }
@@ -99,6 +101,7 @@ export function parseCaseFile(value: string): LocalCase {
 		typeof item.updatedAt !== 'string' ||
 		!strings(item.selectedAddressIds) ||
 		!strings(item.selectedTransferIds) ||
+		!strings(item.pinnedBridgeTransitionIds) ||
 		!annotations ||
 		!validScope
 	)

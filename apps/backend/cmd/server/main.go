@@ -13,6 +13,7 @@ import (
 	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
 	"github.com/openchain/openchain/apps/backend/internal/api"
+	"github.com/openchain/openchain/apps/backend/internal/bridge"
 	"github.com/openchain/openchain/apps/backend/internal/config"
 	"github.com/openchain/openchain/apps/backend/internal/db"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
@@ -54,6 +55,8 @@ func main() {
 	}
 	runtimes := make(map[pb.Network]api.NetworkRuntime, 10)
 	queues := make([]*tracing.Queue, 0, 10)
+	bridgeClients := make(map[string]*adapter.EVMClient, 2)
+	baseBridge := bridge.NewBaseStandardBridge(bridgeClients)
 	for _, network := range []struct {
 		id                    pb.Network
 		name, chainID, rpcURL string
@@ -62,13 +65,14 @@ func main() {
 		{pb.Network_NETWORK_BASE_MAINNET, "base-mainnet", "8453", cfg.BaseMainnetRPCURL},
 	} {
 		evmClient := adapter.NewEVMClient(network.rpcURL)
+		bridgeClients[network.name] = evmClient
 		var chainAdapter adapter.ChainAdapter
 		if network.id == pb.Network_NETWORK_BASE_MAINNET {
 			chainAdapter = adapter.NewBlockscoutChainAdapter(network.name, adapter.BlockscoutBaseAPIURL, cfg.BlockscoutAPIKey, evmClient)
 		} else {
 			chainAdapter = adapter.NewEVMChainAdapter(network.name, network.chainID, adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, evmClient)
 		}
-		engine := tracing.NewEngine(chainAdapter, database, registry)
+		engine := tracing.NewEngine(chainAdapter, database, registry, baseBridge)
 		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobsPerNetwork, cfg.MaxQueuedJobsPerClientPerNetwork)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)

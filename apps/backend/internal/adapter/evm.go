@@ -234,9 +234,62 @@ type LogItem struct {
 	Topics           []string `json:"topics"`
 	Data             string   `json:"data"`
 	BlockNumber      string   `json:"blockNumber"`
+	BlockHash        string   `json:"blockHash"`
 	TransactionHash  string   `json:"transactionHash"`
 	TransactionIndex string   `json:"transactionIndex"`
 	LogIndex         string   `json:"logIndex"`
+}
+
+// LogFilter exposes only the topic-addressed RPC query needed by protocol
+// evidence adapters. It is intentionally not a generic address-history API.
+type LogFilter struct {
+	Address   string
+	Topics    []interface{}
+	FromBlock string
+	ToBlock   string
+}
+
+func (c *EVMClient) GetLogs(ctx context.Context, filter LogFilter) ([]LogItem, error) {
+	if filter.Address == "" || len(filter.Topics) == 0 {
+		return nil, fmt.Errorf("EVM log filter requires an address and topics")
+	}
+	fromBlock := filter.FromBlock
+	if fromBlock == "" {
+		fromBlock = "0x0"
+	}
+	toBlock := filter.ToBlock
+	if toBlock == "" {
+		toBlock = "latest"
+	}
+	raw, err := c.callRPC(ctx, "eth_getLogs", []interface{}{map[string]interface{}{
+		"address": strings.ToLower(filter.Address), "topics": filter.Topics, "fromBlock": fromBlock, "toBlock": toBlock,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	var logs []LogItem
+	if err := json.Unmarshal(raw, &logs); err != nil {
+		return nil, fmt.Errorf("parse EVM logs: %w", err)
+	}
+	return logs, nil
+}
+
+func (c *EVMClient) GetBlockTimestamp(ctx context.Context, blockNumber uint64) (time.Time, error) {
+	raw, err := c.callRPC(ctx, "eth_getBlockByNumber", []interface{}{fmt.Sprintf("0x%x", blockNumber), false})
+	if err != nil {
+		return time.Time{}, err
+	}
+	var block struct {
+		Timestamp string `json:"timestamp"`
+	}
+	if string(raw) == "null" || json.Unmarshal(raw, &block) != nil || block.Timestamp == "" {
+		return time.Time{}, fmt.Errorf("block is unavailable")
+	}
+	seconds, ok := new(big.Int).SetString(strings.TrimPrefix(block.Timestamp, "0x"), 16)
+	if !ok || !seconds.IsInt64() {
+		return time.Time{}, fmt.Errorf("parse EVM block timestamp")
+	}
+	return time.Unix(seconds.Int64(), 0).UTC(), nil
 }
 
 func (c *EVMClient) GetTransactionReceiptLogs(ctx context.Context, hash string) ([]LogItem, error) {

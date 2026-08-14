@@ -20,11 +20,16 @@ function connectJSON(message: unknown) {
 	};
 }
 
-function frozenEvidencePackage(root: string, transferID: string) {
+function frozenEvidencePackage(root: string, transferID: string, includeBridge = false) {
+	const bridge = includeBridge
+		? {
+			id: 'base-standard-bridge:test-message', protocol: 'base-standard-bridge', bridge_name: 'Base Standard Bridge', source_network: 'ethereum-mainnet', destination_network: 'base-mainnet', lifecycle: 'finalized', message_id: '0xmessage', source_transfer_id: transferID, destination_transfer_id: '', source_transaction_hash: '0xtx', destination_transaction_hash: '0xdestination', source_log_reference: '0xtx:log:1', destination_log_reference: '0xdestination:log:2', source_bridge_address: '0x3154cf16ccdb4c6d922629664174b904d80f2c35', destination_bridge_address: '0x4200000000000000000000000000000000000010', canonical_source_token: '', canonical_destination_token: '', recipient: '0x0000000000000000000000000000000000000003', asset: { kind: 'NATIVE', contract_address: '', symbol: 'ETH', decimals: 18 }, amount_base_units: '42', source_block_number: 1, destination_block_number: 2, source_block_hash: '0xblock', destination_block_hash: '0xdestinationblock', source_timestamp: '2026-08-11T00:00:00Z', destination_timestamp: '2026-08-11T00:01:00Z', source_confirmed: true, destination_confirmed: true, limitations: 'No ownership or intent inference.',
+		}
+		: null;
 	const payload = {
 		exported_at: '2026-08-12T00:00:00Z',
 		case: {
-			version: 2,
+			version: 3,
 			title: 'Deterministic replay',
 			network: 'ethereum-mainnet',
 			scope: {
@@ -44,19 +49,22 @@ function frozenEvidencePackage(root: string, transferID: string) {
 			notes: 'No live provider is used.',
 			selectedAddressIds: [],
 			selectedTransferIds: [transferID],
+			pinnedBridgeTransitionIds: bridge ? [bridge.id] : [],
 			annotations: [],
 		},
 		transfers: [{ id: transferID, network: 'ethereum-mainnet', transaction_hash: '0xtx', event_id: 'tx', transfer_kind: 'NATIVE', from_address: root, to_address: '0x0000000000000000000000000000000000000002', asset: { kind: 'NATIVE', contract_address: '', symbol: 'ETH', decimals: 18 }, amount_base_units: '42', block_number: 1, block_hash: '0xblock', block_timestamp: '2026-08-11T00:00:00Z', provisional: false, source: 'frozen-test', retrieved_at: '2026-08-12T00:00:00Z' }],
-		acquisition_snapshots: [],
+		acquisition_snapshots: bridge ? [{ id: 1, network: 'ethereum-mainnet', provider: 'fixture', request_identity: 'fixture', response_sha256: 'fixture', response_body_base64: '', retrieved_at: '2026-08-12T00:00:00Z' }] : [],
 		acquisition_scopes: [],
 		scope_transfers: [],
 		scope_snapshots: [],
 		rule_runs: [],
 		labels: [],
+		bridge_transitions: bridge ? [bridge] : [],
+		bridge_transition_acquisitions: bridge ? [{ transition_id: bridge.id, side: 'source', acquisition_id: 1 }] : [],
 	};
 	return JSON.stringify({
 		format: 'openchain-evidence-package',
-		version: 2,
+		version: 3,
 		payload,
 		manifest: { algorithm: 'SHA-256', payload_sha256: createHash('sha256').update(JSON.stringify(payload)).digest('hex') },
 	});
@@ -92,11 +100,11 @@ test('persists local investigation notes across a reload', async ({ page }) => {
 	await page.getByLabel('Case notes').fill('Verified in Chromium.');
 	await expect
 		.poll(() =>
-			page.evaluate(() => JSON.parse(localStorage.getItem('openchain.local-case.v2') || '{}').title),
+			page.evaluate(() => JSON.parse(localStorage.getItem('openchain.local-case.v3') || '{}').title),
 		)
 		.toBe('E2E investigation');
 	await page.reload();
-
+	await page.waitForTimeout(150);
 	await page.getByRole('tab', { name: 'Case' }).click();
 	await expect(page.getByRole('tab', { name: 'Case' })).toHaveAttribute('aria-selected', 'true');
 	await expect(page.getByLabel('Case title')).toHaveValue('E2E investigation');
@@ -245,7 +253,7 @@ test('replays a deterministic queued trace through finding, package export, and 
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => JSON.parse(localStorage.getItem('openchain.local-case.v2') || '{}').scope?.maxDepth,
+				() => JSON.parse(localStorage.getItem('openchain.local-case.v3') || '{}').scope?.maxDepth,
 			),
 		)
 		.toBe(2);
@@ -319,4 +327,50 @@ test('verifies and replays an imported frozen evidence package locally', async (
 	await page.locator('input[type=file]').setInputFiles({ name: 'evidence.json', mimeType: 'application/json', buffer: Buffer.from(packageJSON) });
 	await expect(page.getByLabel('Case title')).toHaveValue('Deterministic replay');
 	await expect(page.getByRole('button', { name: 'Print' })).toBeEnabled();
+});
+
+test('follows a verified Base bridge path, traces its destination, and preserves it in replay', async ({ page }) => {
+	const root = '0x0000000000000000000000000000000000000001';
+	const recipient = '0x0000000000000000000000000000000000000003';
+	const transferID = 'ethereum-mainnet:bridge:tx';
+	const bridge = {
+		id: 'base-standard-bridge:test-message', protocol: 'base-standard-bridge', bridgeName: 'Base Standard Bridge', sourceNetwork: 'NETWORK_ETHEREUM_MAINNET', destinationNetwork: 'NETWORK_BASE_MAINNET', lifecycle: 'BRIDGE_LIFECYCLE_FINALIZED', messageId: '0xmessage', sourceTransferId: transferID, sourceTransactionHash: '0xtx', destinationTransactionHash: '0xdestination', sourceLogReference: '0xtx:log:1', destinationLogReference: '0xdestination:log:2', sourceBridgeAddress: '0x3154cf16ccdb4c6d922629664174b904d80f2c35', destinationBridgeAddress: '0x4200000000000000000000000000000000000010', recipient, asset: { kind: 'NATIVE', symbol: 'ETH', decimals: 18 }, amountBaseUnits: '42', sourceBlockNumber: '1', destinationBlockNumber: '2', sourceTimestamp: '1', destinationTimestamp: '2', sourceConfirmed: true, destinationConfirmed: true, limitations: 'No ownership or intent inference.',
+	};
+	let requests = 0;
+	await page.route('**/openchain.v1.TracingService/TraceGraph', (route) => {
+		requests++;
+		const body = JSON.parse(route.request().postData() || '{}');
+		const seed = body.address === recipient ? recipient : root;
+		return route.fulfill(connectJSON({
+			seedAddress: seed,
+			nodes: seed === root
+				? [{ id: root, label: 'Bridge test seed', isSeed: true }, { id: '0x3154cf16ccdb4c6d922629664174b904d80f2c35', label: 'Base bridge' }]
+				: [{ id: seed, label: 'Bridge test seed', isSeed: true }],
+			edges: seed === root ? [{ id: transferID, source: root, target: '0x3154cf16ccdb4c6d922629664174b904d80f2c35', amountBaseUnits: '42', txCount: 1, asset: { kind: 'NATIVE', symbol: 'ETH', decimals: 18 }, eventId: 'tx', blockNumber: '1', transactionHash: '0xtx', transferKind: 'NATIVE', sourceName: 'fixture', retrievedAt: '1', firstTxTimestamp: '1', lastTxTimestamp: '1' }] : [],
+			crossChainTransitions: seed === root ? [bridge] : [],
+			sourceStatus: { source: 'fixture', isComplete: true },
+		}));
+	});
+	await page.route('**/openchain.v1.LookupService/LookupAddress', (route) => route.fulfill(connectJSON({})));
+	await page.route('**/openchain.v1.LabelService/GetLabels', (route) => route.fulfill(connectJSON({})));
+	await page.route('**/openchain.v1.EvidenceService/ExportEvidencePackage', (route) =>
+		route.fulfill(connectJSON({ packageJson: frozenEvidencePackage(root, transferID, true) })),
+	);
+	await page.getByPlaceholder('Search target address').fill(root);
+	await page.getByLabel('Investigate address').click();
+	await page.getByRole('tab', { name: /Evidence/ }).click();
+	await expect(page.getByText('Base Standard Bridge')).toBeVisible();
+	await page.getByRole('tab', { name: 'Case' }).click();
+	const download = page.waitForEvent('download');
+	await page.getByRole('button', { name: 'Package' }).click();
+	await download;
+	await page.getByRole('tab', { name: /Evidence/ }).click();
+	await page.getByRole('button', { name: 'Trace destination recipient' }).click();
+	await expect.poll(() => requests).toBe(2);
+	await expect(page.getByLabel('Network')).toContainText('Base Mainnet');
+	await expect(page.getByPlaceholder('Search target address')).toHaveValue(recipient);
+	await page.getByRole('tab', { name: 'Case' }).click();
+	await page.locator('input[type=file]').setInputFiles({ name: 'bridge-evidence.json', mimeType: 'application/json', buffer: Buffer.from(frozenEvidencePackage(root, transferID, true)) });
+	await page.getByRole('tab', { name: /Evidence/ }).click();
+	await expect(page.getByText('Base Standard Bridge')).toBeVisible();
 });

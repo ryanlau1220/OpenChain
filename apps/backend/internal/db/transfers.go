@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
+	"github.com/openchain/openchain/apps/backend/internal/bridge"
 )
 
 const graphName = "openchain"
@@ -67,8 +68,8 @@ SET flow.network = $network,
 RETURN flow
 $$, $1) AS (result agtype)`
 
-func (d *DB) SaveEvidenceGraph(ctx context.Context, scope AcquisitionScope, addresses []Address, transfers []Transfer, acquisitions []adapter.RawAcquisition) error {
-	if len(addresses) == 0 && len(transfers) == 0 && len(acquisitions) == 0 {
+func (d *DB) SaveEvidenceGraph(ctx context.Context, scope AcquisitionScope, addresses []Address, transfers []Transfer, acquisitions []adapter.RawAcquisition, transitions ...bridge.Transition) error {
+	if len(addresses) == 0 && len(transfers) == 0 && len(acquisitions) == 0 && len(transitions) == 0 {
 		return nil
 	}
 	tx, err := d.SQL.BeginTx(ctx, nil)
@@ -94,7 +95,11 @@ func (d *DB) SaveEvidenceGraph(ctx context.Context, scope AcquisitionScope, addr
 			return fmt.Errorf("insert transfer: %w", err)
 		}
 	}
-	if err := insertAcquisitionScope(ctx, tx, scope, transferIDs(transfers), acquisitions); err != nil {
+	snapshotIDs, err := insertAcquisitionScope(ctx, tx, scope, transferIDs(transfers), acquisitions)
+	if err != nil {
+		return err
+	}
+	if err := insertBridgeTransitions(ctx, tx, transitions, snapshotIDs); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
@@ -131,23 +136,24 @@ func (d *DB) SaveAcquisitions(ctx context.Context, scope AcquisitionScope, acqui
 		return fmt.Errorf("begin acquisition transaction: %w", err)
 	}
 	defer tx.Rollback()
-	if err := insertAcquisitionScope(ctx, tx, scope, nil, acquisitions); err != nil {
+	if _, err := insertAcquisitionScope(ctx, tx, scope, nil, acquisitions); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func insertAcquisitionScope(ctx context.Context, tx *sql.Tx, scope AcquisitionScope, transferIDs []string, acquisitions []adapter.RawAcquisition) error {
+func insertAcquisitionScope(ctx context.Context, tx *sql.Tx, scope AcquisitionScope, transferIDs []string, acquisitions []adapter.RawAcquisition) (map[string][]int64, error) {
 	if len(acquisitions) == 0 {
-		return nil
+		return map[string][]int64{}, nil
 	}
 	if scope.Network == "" || scope.Address == "" || scope.RetrievedAt.IsZero() {
-		return fmt.Errorf("invalid acquisition scope")
+		return nil, fmt.Errorf("invalid acquisition scope")
 	}
 	ids := make([]int64, 0, len(acquisitions))
+	byHash := make(map[string][]int64, len(acquisitions))
 	for _, acquisition := range acquisitions {
 		if acquisition.Provider == "" || acquisition.RequestIdentity == "" || acquisition.RetrievedAt.IsZero() {
-			return fmt.Errorf("invalid acquisition")
+			return nil, fmt.Errorf("invalid acquisition")
 		}
 		response := acquisition.Response
 		if response == nil {
@@ -156,29 +162,30 @@ func insertAcquisitionScope(ctx context.Context, tx *sql.Tx, scope AcquisitionSc
 		hash := sha256.Sum256(response)
 		responseHash := fmt.Sprintf("%x", hash[:])
 		if _, err := tx.ExecContext(ctx, insertAcquisitionBlobSQL, responseHash, response); err != nil {
-			return fmt.Errorf("insert acquisition blob: %w", err)
+			return nil, fmt.Errorf("insert acquisition blob: %w", err)
 		}
 		var id int64
 		if err := tx.QueryRowContext(ctx, insertAcquisitionSQL, scope.Network, acquisition.Provider, acquisition.RequestIdentity, responseHash, acquisition.RetrievedAt).Scan(&id); err != nil {
-			return fmt.Errorf("insert acquisition snapshot: %w", err)
+			return nil, fmt.Errorf("insert acquisition snapshot: %w", err)
 		}
 		ids = append(ids, id)
+		byHash[responseHash] = append(byHash[responseHash], id)
 	}
 	var scopeID int64
 	if err := tx.QueryRowContext(ctx, insertAcquisitionScopeSQL, scope.Network, scope.Address, scope.Cursor, scope.RetrievedAt).Scan(&scopeID); err != nil {
-		return fmt.Errorf("insert acquisition scope: %w", err)
+		return nil, fmt.Errorf("insert acquisition scope: %w", err)
 	}
 	for _, transferID := range transferIDs {
 		if _, err := tx.ExecContext(ctx, insertAcquisitionScopeTransferSQL, scopeID, transferID); err != nil {
-			return fmt.Errorf("link acquisition scope transfer: %w", err)
+			return nil, fmt.Errorf("link acquisition scope transfer: %w", err)
 		}
 	}
 	for _, acquisitionID := range ids {
 		if _, err := tx.ExecContext(ctx, insertAcquisitionScopeSnapshotSQL, scopeID, acquisitionID); err != nil {
-			return fmt.Errorf("link acquisition scope snapshot: %w", err)
+			return nil, fmt.Errorf("link acquisition scope snapshot: %w", err)
 		}
 	}
-	return nil
+	return byHash, nil
 }
 
 func transferIDs(transfers []Transfer) []string {

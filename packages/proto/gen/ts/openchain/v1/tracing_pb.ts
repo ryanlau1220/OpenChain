@@ -9,6 +9,53 @@ import { Asset, EntityType, Network, SourceStatus } from "./common_pb.js";
 import { AddressLabel } from "./labels_pb.js";
 
 /**
+ * Lifecycle is a record of bridge-message evidence, not a conclusion about
+ * wallet ownership, intent, or a complete cross-chain transaction history.
+ *
+ * @generated from enum openchain.v1.BridgeLifecycle
+ */
+export enum BridgeLifecycle {
+  /**
+   * @generated from enum value: BRIDGE_LIFECYCLE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BRIDGE_LIFECYCLE_INITIATED = 1;
+   */
+  INITIATED = 1,
+
+  /**
+   * @generated from enum value: BRIDGE_LIFECYCLE_RELAYED = 2;
+   */
+  RELAYED = 2,
+
+  /**
+   * @generated from enum value: BRIDGE_LIFECYCLE_FINALIZED = 3;
+   */
+  FINALIZED = 3,
+
+  /**
+   * @generated from enum value: BRIDGE_LIFECYCLE_FAILED = 4;
+   */
+  FAILED = 4,
+
+  /**
+   * @generated from enum value: BRIDGE_LIFECYCLE_UNRESOLVED = 5;
+   */
+  UNRESOLVED = 5,
+}
+// Retrieve enum metadata with: proto3.getEnumType(BridgeLifecycle)
+proto3.util.setEnumType(BridgeLifecycle, "openchain.v1.BridgeLifecycle", [
+  { no: 0, name: "BRIDGE_LIFECYCLE_UNSPECIFIED" },
+  { no: 1, name: "BRIDGE_LIFECYCLE_INITIATED" },
+  { no: 2, name: "BRIDGE_LIFECYCLE_RELAYED" },
+  { no: 3, name: "BRIDGE_LIFECYCLE_FINALIZED" },
+  { no: 4, name: "BRIDGE_LIFECYCLE_FAILED" },
+  { no: 5, name: "BRIDGE_LIFECYCLE_UNRESOLVED" },
+]);
+
+/**
  * Counterparty selection is deterministic and scoped to the provider page.
  * "total raw amount" ranks counterparties independently for each exact asset; it is never a fiat valuation.
  * "known entity" means a curated label exists; it is not a risk score.
@@ -517,6 +564,85 @@ export class CrossChainTransition extends Message<CrossChainTransition> {
    */
   limitations = "";
 
+  /**
+   * The protocol-specific adapter that established this continuation.
+   *
+   * @generated from field: string protocol = 16;
+   */
+  protocol = "";
+
+  /**
+   * A bridge-specific, deterministic identifier. For the Base standard bridge
+   * this is the versioned OP Stack cross-domain message hash.
+   *
+   * @generated from field: string message_id = 17;
+   */
+  messageId = "";
+
+  /**
+   * The exact source-to-destination token route from the adapter registry.
+   *
+   * @generated from field: string canonical_source_token = 18;
+   */
+  canonicalSourceToken = "";
+
+  /**
+   * @generated from field: string canonical_destination_token = 19;
+   */
+  canonicalDestinationToken = "";
+
+  /**
+   * Recipient encoded in the verified bridge message. It is not an ownership claim.
+   *
+   * @generated from field: string recipient = 20;
+   */
+  recipient = "";
+
+  /**
+   * @generated from field: string source_log_reference = 21;
+   */
+  sourceLogReference = "";
+
+  /**
+   * @generated from field: string destination_log_reference = 22;
+   */
+  destinationLogReference = "";
+
+  /**
+   * @generated from field: uint64 source_block_number = 23;
+   */
+  sourceBlockNumber = protoInt64.zero;
+
+  /**
+   * @generated from field: uint64 destination_block_number = 24;
+   */
+  destinationBlockNumber = protoInt64.zero;
+
+  /**
+   * @generated from field: bool source_confirmed = 25;
+   */
+  sourceConfirmed = false;
+
+  /**
+   * @generated from field: bool destination_confirmed = 26;
+   */
+  destinationConfirmed = false;
+
+  /**
+   * @generated from field: openchain.v1.BridgeLifecycle lifecycle = 27;
+   */
+  lifecycle = BridgeLifecycle.UNSPECIFIED;
+
+  /**
+   * @generated from field: repeated uint64 source_acquisition_ids = 28;
+   */
+  sourceAcquisitionIds: bigint[] = [];
+
+  /**
+   * @generated from field: repeated uint64 destination_acquisition_ids = 29;
+   */
+  destinationAcquisitionIds: bigint[] = [];
+
   constructor(data?: PartialMessage<CrossChainTransition>) {
     super();
     proto3.util.initPartial(data, this);
@@ -540,6 +666,20 @@ export class CrossChainTransition extends Message<CrossChainTransition> {
     { no: 13, name: "source_bridge_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 14, name: "destination_bridge_address", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 15, name: "limitations", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 16, name: "protocol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 17, name: "message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 18, name: "canonical_source_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 19, name: "canonical_destination_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 20, name: "recipient", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 21, name: "source_log_reference", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 22, name: "destination_log_reference", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 23, name: "source_block_number", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 24, name: "destination_block_number", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 25, name: "source_confirmed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 26, name: "destination_confirmed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 27, name: "lifecycle", kind: "enum", T: proto3.getEnumType(BridgeLifecycle) },
+    { no: 28, name: "source_acquisition_ids", kind: "scalar", T: 4 /* ScalarType.UINT64 */, repeated: true },
+    { no: 29, name: "destination_acquisition_ids", kind: "scalar", T: 4 /* ScalarType.UINT64 */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CrossChainTransition {

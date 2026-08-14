@@ -279,6 +279,7 @@ function Index() {
 				rootAddress: '',
 				selectedAddressIds: [],
 				selectedTransferIds: [],
+				pinnedBridgeTransitionIds: [],
 				annotations: [],
 				updatedAt: new Date().toISOString(),
 			}));
@@ -481,7 +482,13 @@ function Index() {
 			...graphData.leads.flatMap((lead) => lead.transferIds),
 		]);
 		const evidenceCase = { ...caseFileRef.current, scope: graphOptionsRef.current };
-		const selected = evidenceCase.selectedTransferIds.filter((id) => evidenceIDs.has(id));
+		const pinnedBridgeSourceIDs = graphData.crossChainTransitions
+			.filter((transition) => evidenceCase.pinnedBridgeTransitionIds.includes(transition.id))
+			.map((transition) => transition.sourceTransferId)
+			.filter((id) => evidenceIDs.has(id));
+		const selected = [
+			...new Set([...evidenceCase.selectedTransferIds, ...pinnedBridgeSourceIDs]),
+		].filter((id) => evidenceIDs.has(id));
 		const transferIDs = selected.length > 0 ? selected : [...evidenceIDs];
 		if (transferIDs.length === 0) throw new Error('This investigation has no transfers to export.');
 		const packageJSON = await exportEvidencePackage(
@@ -535,6 +542,18 @@ function Index() {
 				selectedTransferIds: current.selectedTransferIds.includes(transferID)
 					? current.selectedTransferIds.filter((id) => id !== transferID)
 					: [...current.selectedTransferIds, transferID],
+				updatedAt: new Date().toISOString(),
+			}));
+		},
+		[updateCaseFile],
+	);
+	const toggleBridgePathPin = useCallback(
+		(transitionID: string) => {
+			updateCaseFile((current) => ({
+				...current,
+				pinnedBridgeTransitionIds: current.pinnedBridgeTransitionIds.includes(transitionID)
+					? current.pinnedBridgeTransitionIds.filter((id) => id !== transitionID)
+					: [...current.pinnedBridgeTransitionIds, transitionID],
 				updatedAt: new Date().toISOString(),
 			}));
 		},
@@ -721,7 +740,18 @@ function Index() {
 										toggleEvidencePin(transferID);
 									}}
 								/>
-								<CrossChainPaths transitions={graphData.crossChainTransitions} />
+								<CrossChainPaths
+									transitions={graphData.crossChainTransitions}
+									pinnedTransitionIds={caseFile.pinnedBridgeTransitionIds}
+									onTogglePin={toggleBridgePathPin}
+									onTraceDestination={(transition) => {
+										const destination = transition.destinationNetwork as SupportedNetwork;
+										if (!transition.recipient || destination === Network.UNSPECIFIED) return;
+										changeNetwork(destination);
+										setAddress(transition.recipient);
+										void load(transition.recipient, false, destination, graphOptionsRef.current);
+									}}
+								/>
 							</>
 						)}
 						{inspectorTab === 'case' && caseLoaded && (

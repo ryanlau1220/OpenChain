@@ -38,6 +38,8 @@ async function evidenceJSON() {
 		scope_snapshots: [],
 		rule_runs: [],
 		labels: [],
+		bridge_transitions: [],
+		bridge_transition_acquisitions: [],
 	};
 	const hash = await crypto.subtle.digest(
 		'SHA-256',

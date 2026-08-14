@@ -1,5 +1,7 @@
 import {
 	AddressLabel,
+	BridgeLifecycle,
+	CrossChainTransition,
 	EntityType,
 	GraphEdge,
 	GraphNode,
@@ -12,7 +14,7 @@ import {
 import { type LocalCase, parseCaseFile } from './case-file';
 
 export const EVIDENCE_PACKAGE_FORMAT = 'openchain-evidence-package';
-export const EVIDENCE_PACKAGE_VERSION = 2;
+export const EVIDENCE_PACKAGE_VERSION = 3;
 
 type FrozenTransfer = {
 	id: string;
@@ -55,6 +57,44 @@ type FrozenRuleRun = {
 	result: unknown;
 };
 
+type FrozenBridgeTransition = {
+	id: string;
+	protocol: string;
+	bridge_name: string;
+	source_network: string;
+	destination_network: string;
+	lifecycle: string;
+	message_id: string;
+	source_transfer_id: string;
+	destination_transfer_id: string;
+	source_transaction_hash: string;
+	destination_transaction_hash: string;
+	source_log_reference: string;
+	destination_log_reference: string;
+	source_bridge_address: string;
+	destination_bridge_address: string;
+	canonical_source_token: string;
+	canonical_destination_token: string;
+	recipient: string;
+	asset: { kind: string; contract_address: string; symbol: string; decimals: number };
+	amount_base_units: string;
+	source_block_number: number;
+	destination_block_number: number;
+	source_block_hash: string;
+	destination_block_hash: string;
+	source_timestamp: string;
+	destination_timestamp: string;
+	source_confirmed: boolean;
+	destination_confirmed: boolean;
+	limitations: string;
+};
+
+type FrozenBridgeTransitionAcquisition = {
+	transition_id: string;
+	side: 'source' | 'destination';
+	acquisition_id: number;
+};
+
 export type EvidencePackage = {
 	format: string;
 	version: number;
@@ -68,6 +108,8 @@ export type EvidencePackage = {
 		scope_snapshots: unknown[];
 		rule_runs: FrozenRuleRun[];
 		labels: FrozenLabel[];
+		bridge_transitions: FrozenBridgeTransition[];
+		bridge_transition_acquisitions: FrozenBridgeTransitionAcquisition[];
 	};
 	manifest: { algorithm: string; payload_sha256: string };
 };
@@ -148,6 +190,52 @@ const isRuleRun = (value: unknown): value is FrozenRuleRun =>
 	'parameters' in value &&
 	'result' in value;
 
+const isBridgeTransition = (value: unknown): value is FrozenBridgeTransition =>
+	isRecord(value) &&
+	isRecord(value.asset) &&
+	[
+		'id',
+		'protocol',
+		'bridge_name',
+		'source_network',
+		'destination_network',
+		'lifecycle',
+		'message_id',
+		'source_transfer_id',
+		'destination_transfer_id',
+		'source_transaction_hash',
+		'destination_transaction_hash',
+		'source_log_reference',
+		'destination_log_reference',
+		'source_bridge_address',
+		'destination_bridge_address',
+		'canonical_source_token',
+		'canonical_destination_token',
+		'recipient',
+		'amount_base_units',
+		'source_block_hash',
+		'destination_block_hash',
+		'source_timestamp',
+		'destination_timestamp',
+		'limitations',
+	].every((key) => typeof value[key] === 'string') &&
+	typeof value.source_block_number === 'number' &&
+	typeof value.destination_block_number === 'number' &&
+	typeof value.source_confirmed === 'boolean' &&
+	typeof value.destination_confirmed === 'boolean' &&
+	typeof value.asset.kind === 'string' &&
+	typeof value.asset.contract_address === 'string' &&
+	typeof value.asset.symbol === 'string' &&
+	typeof value.asset.decimals === 'number';
+
+const isBridgeTransitionAcquisition = (
+	value: unknown,
+): value is FrozenBridgeTransitionAcquisition =>
+	isRecord(value) &&
+	typeof value.transition_id === 'string' &&
+	(value.side === 'source' || value.side === 'destination') &&
+	typeof value.acquisition_id === 'number';
+
 async function payloadHash(payload: unknown): Promise<string> {
 	const digest = await crypto.subtle.digest(
 		'SHA-256',
@@ -187,6 +275,10 @@ export async function parseEvidencePackage(value: string): Promise<EvidencePacka
 		!payload.labels.every(isLabel) ||
 		!Array.isArray(payload.rule_runs) ||
 		!payload.rule_runs.every(isRuleRun) ||
+		!Array.isArray(payload.bridge_transitions) ||
+		!payload.bridge_transitions.every(isBridgeTransition) ||
+		!Array.isArray(payload.bridge_transition_acquisitions) ||
+		!payload.bridge_transition_acquisitions.every(isBridgeTransitionAcquisition) ||
 		typeof payload.exported_at !== 'string'
 	)
 		throw new Error('Evidence package contents are invalid.');
@@ -194,6 +286,9 @@ export async function parseEvidencePackage(value: string): Promise<EvidencePacka
 	const scopeIDs = new Set(payload.acquisition_scopes.map((scope) => scope.id));
 	const snapshotIDs = new Set(
 		payload.acquisition_snapshots.map((snapshot) => (snapshot as { id: number }).id),
+	);
+	const bridgeTransitionIDs = new Set(
+		payload.bridge_transitions.map((transition) => transition.id),
 	);
 	if (
 		payload.scope_transfers.some(
@@ -205,6 +300,13 @@ export async function parseEvidencePackage(value: string): Promise<EvidencePacka
 			(link) =>
 				!scopeIDs.has((link as { scope_id: number }).scope_id) ||
 				!snapshotIDs.has((link as { acquisition_id: number }).acquisition_id),
+		) ||
+		payload.bridge_transitions.some(
+			(transition) => !transferIDs.has(transition.source_transfer_id),
+		) ||
+		payload.bridge_transition_acquisitions.some(
+			(link) =>
+				!bridgeTransitionIDs.has(link.transition_id) || !snapshotIDs.has(link.acquisition_id),
 		)
 	)
 		throw new Error('Evidence package scope links are inconsistent.');
@@ -258,6 +360,56 @@ function frozenLeads(runs: readonly FrozenRuleRun[]): InvestigationLead[] {
 		}
 	}
 	return leads;
+}
+
+const lifecycle = (value: string): BridgeLifecycle => {
+	switch (value) {
+		case 'initiated':
+			return BridgeLifecycle.INITIATED;
+		case 'relayed':
+			return BridgeLifecycle.RELAYED;
+		case 'finalized':
+			return BridgeLifecycle.FINALIZED;
+		case 'failed':
+			return BridgeLifecycle.FAILED;
+		default:
+			return BridgeLifecycle.UNRESOLVED;
+	}
+};
+
+function frozenBridgeTransitions(items: readonly FrozenBridgeTransition[]): CrossChainTransition[] {
+	return items.map(
+		(item) =>
+			new CrossChainTransition({
+				id: item.id,
+				protocol: item.protocol,
+				bridgeName: item.bridge_name,
+				sourceNetwork: network(item.source_network),
+				destinationNetwork: network(item.destination_network),
+				lifecycle: lifecycle(item.lifecycle),
+				messageId: item.message_id,
+				sourceTransferId: item.source_transfer_id,
+				destinationTransferId: item.destination_transfer_id,
+				sourceTransactionHash: item.source_transaction_hash,
+				destinationTransactionHash: item.destination_transaction_hash,
+				sourceLogReference: item.source_log_reference,
+				destinationLogReference: item.destination_log_reference,
+				sourceBridgeAddress: item.source_bridge_address,
+				destinationBridgeAddress: item.destination_bridge_address,
+				canonicalSourceToken: item.canonical_source_token,
+				canonicalDestinationToken: item.canonical_destination_token,
+				recipient: item.recipient,
+				asset: item.asset,
+				amountBaseUnits: item.amount_base_units,
+				sourceBlockNumber: BigInt(item.source_block_number),
+				destinationBlockNumber: BigInt(item.destination_block_number),
+				sourceTimestamp: unix(item.source_timestamp),
+				destinationTimestamp: unix(item.destination_timestamp),
+				sourceConfirmed: item.source_confirmed,
+				destinationConfirmed: item.destination_confirmed,
+				limitations: item.limitations,
+			}),
+	);
 }
 
 export function replayEvidencePackage(packageFile: EvidencePackage): {
@@ -344,6 +496,7 @@ export function replayEvidencePackage(packageFile: EvidencePackage): {
 				isComplete: true,
 			},
 			leads: frozenLeads(packageFile.payload.rule_runs),
+			crossChainTransitions: frozenBridgeTransitions(packageFile.payload.bridge_transitions),
 		}),
 	};
 }

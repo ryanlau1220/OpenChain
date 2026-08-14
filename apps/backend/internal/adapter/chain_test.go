@@ -39,14 +39,16 @@ func TestWithEVMChainHeadKeepsObservationsProvisionalWithoutAHeight(t *testing.T
 
 func TestAdaptersDeclareNetworkCapabilities(t *testing.T) {
 	evm := NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, InternalTransfers: true, HistoricalPagination: true, Finality: true, EntityClassification: true, ExactRawProvenance: true}
+	bridgeEVM := evm
+	bridgeEVM.BridgeEvidence = true
 	nativeOnly := NetworkCapabilities{NativeTransfers: true, HistoricalPagination: true, ExactRawProvenance: true}
 	cases := []struct {
 		name  string
 		chain ChainAdapter
 		want  NetworkCapabilities
 	}{
-		{"ethereum", NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "key", nil), evm},
-		{"base", NewBlockscoutChainAdapter("base-mainnet", "https://api.example", "key", nil), evm},
+		{"ethereum", NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "key", nil), bridgeEVM},
+		{"base", NewBlockscoutChainAdapter("base-mainnet", "https://api.example", "key", nil), bridgeEVM},
 		{"polygon", NewAlchemyEVMChainAdapter("polygon-mainnet", "https://api.example", "key", Asset{}, nil), evm},
 		{"arbitrum", NewAlchemyEVMChainAdapter("arbitrum-one", "https://api.example", "key", Asset{}, nil), evm},
 		{"optimism", NewAlchemyEVMChainAdapter("optimism-mainnet", "https://api.example", "key", Asset{}, nil), evm},

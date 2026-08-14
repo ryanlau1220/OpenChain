@@ -38,6 +38,7 @@ func NewAlchemyEVMChainAdapter(network, apiURL, apiKey string, nativeAsset Asset
 }
 
 func (a *AlchemyEVMChainAdapter) Network() string                   { return a.network }
+func (a *AlchemyEVMChainAdapter) EVMClient() *EVMClient             { return a.evmClient }
 func (a *AlchemyEVMChainAdapter) Capabilities() NetworkCapabilities { return evmCapabilities() }
 func (a *AlchemyEVMChainAdapter) NormalizeAddress(value string) (string, error) {
 	return normalizeEthereumAddress(value)

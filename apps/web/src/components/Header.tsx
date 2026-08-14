@@ -31,6 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
 	const networkMenuRef = useRef<HTMLDivElement>(null);
 	const networkTriggerRef = useRef<HTMLButtonElement>(null);
 
+	useEffect(() => setSingleInput(currentAddress), [currentAddress]);
+
 	useEffect(() => {
 		if (!networkMenuOpen) return;
 		const closeOutsideMenu = (event: PointerEvent) => {

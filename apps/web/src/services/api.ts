@@ -8,6 +8,7 @@ import { AddressLabel, LabelVisibility } from '@openchain/proto/openchain/v1/lab
 import { LookupService } from '@openchain/proto/openchain/v1/lookup_connect';
 import { TracingService } from '@openchain/proto/openchain/v1/tracing_connect';
 import {
+	BridgeLifecycle,
 	CrossChainTransition,
 	GraphEdge,
 	GraphNode,
@@ -33,6 +34,7 @@ export type { AddressSummary, LookupFieldStatus };
 export {
 	AddressLabel,
 	CrossChainTransition,
+	BridgeLifecycle,
 	TraceCoverage,
 	EntityType,
 	GraphEdge,

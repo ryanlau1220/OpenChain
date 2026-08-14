@@ -78,6 +78,36 @@ message CrossChainTransition {
   string source_bridge_address = 13;
   string destination_bridge_address = 14;
   string limitations = 15;
+  // The protocol-specific adapter that established this continuation.
+  string protocol = 16;
+  // A bridge-specific, deterministic identifier. For the Base standard bridge
+  // this is the versioned OP Stack cross-domain message hash.
+  string message_id = 17;
+  // The exact source-to-destination token route from the adapter registry.
+  string canonical_source_token = 18;
+  string canonical_destination_token = 19;
+  // Recipient encoded in the verified bridge message. It is not an ownership claim.
+  string recipient = 20;
+  string source_log_reference = 21;
+  string destination_log_reference = 22;
+  uint64 source_block_number = 23;
+  uint64 destination_block_number = 24;
+  bool source_confirmed = 25;
+  bool destination_confirmed = 26;
+  BridgeLifecycle lifecycle = 27;
+  repeated uint64 source_acquisition_ids = 28;
+  repeated uint64 destination_acquisition_ids = 29;
+}
+
+// Lifecycle is a record of bridge-message evidence, not a conclusion about
+// wallet ownership, intent, or a complete cross-chain transaction history.
+enum BridgeLifecycle {
+  BRIDGE_LIFECYCLE_UNSPECIFIED = 0;
+  BRIDGE_LIFECYCLE_INITIATED = 1;
+  BRIDGE_LIFECYCLE_RELAYED = 2;
+  BRIDGE_LIFECYCLE_FINALIZED = 3;
+  BRIDGE_LIFECYCLE_FAILED = 4;
+  BRIDGE_LIFECYCLE_UNRESOLVED = 5;
 }
 
 // Counterparty selection is deterministic and scoped to the provider page.

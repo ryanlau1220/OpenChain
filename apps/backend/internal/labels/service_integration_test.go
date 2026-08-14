@@ -60,7 +60,7 @@ func TestSeedImportIsIdempotentAndSearchable(t *testing.T) {
 		t.Fatal("immutable label assertion accepted mutation")
 	}
 	assertionKey := fmt.Sprintf("versioned-label-%d", time.Now().UnixNano())
-	address := "0x3000000000000000000000000000000000000003"
+	address := fmt.Sprintf("0x%040x", time.Now().UnixNano())
 	first := db.CuratedLabel{ID: assertionKey + "@v1", AssertionKey: assertionKey, Network: "ethereum-mainnet", Address: address, Category: string(CategoryDeFiService), Label: "Version one", Confidence: 1, EvidenceURL: "https://example.test/v1", EvidenceSnapshot: `{"source":"v1"}`, Source: "integration test", SourceVersion: "v1", ReviewState: "approved", Visibility: "public", TrustTier: 1, ValidFrom: time.Now().Add(-time.Minute), CreatedBy: "test", CreatedAt: time.Now().Add(-time.Minute)}
 	second := first
 	second.ID = assertionKey + "@v2"

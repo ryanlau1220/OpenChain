@@ -11,6 +11,7 @@ import (
 	pb "github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1"
 	"github.com/openchain/openchain/apps/backend/gen/proto/openchain/v1/openchainv1connect"
 	"github.com/openchain/openchain/apps/backend/internal/adapter"
+	"github.com/openchain/openchain/apps/backend/internal/bridge"
 	"github.com/openchain/openchain/apps/backend/internal/labels"
 	"github.com/openchain/openchain/apps/backend/internal/rules"
 	"github.com/openchain/openchain/apps/backend/internal/tracing"
@@ -67,7 +68,7 @@ func (h *connectTracingHandler) TraceGraph(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), Coverage: toCoverageProto(result.Coverage)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toBridgeProto(result.CrossChainTransitions), Coverage: toCoverageProto(result.Coverage)}), nil
 }
 
 func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect.Request[pb.TraceStatusRequest]) (*connect.Response[pb.TraceGraphResponse], error) {
@@ -87,7 +88,7 @@ func (h *connectTracingHandler) GetTraceStatus(ctx context.Context, req *connect
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), Coverage: toCoverageProto(result.Coverage)}), nil
+	return connect.NewResponse(&pb.TraceGraphResponse{SeedAddress: result.SeedAddress, Nodes: nodes, Edges: edges, TotalNodes: result.TotalNodes, TotalEdges: result.TotalEdges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toBridgeProto(result.CrossChainTransitions), Coverage: toCoverageProto(result.Coverage)}), nil
 }
 
 func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Request[pb.ExpandNodeRequest]) (*connect.Response[pb.ExpandNodeResponse], error) {
@@ -113,7 +114,7 @@ func (h *connectTracingHandler) ExpandNode(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	nodes, edges := toGraphProto(result)
-	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), Coverage: toCoverageProto(result.Coverage)}), nil
+	return connect.NewResponse(&pb.ExpandNodeResponse{NewNodes: nodes, NewEdges: edges, NextCursor: result.NextCursor, HasMore: result.HasMore, SourceStatus: toSourceStatus(result.SourceStatus), Pending: result.Pending, Leads: toLeadProto(result.Leads), CrossChainTransitions: toBridgeProto(result.CrossChainTransitions), Coverage: toCoverageProto(result.Coverage)}), nil
 }
 
 func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge) {
@@ -138,6 +139,55 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 
 func toCoverageProto(coverage tracing.TraceCoverage) *pb.TraceCoverage {
 	return &pb.TraceCoverage{RequestedPageSize: coverage.RequestedPageSize, ObservedTransferCount: coverage.ObservedTransferCount, GraphTransferCount: coverage.GraphTransferCount, ConfirmationBackedTransferCount: coverage.ConfirmationBackedTransferCount, ProvisionalTransferCount: coverage.ProvisionalTransferCount, Cursor: coverage.Cursor, HasMore: coverage.HasMore, ProviderComplete: coverage.ProviderComplete, Limitation: coverage.Limitation}
+}
+
+func toBridgeProto(transitions []bridge.Transition) []*pb.CrossChainTransition {
+	result := make([]*pb.CrossChainTransition, 0, len(transitions))
+	for _, transition := range transitions {
+		result = append(result, &pb.CrossChainTransition{
+			Id: transition.ID, BridgeName: transition.BridgeName, Protocol: transition.Protocol, MessageId: transition.MessageID,
+			SourceNetwork: protoNetwork(transition.SourceNetwork), DestinationNetwork: protoNetwork(transition.DestinationNetwork),
+			SourceTransferId: transition.SourceTransferID, DestinationTransferId: transition.DestinationTransferID,
+			SourceTransactionHash: transition.SourceTransactionHash, DestinationTransactionHash: transition.DestinationTransactionHash,
+			Asset:           &pb.Asset{Kind: transition.Asset.Kind, ContractAddress: transition.Asset.ContractAddress, Symbol: transition.Asset.Symbol, Decimals: transition.Asset.Decimals},
+			AmountBaseUnits: transition.AmountBaseUnits, SourceTimestamp: transition.SourceTimestamp.Unix(), DestinationTimestamp: transition.DestinationTimestamp.Unix(),
+			SourceBridgeAddress: transition.SourceBridgeAddress, DestinationBridgeAddress: transition.DestinationBridgeAddress,
+			CanonicalSourceToken: transition.CanonicalSourceToken, CanonicalDestinationToken: transition.CanonicalDestinationToken, Recipient: transition.Recipient,
+			SourceLogReference: transition.SourceLogReference, DestinationLogReference: transition.DestinationLogReference,
+			SourceBlockNumber: transition.SourceBlockNumber, DestinationBlockNumber: transition.DestinationBlockNumber,
+			SourceConfirmed: transition.SourceConfirmed, DestinationConfirmed: transition.DestinationConfirmed,
+			Lifecycle: protoBridgeLifecycle(transition.Lifecycle), SourceAcquisitionIds: uint64IDs(transition.SourceAcquisitionIDs), DestinationAcquisitionIds: uint64IDs(transition.DestinationAcquisitionIDs),
+			Limitations: transition.Limitations,
+		})
+	}
+	return result
+}
+
+func uint64IDs(values []int64) []uint64 {
+	result := make([]uint64, 0, len(values))
+	for _, value := range values {
+		if value > 0 {
+			result = append(result, uint64(value))
+		}
+	}
+	return result
+}
+
+func protoBridgeLifecycle(value bridge.Lifecycle) pb.BridgeLifecycle {
+	switch value {
+	case bridge.LifecycleInitiated:
+		return pb.BridgeLifecycle_BRIDGE_LIFECYCLE_INITIATED
+	case bridge.LifecycleRelayed:
+		return pb.BridgeLifecycle_BRIDGE_LIFECYCLE_RELAYED
+	case bridge.LifecycleFinalized:
+		return pb.BridgeLifecycle_BRIDGE_LIFECYCLE_FINALIZED
+	case bridge.LifecycleFailed:
+		return pb.BridgeLifecycle_BRIDGE_LIFECYCLE_FAILED
+	case bridge.LifecycleUnresolved:
+		return pb.BridgeLifecycle_BRIDGE_LIFECYCLE_UNRESOLVED
+	default:
+		return pb.BridgeLifecycle_BRIDGE_LIFECYCLE_UNSPECIFIED
+	}
 }
 
 func toLeadProto(leads []rules.Lead) []*pb.InvestigationLead {
