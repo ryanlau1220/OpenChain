@@ -518,13 +518,13 @@ const layoutAndFit = (cy: cytoscape.Core, name: LayoutName, direction: TraceDire
 			});
 		});
 		cy.resize();
-		if (cy.elements().length > 0) cy.fit(cy.elements(), 100);
+		if (cy.elements().length > 0) cy.fit(cy.elements(), 48);
 		return;
 	}
-	const layout = cy.layout({ name, directed: true, padding: 80, animate: false });
+	const layout = cy.layout({ name, directed: true, padding: 48, animate: false });
 	layout.one('layoutstop', () => {
 		cy.resize();
-		if (cy.elements().length > 0) cy.fit(cy.elements(), 100);
+		if (cy.elements().length > 0) cy.fit(cy.elements(), 48);
 	});
 	layout.run();
 };
@@ -1136,7 +1136,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					className="shrink-0 border-b px-4 py-3"
 					style={{ borderColor: 'var(--border)', background: 'var(--white)' }}
 				>
-					<div className="ml-auto max-w-xl space-y-2">
+					<div className="w-full space-y-2">
 						<div className="flex items-center justify-between">
 							<p
 								className="text-[10px] font-semibold uppercase tracking-wider"
@@ -1162,26 +1162,26 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								Clear
 							</button>
 						</div>
-						<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+						<div className="flex flex-wrap gap-2">
 							<input
 								aria-label="From date"
 								type="date"
 								value={filters.from}
 								onChange={(event) => updateFilter('from', event.target.value)}
-								className="prism-input text-[10px] px-2 py-1.5"
+								className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
 							/>
 							<input
 								aria-label="To date"
 								type="date"
 								value={filters.to}
 								onChange={(event) => updateFilter('to', event.target.value)}
-								className="prism-input text-[10px] px-2 py-1.5"
+								className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
 							/>
 							<select
 								aria-label="Asset"
 								value={filters.asset}
 								onChange={(event) => updateFilter('asset', event.target.value)}
-								className="prism-input text-[10px] px-2 py-1.5"
+								className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
 							>
 								<option value="">All assets</option>
 								{assets.map(([id, label]) => (
@@ -1198,13 +1198,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 								placeholder="Minimum amount"
 								value={filters.minimumAmount}
 								onChange={(event) => updateFilter('minimumAmount', event.target.value)}
-								className="prism-input text-[10px] px-2 py-1.5"
+								className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
 							/>
 							<select
 								aria-label="Transfer type"
 								value={filters.transferKind}
 								onChange={(event) => updateFilter('transferKind', event.target.value)}
-								className="prism-input text-[10px] px-2 py-1.5"
+								className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
 							>
 								<option value="">All types</option>
 								{transferKinds.map((kind) => (
