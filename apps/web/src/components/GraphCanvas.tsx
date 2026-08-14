@@ -1005,6 +1005,23 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						)}
 					</div>
 					<div className="ml-auto flex items-center gap-1.5 shrink-0">
+						{graphOptions && onGraphOptionsChange && (
+							<button
+								type="button"
+								aria-label="Filters"
+								aria-expanded={filterOpen}
+								onClick={() => setFilterOpen((open) => !open)}
+								className="list-none cursor-pointer rounded-lg p-1.5 text-xs"
+								style={{
+									background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
+									border: '1px solid var(--border)',
+									color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
+								}}
+								title={activeFilterCount ? `${activeFilterCount} active filters` : 'Filters'}
+							>
+								<Filter className="h-3.5 w-3.5" />
+							</button>
+						)}
 						<GitFork className="h-3.5 w-3.5 text-[var(--ink-3)]" aria-hidden="true" />
 						<select
 							aria-label="Graph layout"
@@ -1025,111 +1042,6 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 						</select>
 					</div>
 				</div>
-				{graphOptions && onGraphOptionsChange && (
-					<div
-						className="min-h-10 px-4 py-1.5 flex flex-wrap items-center justify-end gap-2"
-						style={{ borderTop: '1px solid var(--border)' }}
-					>
-						<select
-							aria-label="Counterparties per address"
-							value={graphOptions.maxCounterparties}
-							onChange={(event) =>
-								onGraphOptionsChange({
-									...graphOptions,
-									maxCounterparties: Number(event.target.value),
-								})
-							}
-							className="w-36 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-							style={{
-								background: 'var(--slate)',
-								border: '1px solid var(--border)',
-								color: 'var(--ink-2)',
-							}}
-						>
-							<option value={5}>Top 5</option>
-							<option value={10}>Top 10</option>
-							<option value={25}>Top 25</option>
-						</select>
-						<select
-							aria-label="Counterparty ranking"
-							value={graphOptions.ranking}
-							onChange={(event) =>
-								onGraphOptionsChange({
-									...graphOptions,
-									ranking: Number(event.target.value) as GraphRanking,
-								})
-							}
-							className="w-32 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-							style={{
-								background: 'var(--slate)',
-								border: '1px solid var(--border)',
-								color: 'var(--ink-2)',
-							}}
-							title="Ranking is deterministic. Amount ranking is the highest total for one raw on-chain asset, never fiat value."
-						>
-							<option value={GraphRanking.MOST_RECENT}>Recent</option>
-							<option value={GraphRanking.MOST_ACTIVE}>Most active</option>
-							<option value={GraphRanking.TOTAL_RAW_AMOUNT}>Largest total</option>
-							<option value={GraphRanking.KNOWN_ENTITY}>Known entities</option>
-						</select>
-						<select
-							aria-label="Investigation direction"
-							value={graphOptions.direction}
-							onChange={(event) =>
-								onGraphOptionsChange({
-									...graphOptions,
-									direction: Number(event.target.value) as TraceDirection,
-								})
-							}
-							className="w-28 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-							style={{
-								background: 'var(--slate)',
-								border: '1px solid var(--border)',
-								color: 'var(--ink-2)',
-							}}
-						>
-							<option value={TraceDirection.BOTH}>Full flow</option>
-							<option value={TraceDirection.INBOUND}>Sources</option>
-							<option value={TraceDirection.OUTBOUND}>Destinations</option>
-						</select>
-						<select
-							aria-label="Maximum graph depth"
-							value={graphOptions.maxDepth}
-							onChange={(event) =>
-								onGraphOptionsChange({
-									...graphOptions,
-									maxDepth: Number(event.target.value),
-								})
-							}
-							className="w-20 text-xs rounded-lg px-2.5 py-1 focus:outline-none"
-							style={{
-								background: 'var(--slate)',
-								border: '1px solid var(--border)',
-								color: 'var(--ink-2)',
-							}}
-							title="Manual expansion stops at this distance from the target."
-						>
-							<option value={1}>Depth 1</option>
-							<option value={2}>Depth 2</option>
-							<option value={3}>Depth 3</option>
-						</select>
-						<button
-							type="button"
-							aria-label="Filters"
-							aria-expanded={filterOpen}
-							onClick={() => setFilterOpen((open) => !open)}
-							className="list-none cursor-pointer rounded-lg p-1.5 text-xs"
-							style={{
-								background: activeFilterCount ? 'rgba(136,125,255,0.10)' : 'var(--slate)',
-								border: '1px solid var(--border)',
-								color: activeFilterCount ? 'var(--accent)' : 'var(--ink-2)',
-							}}
-							title={activeFilterCount ? `${activeFilterCount} active filters` : 'Filters'}
-						>
-							<Filter className="h-3.5 w-3.5" />
-						</button>
-					</div>
-				)}
 			</div>
 			{filterOpen && (
 				<div
@@ -1137,7 +1049,90 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 					style={{ borderColor: 'var(--border)', background: 'var(--white)' }}
 				>
 					<div className="w-full space-y-2">
-						<div className="flex items-center justify-between">
+						{graphOptions && onGraphOptionsChange && (
+							<div className="space-y-1.5">
+								<div className="flex items-center justify-between">
+									<p
+										className="text-[10px] font-semibold uppercase tracking-wider"
+										style={{ color: 'var(--ink-3)' }}
+									>
+										Trace scope
+									</p>
+									<p className="text-[9px]" style={{ color: 'var(--ink-3)' }}>
+										Changes retrieve a new graph.
+									</p>
+								</div>
+								<div className="flex flex-wrap gap-2">
+									<select
+										aria-label="Counterparties per address"
+										value={graphOptions.maxCounterparties}
+										onChange={(event) =>
+											onGraphOptionsChange({
+												...graphOptions,
+												maxCounterparties: Number(event.target.value),
+											})
+										}
+										className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
+									>
+										<option value={5}>Top 5 counterparties</option>
+										<option value={10}>Top 10 counterparties</option>
+										<option value={25}>Top 25 counterparties</option>
+									</select>
+									<select
+										aria-label="Counterparty ranking"
+										value={graphOptions.ranking}
+										onChange={(event) =>
+											onGraphOptionsChange({
+												...graphOptions,
+												ranking: Number(event.target.value) as GraphRanking,
+											})
+										}
+										className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
+										title="Ranking is deterministic. Amount ranking is the highest total for one raw on-chain asset, never fiat value."
+									>
+										<option value={GraphRanking.MOST_RECENT}>Most recent</option>
+										<option value={GraphRanking.MOST_ACTIVE}>Most transfers</option>
+										<option value={GraphRanking.TOTAL_RAW_AMOUNT}>Largest total per asset</option>
+										<option value={GraphRanking.KNOWN_ENTITY}>Known labelled entities</option>
+									</select>
+									<select
+										aria-label="Investigation direction"
+										value={graphOptions.direction}
+										onChange={(event) =>
+											onGraphOptionsChange({
+												...graphOptions,
+												direction: Number(event.target.value) as TraceDirection,
+											})
+										}
+										className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
+									>
+										<option value={TraceDirection.BOTH}>Full flow</option>
+										<option value={TraceDirection.INBOUND}>Source of funds</option>
+										<option value={TraceDirection.OUTBOUND}>Destination of funds</option>
+									</select>
+									<select
+										aria-label="Maximum graph depth"
+										value={graphOptions.maxDepth}
+										onChange={(event) =>
+											onGraphOptionsChange({
+												...graphOptions,
+												maxDepth: Number(event.target.value),
+											})
+										}
+										className="prism-input min-w-32 flex-1 text-[10px] px-2 py-1.5"
+										title="Manual expansion stops at this distance from the target."
+									>
+										<option value={1}>Depth 1</option>
+										<option value={2}>Depth 2</option>
+										<option value={3}>Depth 3</option>
+									</select>
+								</div>
+							</div>
+						)}
+						<div
+							className="flex items-center justify-between border-t pt-2"
+							style={{ borderColor: 'var(--border)' }}
+						>
 							<p
 								className="text-[10px] font-semibold uppercase tracking-wider"
 								style={{ color: 'var(--ink-3)' }}
