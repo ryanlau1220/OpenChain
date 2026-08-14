@@ -13,7 +13,7 @@ import (
 
 const (
 	Format  = "openchain-evidence-package"
-	Version = 1
+	Version = 2
 )
 
 type Package struct {
@@ -29,13 +29,15 @@ type Manifest struct {
 }
 
 type Payload struct {
-	ExportedAt time.Time       `json:"exported_at"`
-	Case       json.RawMessage `json:"case"`
-	Transfers  []Transfer      `json:"transfers"`
-	Snapshots  []Snapshot      `json:"acquisition_snapshots"`
-	Provenance []Provenance    `json:"provenance"`
-	RuleRuns   []RuleRun       `json:"rule_runs"`
-	Labels     []Label         `json:"labels"`
+	ExportedAt     time.Time          `json:"exported_at"`
+	Case           json.RawMessage    `json:"case"`
+	Transfers      []Transfer         `json:"transfers"`
+	Snapshots      []Snapshot         `json:"acquisition_snapshots"`
+	Scopes         []AcquisitionScope `json:"acquisition_scopes"`
+	ScopeTransfers []ScopeTransfer    `json:"scope_transfers"`
+	ScopeSnapshots []ScopeSnapshot    `json:"scope_snapshots"`
+	RuleRuns       []RuleRun          `json:"rule_runs"`
+	Labels         []Label            `json:"labels"`
 }
 
 type Transfer struct {
@@ -73,9 +75,24 @@ type Snapshot struct {
 	RetrievedAt        time.Time `json:"retrieved_at"`
 }
 
-type Provenance struct {
-	TransferID    string `json:"transfer_id"`
-	AcquisitionID int64  `json:"acquisition_id"`
+// AcquisitionScope identifies the page of observations resolved by a trace.
+// Snapshot links are page-scoped, rather than assertions about each transfer.
+type AcquisitionScope struct {
+	ID          int64     `json:"id"`
+	Network     string    `json:"network"`
+	Address     string    `json:"address"`
+	Cursor      string    `json:"cursor"`
+	RetrievedAt time.Time `json:"retrieved_at"`
+}
+
+type ScopeTransfer struct {
+	ScopeID    int64  `json:"scope_id"`
+	TransferID string `json:"transfer_id"`
+}
+
+type ScopeSnapshot struct {
+	ScopeID       int64 `json:"scope_id"`
+	AcquisitionID int64 `json:"acquisition_id"`
 }
 
 type RuleRun struct {
@@ -117,8 +134,14 @@ func Build(caseJSON []byte, exported *db.EvidenceExport, now time.Time) (*Packag
 	for _, snapshot := range exported.Snapshots {
 		payload.Snapshots = append(payload.Snapshots, Snapshot{ID: snapshot.ID, Network: snapshot.Network, Provider: snapshot.Provider, RequestIdentity: snapshot.RequestIdentity, ResponseSHA256: snapshot.Hash, ResponseBodyBase64: base64.StdEncoding.EncodeToString(snapshot.Response), RetrievedAt: snapshot.RetrievedAt.UTC()})
 	}
-	for _, link := range exported.Provenance {
-		payload.Provenance = append(payload.Provenance, Provenance{TransferID: link.TransferID, AcquisitionID: link.AcquisitionID})
+	for _, scope := range exported.Scopes {
+		payload.Scopes = append(payload.Scopes, AcquisitionScope{ID: scope.ID, Network: scope.Network, Address: scope.Address, Cursor: scope.Cursor, RetrievedAt: scope.RetrievedAt.UTC()})
+	}
+	for _, link := range exported.ScopeTransfers {
+		payload.ScopeTransfers = append(payload.ScopeTransfers, ScopeTransfer{ScopeID: link.ScopeID, TransferID: link.TransferID})
+	}
+	for _, link := range exported.ScopeSnapshots {
+		payload.ScopeSnapshots = append(payload.ScopeSnapshots, ScopeSnapshot{ScopeID: link.ScopeID, AcquisitionID: link.AcquisitionID})
 	}
 	for _, run := range exported.RuleRuns {
 		payload.RuleRuns = append(payload.RuleRuns, RuleRun{ID: run.ID, Network: run.Network, RuleID: run.RuleID, RuleVersion: run.RuleVersion, Parameters: run.Parameters, InputTransferIDs: run.InputTransferIDs, Result: run.Result, StartedAt: run.StartedAt.UTC(), CompletedAt: run.CompletedAt.UTC()})

@@ -74,12 +74,19 @@ func TestQueueIntegrationTraceFindingAndEvidenceExport(t *testing.T) {
 CREATE TABLE %s.trace_jobs (LIKE public.trace_jobs INCLUDING ALL);
 CREATE TABLE %s.transfers (LIKE public.transfers INCLUDING ALL);
 CREATE TABLE %s.assets (LIKE public.assets INCLUDING ALL);
-CREATE TABLE %s.acquisition_snapshots (LIKE public.acquisition_snapshots INCLUDING ALL);
-CREATE TABLE %s.transfer_acquisitions (transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (transfer_id, acquisition_id));
+CREATE TABLE %s.acquisition_blobs (response_sha256 TEXT PRIMARY KEY, response_body BYTEA NOT NULL);
+CREATE TABLE %s.acquisition_snapshots (id BIGSERIAL PRIMARY KEY, network TEXT NOT NULL, provider TEXT NOT NULL, request_identity TEXT NOT NULL, response_sha256 TEXT NOT NULL REFERENCES %s.acquisition_blobs(response_sha256), retrieved_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE %s.acquisition_scopes (id BIGSERIAL PRIMARY KEY, network TEXT NOT NULL, address TEXT NOT NULL, cursor TEXT NOT NULL, retrieved_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE %s.acquisition_scope_transfers (scope_id BIGINT NOT NULL REFERENCES %s.acquisition_scopes(id), transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), PRIMARY KEY (scope_id, transfer_id));
+CREATE TABLE %s.acquisition_scope_snapshots (scope_id BIGINT NOT NULL REFERENCES %s.acquisition_scopes(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (scope_id, acquisition_id));
 CREATE TABLE %s.rule_catalog (LIKE public.rule_catalog INCLUDING ALL);
 CREATE TABLE %s.rule_runs (LIKE public.rule_runs INCLUDING ALL);
 CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
-SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
+CREATE TRIGGER acquisition_blobs_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_blobs FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+CREATE TRIGGER acquisition_scopes_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_scopes FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+CREATE TRIGGER acquisition_scope_transfers_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_scope_transfers FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+CREATE TRIGGER acquisition_scope_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_scope_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
@@ -129,17 +136,20 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 			if len(result.Msg.GetLeads()) != 1 || result.Msg.GetLeads()[0].GetRuleId() != "fan-out-dispersion" {
 				t.Fatalf("deterministic finding = %#v", result.Msg.GetLeads())
 			}
-			var snapshots, links int
+			var snapshots, blobs, links int
 			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_snapshots`).Scan(&snapshots); err != nil {
 				t.Fatal(err)
 			}
-			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM transfer_acquisitions WHERE transfer_id = $1`, "ethereum-mainnet:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:tx").Scan(&links); err != nil {
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_blobs`).Scan(&blobs); err != nil {
 				t.Fatal(err)
 			}
-			// The failed first provider request is preserved separately from the
-			// three successful source snapshots linked to each transfer.
-			if snapshots != 4 || links != 3 {
-				t.Fatalf("snapshots = %d, links = %d", snapshots, links)
+			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_scope_transfers WHERE transfer_id = $1`, "ethereum-mainnet:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:tx").Scan(&links); err != nil {
+				t.Fatal(err)
+			}
+			// The failed request is retained in its own scope. The three successful
+			// provider responses are scoped to their shared page, not each transfer.
+			if snapshots != 4 || blobs != 3 || links != 1 {
+				t.Fatalf("snapshots = %d, blobs = %d, scope links = %d", snapshots, blobs, links)
 			}
 			var ruleRuns int
 			if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM rule_runs WHERE network = $1`, "ethereum-mainnet").Scan(&ruleRuns); err != nil || ruleRuns != len(rules.Catalog())-1 {
@@ -156,7 +166,7 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 				transferIDs = append(transferIDs, edge.GetId())
 			}
 			exported, err := database.ExportEvidence(ctx, "ethereum-mainnet", transferIDs)
-			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 3 || len(exported.Provenance) != 9 || len(exported.RuleRuns) != len(rules.Catalog())-1 {
+			if err != nil || len(exported.Transfers) != 3 || len(exported.Snapshots) != 3 || len(exported.Scopes) != 1 || len(exported.ScopeTransfers) != 3 || len(exported.ScopeSnapshots) != 3 || len(exported.RuleRuns) != len(rules.Catalog())-1 {
 				t.Fatalf("evidence export = %#v err=%v", exported, err)
 			}
 			packageResponse, err := evidenceClient.ExportEvidencePackage(ctx, connect.NewRequest(&pb.ExportEvidencePackageRequest{Network: pb.Network_NETWORK_ETHEREUM_MAINNET, TransferIds: transferIDs, CaseJson: `{"version":1,"title":"Integration case"}`}))

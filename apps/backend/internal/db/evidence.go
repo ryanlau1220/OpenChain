@@ -17,8 +17,19 @@ type AcquisitionSnapshot struct {
 	RetrievedAt                              time.Time
 }
 
-type TransferAcquisition struct {
-	TransferID    string
+type RecordedAcquisitionScope struct {
+	ID                       int64
+	Network, Address, Cursor string
+	RetrievedAt              time.Time
+}
+
+type AcquisitionScopeTransfer struct {
+	ScopeID    int64
+	TransferID string
+}
+
+type AcquisitionScopeSnapshot struct {
+	ScopeID       int64
 	AcquisitionID int64
 }
 
@@ -30,11 +41,13 @@ type RecordedRuleRun struct {
 }
 
 type EvidenceExport struct {
-	Transfers  []Transfer
-	Snapshots  []AcquisitionSnapshot
-	Provenance []TransferAcquisition
-	RuleRuns   []RecordedRuleRun
-	Labels     []CuratedLabel
+	Transfers      []Transfer
+	Snapshots      []AcquisitionSnapshot
+	Scopes         []RecordedAcquisitionScope
+	ScopeTransfers []AcquisitionScopeTransfer
+	ScopeSnapshots []AcquisitionScopeSnapshot
+	RuleRuns       []RecordedRuleRun
+	Labels         []CuratedLabel
 }
 
 const maxEvidenceTransferIDs = 250
@@ -51,11 +64,23 @@ func (d *DB) ExportEvidence(ctx context.Context, network string, transferIDs []s
 	if len(transfers) != len(ids) {
 		return nil, fmt.Errorf("one or more selected transfers are unavailable")
 	}
-	snapshots, err := d.exportSnapshots(ctx, ids)
+	scopes, err := d.exportAcquisitionScopes(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
-	provenance, err := d.exportProvenance(ctx, ids)
+	scopeIDs := make([]int64, 0, len(scopes))
+	for _, scope := range scopes {
+		scopeIDs = append(scopeIDs, scope.ID)
+	}
+	snapshots, err := d.exportSnapshots(ctx, scopeIDs)
+	if err != nil {
+		return nil, err
+	}
+	scopeTransfers, err := d.exportScopeTransfers(ctx, scopeIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	scopeSnapshots, err := d.exportScopeSnapshots(ctx, scopeIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +96,7 @@ func (d *DB) ExportEvidence(ctx context.Context, network string, transferIDs []s
 	if err != nil {
 		return nil, err
 	}
-	return &EvidenceExport{Transfers: transfers, Snapshots: snapshots, Provenance: provenance, RuleRuns: runs, Labels: labels}, nil
+	return &EvidenceExport{Transfers: transfers, Snapshots: snapshots, Scopes: scopes, ScopeTransfers: scopeTransfers, ScopeSnapshots: scopeSnapshots, RuleRuns: runs, Labels: labels}, nil
 }
 
 func (d *DB) exportTransfers(ctx context.Context, ids []string) ([]Transfer, error) {
@@ -94,8 +119,31 @@ func (d *DB) exportTransfers(ctx context.Context, ids []string) ([]Transfer, err
 	return result, nil
 }
 
-func (d *DB) exportSnapshots(ctx context.Context, ids []string) ([]AcquisitionSnapshot, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT DISTINCT snapshot.id, snapshot.network, snapshot.provider, snapshot.request_identity, snapshot.response_sha256, snapshot.response_body, snapshot.retrieved_at FROM acquisition_snapshots snapshot JOIN transfer_acquisitions link ON link.acquisition_id = snapshot.id WHERE link.transfer_id = ANY($1) ORDER BY snapshot.id`, pq.Array(ids))
+func (d *DB) exportAcquisitionScopes(ctx context.Context, ids []string) ([]RecordedAcquisitionScope, error) {
+	rows, err := d.SQL.QueryContext(ctx, `SELECT DISTINCT scope.id, scope.network, scope.address, scope.cursor, scope.retrieved_at FROM acquisition_scopes scope JOIN acquisition_scope_transfers link ON link.scope_id = scope.id WHERE link.transfer_id = ANY($1) ORDER BY scope.id`, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("query package acquisition scopes: %w", err)
+	}
+	defer rows.Close()
+	result := make([]RecordedAcquisitionScope, 0)
+	for rows.Next() {
+		var scope RecordedAcquisitionScope
+		if err := rows.Scan(&scope.ID, &scope.Network, &scope.Address, &scope.Cursor, &scope.RetrievedAt); err != nil {
+			return nil, fmt.Errorf("scan package acquisition scope: %w", err)
+		}
+		result = append(result, scope)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate package acquisition scopes: %w", err)
+	}
+	return result, nil
+}
+
+func (d *DB) exportSnapshots(ctx context.Context, scopeIDs []int64) ([]AcquisitionSnapshot, error) {
+	if len(scopeIDs) == 0 {
+		return []AcquisitionSnapshot{}, nil
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT DISTINCT snapshot.id, snapshot.network, snapshot.provider, snapshot.request_identity, snapshot.response_sha256, blob.response_body, snapshot.retrieved_at FROM acquisition_snapshots snapshot JOIN acquisition_scope_snapshots link ON link.acquisition_id = snapshot.id JOIN acquisition_blobs blob ON blob.response_sha256 = snapshot.response_sha256 WHERE link.scope_id = ANY($1) ORDER BY snapshot.id`, pq.Array(scopeIDs))
 	if err != nil {
 		return nil, fmt.Errorf("query package acquisition snapshots: %w", err)
 	}
@@ -114,22 +162,48 @@ func (d *DB) exportSnapshots(ctx context.Context, ids []string) ([]AcquisitionSn
 	return result, nil
 }
 
-func (d *DB) exportProvenance(ctx context.Context, ids []string) ([]TransferAcquisition, error) {
-	rows, err := d.SQL.QueryContext(ctx, `SELECT transfer_id, acquisition_id FROM transfer_acquisitions WHERE transfer_id = ANY($1) ORDER BY transfer_id, acquisition_id`, pq.Array(ids))
+func (d *DB) exportScopeTransfers(ctx context.Context, scopeIDs []int64, transferIDs []string) ([]AcquisitionScopeTransfer, error) {
+	if len(scopeIDs) == 0 {
+		return []AcquisitionScopeTransfer{}, nil
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT scope_id, transfer_id FROM acquisition_scope_transfers WHERE scope_id = ANY($1) AND transfer_id = ANY($2) ORDER BY scope_id, transfer_id`, pq.Array(scopeIDs), pq.Array(transferIDs))
 	if err != nil {
-		return nil, fmt.Errorf("query package provenance: %w", err)
+		return nil, fmt.Errorf("query package scope transfers: %w", err)
 	}
 	defer rows.Close()
-	result := make([]TransferAcquisition, 0)
+	result := make([]AcquisitionScopeTransfer, 0)
 	for rows.Next() {
-		var link TransferAcquisition
-		if err := rows.Scan(&link.TransferID, &link.AcquisitionID); err != nil {
-			return nil, fmt.Errorf("scan package provenance: %w", err)
+		var link AcquisitionScopeTransfer
+		if err := rows.Scan(&link.ScopeID, &link.TransferID); err != nil {
+			return nil, fmt.Errorf("scan package scope transfer: %w", err)
 		}
 		result = append(result, link)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate package provenance: %w", err)
+		return nil, fmt.Errorf("iterate package scope transfers: %w", err)
+	}
+	return result, nil
+}
+
+func (d *DB) exportScopeSnapshots(ctx context.Context, scopeIDs []int64) ([]AcquisitionScopeSnapshot, error) {
+	if len(scopeIDs) == 0 {
+		return []AcquisitionScopeSnapshot{}, nil
+	}
+	rows, err := d.SQL.QueryContext(ctx, `SELECT scope_id, acquisition_id FROM acquisition_scope_snapshots WHERE scope_id = ANY($1) ORDER BY scope_id, acquisition_id`, pq.Array(scopeIDs))
+	if err != nil {
+		return nil, fmt.Errorf("query package scope snapshots: %w", err)
+	}
+	defer rows.Close()
+	result := make([]AcquisitionScopeSnapshot, 0)
+	for rows.Next() {
+		var link AcquisitionScopeSnapshot
+		if err := rows.Scan(&link.ScopeID, &link.AcquisitionID); err != nil {
+			return nil, fmt.Errorf("scan package scope snapshot: %w", err)
+		}
+		result = append(result, link)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate package scope snapshots: %w", err)
 	}
 	return result, nil
 }

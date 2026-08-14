@@ -43,10 +43,17 @@ func TestSaveGraphIntegration(t *testing.T) {
 	if _, err := database.SQL.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA %s;
 CREATE TABLE %s.transfers (LIKE public.transfers INCLUDING ALL);
 CREATE TABLE %s.assets (LIKE public.assets INCLUDING ALL);
-CREATE TABLE %s.acquisition_snapshots (LIKE public.acquisition_snapshots INCLUDING ALL);
-CREATE TABLE %s.transfer_acquisitions (transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (transfer_id, acquisition_id));
+CREATE TABLE %s.acquisition_blobs (response_sha256 TEXT PRIMARY KEY, response_body BYTEA NOT NULL);
+CREATE TABLE %s.acquisition_snapshots (id BIGSERIAL PRIMARY KEY, network TEXT NOT NULL, provider TEXT NOT NULL, request_identity TEXT NOT NULL, response_sha256 TEXT NOT NULL REFERENCES %s.acquisition_blobs(response_sha256), retrieved_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE %s.acquisition_scopes (id BIGSERIAL PRIMARY KEY, network TEXT NOT NULL, address TEXT NOT NULL, cursor TEXT NOT NULL, retrieved_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE %s.acquisition_scope_transfers (scope_id BIGINT NOT NULL REFERENCES %s.acquisition_scopes(id), transfer_id TEXT NOT NULL REFERENCES %s.transfers(id), PRIMARY KEY (scope_id, transfer_id));
+CREATE TABLE %s.acquisition_scope_snapshots (scope_id BIGINT NOT NULL REFERENCES %s.acquisition_scopes(id), acquisition_id BIGINT NOT NULL REFERENCES %s.acquisition_snapshots(id), PRIMARY KEY (scope_id, acquisition_id));
 CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
-SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
+CREATE TRIGGER acquisition_blobs_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_blobs FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+CREATE TRIGGER acquisition_scopes_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_scopes FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+CREATE TRIGGER acquisition_scope_transfers_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_scope_transfers FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+CREATE TRIGGER acquisition_scope_snapshots_immutable BEFORE UPDATE OR DELETE ON %s.acquisition_scope_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema, schema)); err != nil {
 		t.Fatal(err)
 	}
 	from := "0x1000000000000000000000000000000000000001"
@@ -58,7 +65,8 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 		cleanupGraph(t, database, transfer.ID, transfer.Network, from, to)
 		_, _ = database.SQL.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA %s CASCADE`, schema))
 	}()
-	if err := database.SaveEvidenceGraph(ctx, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}, []adapter.RawAcquisition{acquisition}); err != nil {
+	scope := AcquisitionScope{Network: transfer.Network, Address: from, Cursor: "page-1", RetrievedAt: acquisition.RetrievedAt}
+	if err := database.SaveEvidenceGraph(ctx, scope, []Address{{Network: transfer.Network, Address: from, Label: "From", EntityType: "EOA"}, {Network: transfer.Network, Address: to, Label: "To", EntityType: "EOA"}}, []Transfer{transfer}, []adapter.RawAcquisition{acquisition}); err != nil {
 		t.Fatal(err)
 	}
 	var relationalCount int
@@ -72,14 +80,31 @@ SET search_path = %s, public`, schema, schema, schema, schema, schema, schema, s
 	var acquisitionID int64
 	var responseHash string
 	var provisional bool
-	if err := database.SQL.QueryRowContext(ctx, `SELECT snapshot.id, snapshot.response_sha256, transfer.provisional FROM acquisition_snapshots snapshot JOIN transfer_acquisitions link ON link.acquisition_id = snapshot.id JOIN transfers transfer ON transfer.id = link.transfer_id WHERE transfer.id = $1`, transfer.ID).Scan(&acquisitionID, &responseHash, &provisional); err != nil || responseHash != fmt.Sprintf("%x", expectedHash[:]) || provisional {
+	if err := database.SQL.QueryRowContext(ctx, `SELECT snapshot.id, snapshot.response_sha256, transfer.provisional FROM acquisition_snapshots snapshot JOIN acquisition_scope_snapshots scope_snapshot ON scope_snapshot.acquisition_id = snapshot.id JOIN acquisition_scope_transfers scope_transfer ON scope_transfer.scope_id = scope_snapshot.scope_id JOIN transfers transfer ON transfer.id = scope_transfer.transfer_id WHERE transfer.id = $1`, transfer.ID).Scan(&acquisitionID, &responseHash, &provisional); err != nil || responseHash != fmt.Sprintf("%x", expectedHash[:]) || provisional {
 		t.Fatalf("transfer provenance = id:%d hash:%q provisional:%v err:%v", acquisitionID, responseHash, provisional, err)
 	}
 	if _, err := database.SQL.ExecContext(ctx, `UPDATE acquisition_snapshots SET provider = 'changed' WHERE id = $1`, acquisitionID); err == nil {
 		t.Fatal("immutable acquisition snapshot was updated")
 	}
+	secondScope := AcquisitionScope{Network: transfer.Network, Address: to, Cursor: "page-2", RetrievedAt: acquisition.RetrievedAt.Add(time.Second)}
+	if err := database.SaveAcquisitions(ctx, secondScope, []adapter.RawAcquisition{{Provider: acquisition.Provider, RequestIdentity: acquisition.RequestIdentity, Response: rawResponse, RetrievedAt: acquisition.RetrievedAt.Add(time.Second)}}); err != nil {
+		t.Fatal(err)
+	}
+	var blobs, snapshots, scopes int
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_blobs`).Scan(&blobs); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_snapshots`).Scan(&snapshots); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM acquisition_scopes`).Scan(&scopes); err != nil || blobs != 1 || snapshots != 2 || scopes != 2 {
+		t.Fatalf("deduplicated evidence blobs=%d snapshots=%d scopes=%d err=%v", blobs, snapshots, scopes, err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE acquisition_blobs SET response_body = 'changed' WHERE response_sha256 = $1`, responseHash); err == nil {
+		t.Fatal("immutable acquisition blob was updated")
+	}
 	exported, err := database.ExportEvidence(ctx, transfer.Network, []string{transfer.ID})
-	if err != nil || len(exported.Transfers) != 1 || len(exported.Snapshots) != 1 || len(exported.Provenance) != 1 || exported.Snapshots[0].Hash != responseHash {
+	if err != nil || len(exported.Transfers) != 1 || len(exported.Snapshots) != 1 || len(exported.Scopes) != 1 || len(exported.ScopeTransfers) != 1 || len(exported.ScopeSnapshots) != 1 || exported.Snapshots[0].Hash != responseHash {
 		t.Fatalf("evidence export = %#v err=%v", exported, err)
 	}
 	var assetCount int

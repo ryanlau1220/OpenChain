@@ -92,7 +92,8 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	page, err := e.chainAdapter.ListTransfers(acquisitionContext, address, limit, cursor)
 	if err != nil {
 		if e.database != nil {
-			if persistErr := e.database.SaveAcquisitions(ctx, e.Network(), recorder.Items()); persistErr != nil {
+			scope := db.AcquisitionScope{Network: e.Network(), Address: address, Cursor: cursor, RetrievedAt: time.Now().UTC()}
+			if persistErr := e.database.SaveAcquisitions(ctx, scope, recorder.Items()); persistErr != nil {
 				return nil, persistErr
 			}
 		}
@@ -106,7 +107,12 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 	leads, runs := rules.Evaluate(e.Network(), persistedTransfers, completedAt)
 	result.Leads = leads
 	if e.database != nil {
-		if err := e.database.SaveEvidenceGraph(ctx, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items()); err != nil {
+		retrievedAt := page.SourceStatus.RetrievedAt
+		if retrievedAt.IsZero() {
+			retrievedAt = completedAt
+		}
+		scope := db.AcquisitionScope{Network: e.Network(), Address: address, Cursor: cursor, RetrievedAt: retrievedAt}
+		if err := e.database.SaveEvidenceGraph(ctx, scope, e.toAddresses(result.Nodes), persistedTransfers, recorder.Items()); err != nil {
 			return nil, err
 		}
 		if err := e.database.SaveRuleRuns(ctx, runs); err != nil {
@@ -118,7 +124,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 		candidates := make([]rules.BridgeCandidate, 0, len(bridgeEvidence))
 		for _, evidence := range bridgeEvidence {
 			if e.database != nil {
-				if err := e.database.SaveEvidenceGraph(ctx, evidence.Addresses, evidence.Transfers, evidence.Acquisitions); err != nil {
+				if err := e.database.SaveEvidenceGraph(ctx, evidence.Scope, evidence.Addresses, evidence.Transfers, evidence.Acquisitions); err != nil {
 					return nil, err
 				}
 			}

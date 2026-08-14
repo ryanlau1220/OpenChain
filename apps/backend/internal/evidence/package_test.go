@@ -14,9 +14,11 @@ import (
 func TestBuildCreatesManifestForFrozenPayload(t *testing.T) {
 	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
 	packageFile, err := Build([]byte(`{"version":1,"title":"Case"}`), &db.EvidenceExport{
-		Transfers: []db.Transfer{{ID: "transfer-1", Network: "ethereum-mainnet", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, BlockTimestamp: now, RetrievedAt: now}},
-		Snapshots: []db.AcquisitionSnapshot{{ID: 7, Network: "ethereum-mainnet", Provider: "test", RequestIdentity: "GET /", Hash: "hash", Response: []byte(`{"ok":true}`), RetrievedAt: now}},
-		Provenance: []db.TransferAcquisition{{TransferID: "transfer-1", AcquisitionID: 7}},
+		Transfers:      []db.Transfer{{ID: "transfer-1", Network: "ethereum-mainnet", Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, BlockTimestamp: now, RetrievedAt: now}},
+		Snapshots:      []db.AcquisitionSnapshot{{ID: 7, Network: "ethereum-mainnet", Provider: "test", RequestIdentity: "GET /", Hash: "hash", Response: []byte(`{"ok":true}`), RetrievedAt: now}},
+		Scopes:         []db.RecordedAcquisitionScope{{ID: 4, Network: "ethereum-mainnet", Address: "0xaddress", Cursor: "page-1", RetrievedAt: now}},
+		ScopeTransfers: []db.AcquisitionScopeTransfer{{ScopeID: 4, TransferID: "transfer-1"}},
+		ScopeSnapshots: []db.AcquisitionScopeSnapshot{{ScopeID: 4, AcquisitionID: 7}},
 	}, now)
 	if err != nil {
 		t.Fatal(err)

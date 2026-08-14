@@ -48,13 +48,15 @@ function frozenEvidencePackage(root: string, transferID: string) {
 		},
 		transfers: [{ id: transferID, network: 'ethereum-mainnet', transaction_hash: '0xtx', event_id: 'tx', transfer_kind: 'NATIVE', from_address: root, to_address: '0x0000000000000000000000000000000000000002', asset: { kind: 'NATIVE', contract_address: '', symbol: 'ETH', decimals: 18 }, amount_base_units: '42', block_number: 1, block_hash: '0xblock', block_timestamp: '2026-08-11T00:00:00Z', provisional: false, source: 'frozen-test', retrieved_at: '2026-08-12T00:00:00Z' }],
 		acquisition_snapshots: [],
-		provenance: [],
+		acquisition_scopes: [],
+		scope_transfers: [],
+		scope_snapshots: [],
 		rule_runs: [],
 		labels: [],
 	};
 	return JSON.stringify({
 		format: 'openchain-evidence-package',
-		version: 1,
+		version: 2,
 		payload,
 		manifest: { algorithm: 'SHA-256', payload_sha256: createHash('sha256').update(JSON.stringify(payload)).digest('hex') },
 	});

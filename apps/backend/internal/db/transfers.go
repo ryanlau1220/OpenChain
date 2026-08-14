@@ -25,9 +25,19 @@ type Address struct {
 	Network, Address, Label, EntityType string
 }
 
+// AcquisitionScope records the trace page that produced a set of observations.
+// It deliberately does not claim every source response contains every transfer.
+type AcquisitionScope struct {
+	Network, Address, Cursor string
+	RetrievedAt              time.Time
+}
+
 const insertTransferSQL = `INSERT INTO transfers (id, network, transaction_hash, event_id, transfer_kind, from_address, to_address, asset_symbol, asset_kind, asset_contract_address, asset_decimals, amount_base_units, block_number, block_hash, block_timestamp, provisional, source, retrieved_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT (id) DO NOTHING`
-const insertAcquisitionSQL = `INSERT INTO acquisition_snapshots (network, provider, request_identity, response_sha256, response_body, retrieved_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`
-const insertTransferAcquisitionSQL = `INSERT INTO transfer_acquisitions (transfer_id, acquisition_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+const insertAcquisitionBlobSQL = `INSERT INTO acquisition_blobs (response_sha256, response_body) VALUES ($1, $2) ON CONFLICT (response_sha256) DO NOTHING`
+const insertAcquisitionSQL = `INSERT INTO acquisition_snapshots (network, provider, request_identity, response_sha256, retrieved_at) VALUES ($1,$2,$3,$4,$5) RETURNING id`
+const insertAcquisitionScopeSQL = `INSERT INTO acquisition_scopes (network, address, cursor, retrieved_at) VALUES ($1,$2,$3,$4) RETURNING id`
+const insertAcquisitionScopeTransferSQL = `INSERT INTO acquisition_scope_transfers (scope_id, transfer_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+const insertAcquisitionScopeSnapshotSQL = `INSERT INTO acquisition_scope_snapshots (scope_id, acquisition_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
 const upsertAssetSQL = `INSERT INTO assets (network, contract_address, kind, symbol, decimals, retrieved_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (network, contract_address) DO UPDATE SET kind = EXCLUDED.kind, symbol = EXCLUDED.symbol, decimals = EXCLUDED.decimals, retrieved_at = EXCLUDED.retrieved_at`
 
 const upsertAddressSQL = `SELECT * FROM cypher('openchain', $$
@@ -54,7 +64,7 @@ SET flow.network = $network,
 RETURN flow
 $$, $1) AS (result agtype)`
 
-func (d *DB) SaveEvidenceGraph(ctx context.Context, addresses []Address, transfers []Transfer, acquisitions []adapter.RawAcquisition) error {
+func (d *DB) SaveEvidenceGraph(ctx context.Context, scope AcquisitionScope, addresses []Address, transfers []Transfer, acquisitions []adapter.RawAcquisition) error {
 	if len(addresses) == 0 && len(transfers) == 0 && len(acquisitions) == 0 {
 		return nil
 	}
@@ -63,10 +73,6 @@ func (d *DB) SaveEvidenceGraph(ctx context.Context, addresses []Address, transfe
 		return fmt.Errorf("begin transfer transaction: %w", err)
 	}
 	defer tx.Rollback()
-	acquisitionIDs, err := insertAcquisitions(ctx, tx, transfers, acquisitions)
-	if err != nil {
-		return err
-	}
 	statement, err := tx.PrepareContext(ctx, insertTransferSQL)
 	if err != nil {
 		return fmt.Errorf("prepare transfer insert: %w", err)
@@ -84,11 +90,9 @@ func (d *DB) SaveEvidenceGraph(ctx context.Context, addresses []Address, transfe
 		if _, err := statement.ExecContext(ctx, transfer.ID, transfer.Network, transfer.TransactionHash, transfer.EventID, transfer.TransferKind, transfer.FromAddress, transfer.ToAddress, transfer.Asset.Symbol, transfer.Asset.Kind, transfer.Asset.ContractAddress, transfer.Asset.Decimals, transfer.AmountBaseUnits, transfer.BlockNumber, transfer.BlockHash, transfer.BlockTimestamp, transfer.Provisional, transfer.Source, transfer.RetrievedAt); err != nil {
 			return fmt.Errorf("insert transfer: %w", err)
 		}
-		for _, acquisitionID := range acquisitionIDs {
-			if _, err := tx.ExecContext(ctx, insertTransferAcquisitionSQL, transfer.ID, acquisitionID); err != nil {
-				return fmt.Errorf("link transfer acquisition: %w", err)
-			}
-		}
+	}
+	if err := insertAcquisitionScope(ctx, tx, scope, transferIDs(transfers), acquisitions); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
 		return fmt.Errorf("load Apache AGE: %w", err)
@@ -114,7 +118,7 @@ func (d *DB) SaveEvidenceGraph(ctx context.Context, addresses []Address, transfe
 	return tx.Commit()
 }
 
-func (d *DB) SaveAcquisitions(ctx context.Context, network string, acquisitions []adapter.RawAcquisition) error {
+func (d *DB) SaveAcquisitions(ctx context.Context, scope AcquisitionScope, acquisitions []adapter.RawAcquisition) error {
 	if len(acquisitions) == 0 {
 		return nil
 	}
@@ -123,40 +127,64 @@ func (d *DB) SaveAcquisitions(ctx context.Context, network string, acquisitions 
 		return fmt.Errorf("begin acquisition transaction: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := insertAcquisitions(ctx, tx, []Transfer{{Network: network}}, acquisitions); err != nil {
+	if err := insertAcquisitionScope(ctx, tx, scope, nil, acquisitions); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func insertAcquisitions(ctx context.Context, tx *sql.Tx, transfers []Transfer, acquisitions []adapter.RawAcquisition) ([]int64, error) {
+func insertAcquisitionScope(ctx context.Context, tx *sql.Tx, scope AcquisitionScope, transferIDs []string, acquisitions []adapter.RawAcquisition) error {
 	if len(acquisitions) == 0 {
-		return nil, nil
+		return nil
 	}
-	network := ""
-	if len(transfers) > 0 {
-		network = transfers[0].Network
-	}
-	if network == "" {
-		return nil, fmt.Errorf("acquisition network is required")
+	if scope.Network == "" || scope.Address == "" || scope.RetrievedAt.IsZero() {
+		return fmt.Errorf("invalid acquisition scope")
 	}
 	ids := make([]int64, 0, len(acquisitions))
 	for _, acquisition := range acquisitions {
 		if acquisition.Provider == "" || acquisition.RequestIdentity == "" || acquisition.RetrievedAt.IsZero() {
-			return nil, fmt.Errorf("invalid acquisition")
+			return fmt.Errorf("invalid acquisition")
 		}
 		response := acquisition.Response
 		if response == nil {
 			response = []byte{}
 		}
 		hash := sha256.Sum256(response)
+		responseHash := fmt.Sprintf("%x", hash[:])
+		if _, err := tx.ExecContext(ctx, insertAcquisitionBlobSQL, responseHash, response); err != nil {
+			return fmt.Errorf("insert acquisition blob: %w", err)
+		}
 		var id int64
-		if err := tx.QueryRowContext(ctx, insertAcquisitionSQL, network, acquisition.Provider, acquisition.RequestIdentity, fmt.Sprintf("%x", hash[:]), response, acquisition.RetrievedAt).Scan(&id); err != nil {
-			return nil, fmt.Errorf("insert acquisition snapshot: %w", err)
+		if err := tx.QueryRowContext(ctx, insertAcquisitionSQL, scope.Network, acquisition.Provider, acquisition.RequestIdentity, responseHash, acquisition.RetrievedAt).Scan(&id); err != nil {
+			return fmt.Errorf("insert acquisition snapshot: %w", err)
 		}
 		ids = append(ids, id)
 	}
-	return ids, nil
+	var scopeID int64
+	if err := tx.QueryRowContext(ctx, insertAcquisitionScopeSQL, scope.Network, scope.Address, scope.Cursor, scope.RetrievedAt).Scan(&scopeID); err != nil {
+		return fmt.Errorf("insert acquisition scope: %w", err)
+	}
+	for _, transferID := range transferIDs {
+		if _, err := tx.ExecContext(ctx, insertAcquisitionScopeTransferSQL, scopeID, transferID); err != nil {
+			return fmt.Errorf("link acquisition scope transfer: %w", err)
+		}
+	}
+	for _, acquisitionID := range ids {
+		if _, err := tx.ExecContext(ctx, insertAcquisitionScopeSnapshotSQL, scopeID, acquisitionID); err != nil {
+			return fmt.Errorf("link acquisition scope snapshot: %w", err)
+		}
+	}
+	return nil
+}
+
+func transferIDs(transfers []Transfer) []string {
+	ids := make([]string, 0, len(transfers))
+	for _, transfer := range transfers {
+		if transfer.ID != "" {
+			ids = append(ids, transfer.ID)
+		}
+	}
+	return ids
 }
 
 func execCypher(ctx context.Context, tx *sql.Tx, query string, parameters any) error {

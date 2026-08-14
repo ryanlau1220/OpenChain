@@ -52,24 +52,69 @@ ALTER TABLE public.transfers ADD COLUMN IF NOT EXISTS provisional BOOLEAN NOT NU
 CREATE INDEX IF NOT EXISTS transfers_from_network_idx ON public.transfers (network, from_address, block_number DESC);
 CREATE INDEX IF NOT EXISTS transfers_to_network_idx ON public.transfers (network, to_address, block_number DESC);
 
+CREATE TABLE IF NOT EXISTS public.acquisition_blobs (
+  response_sha256 TEXT PRIMARY KEY CHECK (length(response_sha256) = 64),
+  response_body BYTEA NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.acquisition_snapshots (
   id BIGSERIAL PRIMARY KEY,
   network TEXT NOT NULL,
   provider TEXT NOT NULL,
   request_identity TEXT NOT NULL,
   response_sha256 TEXT NOT NULL CHECK (length(response_sha256) = 64),
-  response_body BYTEA NOT NULL,
   retrieved_at TIMESTAMPTZ NOT NULL
 );
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'acquisition_snapshots' AND column_name = 'response_body'
+  ) THEN
+    EXECUTE 'INSERT INTO public.acquisition_blobs (response_sha256, response_body) SELECT response_sha256, response_body FROM public.acquisition_snapshots ON CONFLICT (response_sha256) DO NOTHING';
+    EXECUTE 'ALTER TABLE public.acquisition_snapshots DROP COLUMN response_body';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'acquisition_snapshots_response_sha256_fkey' AND conrelid = 'public.acquisition_snapshots'::regclass
+  ) THEN
+    ALTER TABLE public.acquisition_snapshots
+      ADD CONSTRAINT acquisition_snapshots_response_sha256_fkey
+      FOREIGN KEY (response_sha256) REFERENCES public.acquisition_blobs(response_sha256);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS acquisition_snapshots_network_retrieved_idx ON public.acquisition_snapshots (network, retrieved_at DESC);
 CREATE INDEX IF NOT EXISTS acquisition_snapshots_response_hash_idx ON public.acquisition_snapshots (response_sha256);
 
-CREATE TABLE IF NOT EXISTS public.transfer_acquisitions (
-  transfer_id TEXT NOT NULL REFERENCES public.transfers(id),
-  acquisition_id BIGINT NOT NULL REFERENCES public.acquisition_snapshots(id),
-  PRIMARY KEY (transfer_id, acquisition_id)
+DROP TABLE IF EXISTS public.transfer_acquisitions;
+
+CREATE TABLE IF NOT EXISTS public.acquisition_scopes (
+  id BIGSERIAL PRIMARY KEY,
+  network TEXT NOT NULL,
+  address TEXT NOT NULL,
+  cursor TEXT NOT NULL,
+  retrieved_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS acquisition_scopes_lookup_idx ON public.acquisition_scopes (network, address, retrieved_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.acquisition_scope_transfers (
+  scope_id BIGINT NOT NULL REFERENCES public.acquisition_scopes(id),
+  transfer_id TEXT NOT NULL REFERENCES public.transfers(id),
+  PRIMARY KEY (scope_id, transfer_id)
+);
+
+CREATE INDEX IF NOT EXISTS acquisition_scope_transfers_transfer_idx ON public.acquisition_scope_transfers (transfer_id);
+
+CREATE TABLE IF NOT EXISTS public.acquisition_scope_snapshots (
+  scope_id BIGINT NOT NULL REFERENCES public.acquisition_scopes(id),
+  acquisition_id BIGINT NOT NULL REFERENCES public.acquisition_snapshots(id),
+  PRIMARY KEY (scope_id, acquisition_id)
+);
+
+CREATE INDEX IF NOT EXISTS acquisition_scope_snapshots_acquisition_idx ON public.acquisition_scope_snapshots (acquisition_id);
 
 CREATE OR REPLACE FUNCTION public.reject_evidence_mutation() RETURNS trigger AS $$
 BEGIN
@@ -79,8 +124,14 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS acquisition_snapshots_immutable ON public.acquisition_snapshots;
 CREATE TRIGGER acquisition_snapshots_immutable BEFORE UPDATE OR DELETE ON public.acquisition_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
-DROP TRIGGER IF EXISTS transfer_acquisitions_immutable ON public.transfer_acquisitions;
-CREATE TRIGGER transfer_acquisitions_immutable BEFORE UPDATE OR DELETE ON public.transfer_acquisitions FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS acquisition_blobs_immutable ON public.acquisition_blobs;
+CREATE TRIGGER acquisition_blobs_immutable BEFORE UPDATE OR DELETE ON public.acquisition_blobs FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS acquisition_scopes_immutable ON public.acquisition_scopes;
+CREATE TRIGGER acquisition_scopes_immutable BEFORE UPDATE OR DELETE ON public.acquisition_scopes FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS acquisition_scope_transfers_immutable ON public.acquisition_scope_transfers;
+CREATE TRIGGER acquisition_scope_transfers_immutable BEFORE UPDATE OR DELETE ON public.acquisition_scope_transfers FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS acquisition_scope_snapshots_immutable ON public.acquisition_scope_snapshots;
+CREATE TRIGGER acquisition_scope_snapshots_immutable BEFORE UPDATE OR DELETE ON public.acquisition_scope_snapshots FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
 
 CREATE TABLE IF NOT EXISTS public.rule_catalog (
   rule_id TEXT NOT NULL,

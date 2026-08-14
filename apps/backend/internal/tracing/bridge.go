@@ -31,7 +31,7 @@ var opStackBridgeRoutes = []bridgeRoute{
 type bridgeEvidence struct {
 	Candidate    rules.BridgeCandidate
 	Transition   CrossChainTransition
-	Network      string
+	Scope        db.AcquisitionScope
 	Addresses    []db.Address
 	Transfers    []db.Transfer
 	Acquisitions []adapter.RawAcquisition
@@ -87,6 +87,11 @@ func (c *BridgeCorrelator) Correlate(ctx context.Context, sourceNetwork string, 
 			if err != nil {
 				continue
 			}
+			retrievedAt := page.SourceStatus.RetrievedAt
+			if retrievedAt.IsZero() {
+				retrievedAt = time.Now().UTC()
+			}
+			scope := db.AcquisitionScope{Network: route.destinationNetwork, Address: owner, RetrievedAt: retrievedAt}
 			for _, source := range sources {
 				for _, item := range page.Transfers {
 					if !strings.EqualFold(item.From, route.destinationBridge) || !strings.EqualFold(item.To, owner) || !matchingBridgeAsset(source.Asset, item.Asset) || item.AmountBaseUnits != source.AmountBaseUnits || item.Timestamp.Before(source.BlockTimestamp) || item.Timestamp.Sub(source.BlockTimestamp) > bridgeCorrelationWindow {
@@ -97,7 +102,7 @@ func (c *BridgeCorrelator) Correlate(ctx context.Context, sourceNetwork string, 
 						continue
 					}
 					candidate := rules.BridgeCandidate{BridgeName: route.name, DestinationNetwork: route.destinationNetwork, Source: source, Destination: destination}
-					result = append(result, bridgeEvidence{Candidate: candidate, Transition: crossChainTransition(candidate, route.sourceBridge, route.destinationBridge), Network: route.destinationNetwork, Addresses: []db.Address{{Network: route.destinationNetwork, Address: destination.FromAddress, Label: shortAddress(destination.FromAddress), EntityType: "BRIDGE"}, {Network: route.destinationNetwork, Address: destination.ToAddress, Label: shortAddress(destination.ToAddress), EntityType: "EOA"}}, Transfers: []db.Transfer{destination}, Acquisitions: recorder.Items()})
+					result = append(result, bridgeEvidence{Candidate: candidate, Transition: crossChainTransition(candidate, route.sourceBridge, route.destinationBridge), Scope: scope, Addresses: []db.Address{{Network: route.destinationNetwork, Address: destination.FromAddress, Label: shortAddress(destination.FromAddress), EntityType: "BRIDGE"}, {Network: route.destinationNetwork, Address: destination.ToAddress, Label: shortAddress(destination.ToAddress), EntityType: "EOA"}}, Transfers: []db.Transfer{destination}, Acquisitions: recorder.Items()})
 					break
 				}
 			}

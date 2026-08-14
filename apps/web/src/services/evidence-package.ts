@@ -12,7 +12,7 @@ import {
 import { type LocalCase, parseCaseFile } from './case-file';
 
 export const EVIDENCE_PACKAGE_FORMAT = 'openchain-evidence-package';
-export const EVIDENCE_PACKAGE_VERSION = 1;
+export const EVIDENCE_PACKAGE_VERSION = 2;
 
 type FrozenTransfer = {
 	id: string;
@@ -63,7 +63,9 @@ export type EvidencePackage = {
 		case: LocalCase;
 		transfers: FrozenTransfer[];
 		acquisition_snapshots: unknown[];
-		provenance: unknown[];
+		acquisition_scopes: unknown[];
+		scope_transfers: unknown[];
+		scope_snapshots: unknown[];
 		rule_runs: FrozenRuleRun[];
 		labels: FrozenLabel[];
 	};
@@ -128,10 +130,16 @@ const isSnapshot = (value: unknown) =>
 		'retrieved_at',
 	].every((key) => typeof value[key] === 'string');
 
-const isProvenance = (value: unknown) =>
+const isAcquisitionScope = (value: unknown) =>
 	isRecord(value) &&
-	typeof value.transfer_id === 'string' &&
-	typeof value.acquisition_id === 'number';
+	typeof value.id === 'number' &&
+	['network', 'address', 'cursor', 'retrieved_at'].every((key) => typeof value[key] === 'string');
+
+const isScopeTransfer = (value: unknown) =>
+	isRecord(value) && typeof value.scope_id === 'number' && typeof value.transfer_id === 'string';
+
+const isScopeSnapshot = (value: unknown) =>
+	isRecord(value) && typeof value.scope_id === 'number' && typeof value.acquisition_id === 'number';
 
 const isRuleRun = (value: unknown): value is FrozenRuleRun =>
 	isRecord(value) &&
@@ -169,8 +177,12 @@ export async function parseEvidencePackage(value: string): Promise<EvidencePacka
 		!payload.transfers.every(isTransfer) ||
 		!Array.isArray(payload.acquisition_snapshots) ||
 		!payload.acquisition_snapshots.every(isSnapshot) ||
-		!Array.isArray(payload.provenance) ||
-		!payload.provenance.every(isProvenance) ||
+		!Array.isArray(payload.acquisition_scopes) ||
+		!payload.acquisition_scopes.every(isAcquisitionScope) ||
+		!Array.isArray(payload.scope_transfers) ||
+		!payload.scope_transfers.every(isScopeTransfer) ||
+		!Array.isArray(payload.scope_snapshots) ||
+		!payload.scope_snapshots.every(isScopeSnapshot) ||
 		!Array.isArray(payload.labels) ||
 		!payload.labels.every(isLabel) ||
 		!Array.isArray(payload.rule_runs) ||
@@ -178,6 +190,24 @@ export async function parseEvidencePackage(value: string): Promise<EvidencePacka
 		typeof payload.exported_at !== 'string'
 	)
 		throw new Error('Evidence package contents are invalid.');
+	const transferIDs = new Set(payload.transfers.map((transfer) => transfer.id));
+	const scopeIDs = new Set(payload.acquisition_scopes.map((scope) => scope.id));
+	const snapshotIDs = new Set(
+		payload.acquisition_snapshots.map((snapshot) => (snapshot as { id: number }).id),
+	);
+	if (
+		payload.scope_transfers.some(
+			(link) =>
+				!scopeIDs.has((link as { scope_id: number }).scope_id) ||
+				!transferIDs.has((link as { transfer_id: string }).transfer_id),
+		) ||
+		payload.scope_snapshots.some(
+			(link) =>
+				!scopeIDs.has((link as { scope_id: number }).scope_id) ||
+				!snapshotIDs.has((link as { acquisition_id: number }).acquisition_id),
+		)
+	)
+		throw new Error('Evidence package scope links are inconsistent.');
 	const caseFile = parseCaseFile(JSON.stringify(payload.case));
 	if (
 		caseFile.network !== payload.transfers[0].network ||

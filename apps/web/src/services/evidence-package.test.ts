@@ -33,7 +33,9 @@ async function evidenceJSON() {
 			},
 		],
 		acquisition_snapshots: [],
-		provenance: [],
+		acquisition_scopes: [],
+		scope_transfers: [],
+		scope_snapshots: [],
 		rule_runs: [],
 		labels: [],
 	};
@@ -65,5 +67,21 @@ describe('evidence packages', () => {
 		};
 		altered.payload.transfers[0].amount_base_units = '43';
 		await expect(parseEvidencePackage(JSON.stringify(altered))).rejects.toThrow('integrity');
+	});
+
+	it('rejects scope links that do not point to exported evidence', async () => {
+		const inconsistent = JSON.parse(await evidenceJSON()) as {
+			payload: { scope_transfers: unknown[] };
+			manifest: { payload_sha256: string };
+		};
+		inconsistent.payload.scope_transfers = [{ scope_id: 9, transfer_id: 'missing' }];
+		const hash = await crypto.subtle.digest(
+			'SHA-256',
+			new TextEncoder().encode(JSON.stringify(inconsistent.payload)),
+		);
+		inconsistent.manifest.payload_sha256 = [...new Uint8Array(hash)]
+			.map((byte) => byte.toString(16).padStart(2, '0'))
+			.join('');
+		await expect(parseEvidencePackage(JSON.stringify(inconsistent))).rejects.toThrow('scope links');
 	});
 });
