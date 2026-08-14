@@ -488,7 +488,7 @@ func (e *Engine) graphFromEdges(ctx context.Context, seed string, edges []GraphE
 }
 
 func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode {
-	label, entityType := shortAddress(address), "EOA"
+	label, entityType := shortAddress(address), "UNKNOWN"
 	var nodeLabels []labels.LabelItem
 	if e.labelRegistry != nil {
 		if items, err := e.labelRegistry.GetLabels(ctx, e.Network(), address); err == nil && len(items) > 0 {
@@ -499,9 +499,13 @@ func (e *Engine) node(ctx context.Context, address string, seed bool) GraphNode 
 			}
 		}
 	}
-	if e.chainAdapter != nil && seed {
-		if contract, err := e.chainAdapter.IsContract(ctx, address); err == nil && contract {
-			entityType = "CONTRACT"
+	if e.chainAdapter != nil && seed && e.chainAdapter.Capabilities().EntityClassification {
+		if contract, err := e.chainAdapter.IsContract(ctx, address); err == nil {
+			if contract {
+				entityType = "CONTRACT"
+			} else {
+				entityType = "EOA"
+			}
 		}
 	}
 	return GraphNode{ID: address, Label: label, EntityType: entityType, IsSeed: seed, Labels: nodeLabels}

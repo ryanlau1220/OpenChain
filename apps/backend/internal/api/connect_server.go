@@ -20,12 +20,14 @@ type connectTracingHandler struct{ server *Server }
 
 func parseEntityType(value string) pb.EntityType {
 	switch value {
+	case "EOA":
+		return pb.EntityType_ENTITY_TYPE_EOA
 	case "CONTRACT":
 		return pb.EntityType_ENTITY_TYPE_CONTRACT
 	case "EXCHANGE":
 		return pb.EntityType_ENTITY_TYPE_EXCHANGE
 	default:
-		return pb.EntityType_ENTITY_TYPE_EOA
+		return pb.EntityType_ENTITY_TYPE_UNSPECIFIED
 	}
 }
 
@@ -180,12 +182,14 @@ func (h *connectLookupHandler) LookupAddress(ctx context.Context, req *connect.R
 	}
 
 	entityAvailable := false
-	if value, callErr := runtime.Chain.IsContract(ctx, address); callErr == nil {
-		entityAvailable = true
-		if value {
-			summary.EntityType = pb.EntityType_ENTITY_TYPE_CONTRACT
-		} else {
-			summary.EntityType = pb.EntityType_ENTITY_TYPE_EOA
+	if runtime.Chain.Capabilities().EntityClassification {
+		if value, callErr := runtime.Chain.IsContract(ctx, address); callErr == nil {
+			entityAvailable = true
+			if value {
+				summary.EntityType = pb.EntityType_ENTITY_TYPE_CONTRACT
+			} else {
+				summary.EntityType = pb.EntityType_ENTITY_TYPE_EOA
+			}
 		}
 	}
 	if h.server.labels != nil {

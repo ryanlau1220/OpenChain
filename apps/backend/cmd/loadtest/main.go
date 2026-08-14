@@ -28,6 +28,10 @@ type stubChain struct{ delay time.Duration }
 
 func (c *stubChain) Network() string { return loadTestNetwork }
 
+func (c *stubChain) Capabilities() adapter.NetworkCapabilities {
+	return adapter.NetworkCapabilities{NativeTransfers: true, HistoricalPagination: true, Finality: true, EntityClassification: true, ExactRawProvenance: true}
+}
+
 func (c *stubChain) NativeAsset() adapter.Asset {
 	return adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}
 }

@@ -37,6 +37,9 @@ func NewTONAdapter(network, key string) *TONAdapter {
 	return &TONAdapter{network: network, apiURL: tonAPIURL, key: key, client: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(tonAPISource, int(time.Second/tonAPIRequestGap))}
 }
 func (a *TONAdapter) Network() string { return a.network }
+func (a *TONAdapter) Capabilities() NetworkCapabilities {
+	return NetworkCapabilities{NativeTransfers: true, HistoricalPagination: true, ExactRawProvenance: true}
+}
 func (a *TONAdapter) NormalizeAddress(v string) (string, error) {
 	v = strings.TrimSpace(v)
 	if strings.HasPrefix(v, "0:") && len(v) == 66 {
@@ -201,6 +204,9 @@ func NewCardanoAdapter(network, key string) *CardanoAdapter {
 	return &CardanoAdapter{network: network, apiURL: blockfrostAPIURL, key: key, client: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(blockfrostSource, int(time.Second/blockfrostRequestGap))}
 }
 func (a *CardanoAdapter) Network() string { return a.network }
+func (a *CardanoAdapter) Capabilities() NetworkCapabilities {
+	return NetworkCapabilities{NativeTransfers: true, HistoricalPagination: true, ExactRawProvenance: true}
+}
 func (a *CardanoAdapter) NormalizeAddress(v string) (string, error) {
 	v = strings.TrimSpace(v)
 	if (strings.HasPrefix(v, "addr1") || strings.HasPrefix(v, "addr_test1")) && len(v) >= 50 && len(v) <= 120 && isLowerAlphaNumeric(v) {

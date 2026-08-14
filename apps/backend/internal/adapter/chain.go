@@ -99,6 +99,7 @@ type ContractMetadata struct {
 // ChainAdapter defines the abstract interface for multi-chain network adapters (EVM, Solana, Bitcoin, etc.)
 type ChainAdapter interface {
 	Network() string
+	Capabilities() NetworkCapabilities
 	NormalizeAddress(value string) (string, error)
 	NormalizeTransactionHash(value string) (string, error)
 	NativeAsset() Asset

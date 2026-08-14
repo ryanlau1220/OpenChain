@@ -52,6 +52,16 @@ func heliusHistoryConfig(rpcURL string) (string, string) {
 
 func (a *SolanaAdapter) Network() string { return a.network }
 
+func (a *SolanaAdapter) Capabilities() NetworkCapabilities {
+	return NetworkCapabilities{
+		NativeTransfers:      true,
+		TokenTransfers:       true,
+		HistoricalPagination: true,
+		EntityClassification: true,
+		ExactRawProvenance:   true,
+	}
+}
+
 func (a *SolanaAdapter) NormalizeAddress(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	decoded, err := decodeBase58(value)

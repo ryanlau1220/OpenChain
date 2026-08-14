@@ -39,6 +39,17 @@ func NewTronAdapter(network, apiURL, apiKey string) *TronAdapter {
 
 func (a *TronAdapter) Network() string { return a.network }
 
+func (a *TronAdapter) Capabilities() NetworkCapabilities {
+	return NetworkCapabilities{
+		NativeTransfers:      true,
+		TokenTransfers:       true,
+		InternalTransfers:    true,
+		HistoricalPagination: true,
+		EntityClassification: true,
+		ExactRawProvenance:   true,
+	}
+}
+
 func (a *TronAdapter) NormalizeAddress(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	decoded, err := decodeBase58(value)

@@ -167,7 +167,10 @@ const testTraceAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
 
 type retryChain struct{ attempts int }
 
-func (c *retryChain) Network() string                                       { return "ethereum-mainnet" }
+func (c *retryChain) Network() string { return "ethereum-mainnet" }
+func (c *retryChain) Capabilities() adapter.NetworkCapabilities {
+	return adapter.NetworkCapabilities{NativeTransfers: true, HistoricalPagination: true, Finality: true, EntityClassification: true, ExactRawProvenance: true}
+}
 func (c *retryChain) NormalizeAddress(value string) (string, error)         { return value, nil }
 func (c *retryChain) NormalizeTransactionHash(value string) (string, error) { return value, nil }
 func (c *retryChain) NativeAsset() adapter.Asset {

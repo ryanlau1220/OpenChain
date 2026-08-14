@@ -56,9 +56,10 @@ type NetworkRuntime struct {
 }
 
 type healthNetwork struct {
-	Network   string                   `json:"network"`
-	Queue     tracing.Stats            `json:"queue"`
-	Providers []adapter.ProviderHealth `json:"providers"`
+	Network      string                      `json:"network"`
+	Capabilities adapter.NetworkCapabilities `json:"capabilities"`
+	Queue        tracing.Stats               `json:"queue"`
+	Providers    []adapter.ProviderHealth    `json:"providers"`
 }
 
 // HealthAlert is a stable, machine-readable operational signal. A degraded
@@ -160,7 +161,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		queue.Queued += stats.Queued
 		queue.Running += stats.Running
 		queue.Failed += stats.Failed
-		item := healthNetwork{Network: runtime.Engine.Network(), Queue: stats}
+		item := healthNetwork{Network: runtime.Engine.Network(), Capabilities: runtime.Chain.Capabilities(), Queue: stats}
 		if reporter, ok := runtime.Chain.(providerHealthReporter); ok {
 			item.Providers = reporter.ProviderHealth()
 		}

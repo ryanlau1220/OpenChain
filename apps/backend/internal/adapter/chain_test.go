@@ -36,3 +36,31 @@ func TestWithEVMChainHeadKeepsObservationsProvisionalWithoutAHeight(t *testing.T
 		t.Fatalf("status = %#v", status)
 	}
 }
+
+func TestAdaptersDeclareNetworkCapabilities(t *testing.T) {
+	evm := NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, InternalTransfers: true, HistoricalPagination: true, Finality: true, EntityClassification: true, ExactRawProvenance: true}
+	nativeOnly := NetworkCapabilities{NativeTransfers: true, HistoricalPagination: true, ExactRawProvenance: true}
+	cases := []struct {
+		name  string
+		chain ChainAdapter
+		want  NetworkCapabilities
+	}{
+		{"ethereum", NewEVMChainAdapter("ethereum-mainnet", "1", "https://api.example", "key", nil), evm},
+		{"base", NewBlockscoutChainAdapter("base-mainnet", "https://api.example", "key", nil), evm},
+		{"polygon", NewAlchemyEVMChainAdapter("polygon-mainnet", "https://api.example", "key", Asset{}, nil), evm},
+		{"arbitrum", NewAlchemyEVMChainAdapter("arbitrum-one", "https://api.example", "key", Asset{}, nil), evm},
+		{"optimism", NewAlchemyEVMChainAdapter("optimism-mainnet", "https://api.example", "key", Asset{}, nil), evm},
+		{"bnb", NewAlchemyEVMChainAdapter("bnb-chain", "https://api.example", "key", Asset{}, nil), evm},
+		{"solana", NewSolanaAdapter("solana-mainnet", "https://mainnet.helius-rpc.com/?api-key=key"), NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, HistoricalPagination: true, EntityClassification: true, ExactRawProvenance: true}},
+		{"tron", NewTronAdapter("tron-mainnet", "https://api.example", "key"), NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, InternalTransfers: true, HistoricalPagination: true, EntityClassification: true, ExactRawProvenance: true}},
+		{"ton", NewTONAdapter("ton-mainnet", "key"), nativeOnly},
+		{"cardano", NewCardanoAdapter("cardano-mainnet", "key"), nativeOnly},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.chain.Capabilities(); got != test.want {
+				t.Fatalf("capabilities = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
