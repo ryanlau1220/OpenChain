@@ -232,15 +232,15 @@ func (d *DB) exportLabels(ctx context.Context, addresses []string) ([]CuratedLab
 	if len(addresses) == 0 {
 		return []CuratedLabel{}, nil
 	}
-	rows, err := d.SQL.QueryContext(ctx, `SELECT id, network, address, category, label, confidence, evidence_url, source, source_version, visibility, trust_tier, created_by, created_at FROM curated_labels WHERE address = ANY($1) ORDER BY network, trust_tier, label`, pq.Array(addresses))
+	rows, err := d.SQL.QueryContext(ctx, `SELECT `+labelColumns+labelAssertionFrom+`WHERE assertion.address = ANY($1) AND `+currentLabelPredicate+` ORDER BY assertion.network, assertion.trust_tier, assertion.label`, pq.Array(addresses))
 	if err != nil {
 		return nil, fmt.Errorf("query package labels: %w", err)
 	}
 	defer rows.Close()
 	result := make([]CuratedLabel, 0)
 	for rows.Next() {
-		var label CuratedLabel
-		if err := rows.Scan(&label.ID, &label.Network, &label.Address, &label.Category, &label.Label, &label.Confidence, &label.EvidenceURL, &label.Source, &label.SourceVersion, &label.Visibility, &label.TrustTier, &label.CreatedBy, &label.CreatedAt); err != nil {
+		label, err := scanCuratedLabel(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan package label: %w", err)
 		}
 		result = append(result, label)

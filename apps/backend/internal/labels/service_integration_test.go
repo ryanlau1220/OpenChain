@@ -2,6 +2,7 @@ package labels
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -45,10 +46,39 @@ func TestSeedImportIsIdempotentAndSearchable(t *testing.T) {
 		t.Fatalf("search result = %#v", search)
 	}
 	var count int
-	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM curated_labels WHERE id = $1`, items[0].ID).Scan(&count); err != nil {
+	if err := database.SQL.QueryRowContext(ctx, `SELECT count(*) FROM label_assertions WHERE id = $1`, items[0].ID).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
 		t.Fatalf("seed import count = %d", count)
+	}
+	var evidenceSnapshot string
+	if err := database.SQL.QueryRowContext(ctx, `SELECT encode(evidence.content, 'escape') FROM label_assertions assertion JOIN label_evidence evidence ON evidence.sha256 = assertion.evidence_sha256 WHERE assertion.id = $1`, items[0].ID).Scan(&evidenceSnapshot); err != nil || evidenceSnapshot == "" {
+		t.Fatalf("stored label evidence = %q err=%v", evidenceSnapshot, err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `UPDATE label_assertions SET label = 'mutated' WHERE id = $1`, items[0].ID); err == nil {
+		t.Fatal("immutable label assertion accepted mutation")
+	}
+	assertionKey := fmt.Sprintf("versioned-label-%d", time.Now().UnixNano())
+	address := "0x3000000000000000000000000000000000000003"
+	first := db.CuratedLabel{ID: assertionKey + "@v1", AssertionKey: assertionKey, Network: "ethereum-mainnet", Address: address, Category: string(CategoryDeFiService), Label: "Version one", Confidence: 1, EvidenceURL: "https://example.test/v1", EvidenceSnapshot: `{"source":"v1"}`, Source: "integration test", SourceVersion: "v1", ReviewState: "approved", Visibility: "public", TrustTier: 1, ValidFrom: time.Now().Add(-time.Minute), CreatedBy: "test", CreatedAt: time.Now().Add(-time.Minute)}
+	second := first
+	second.ID = assertionKey + "@v2"
+	second.Label = "Version two"
+	second.EvidenceURL = "https://example.test/v2"
+	second.EvidenceSnapshot = `{"source":"v2"}`
+	second.SourceVersion = "v2"
+	second.SupersedesID = first.ID
+	if err := database.InsertLabelAssertions(ctx, []db.CuratedLabel{first, second}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := database.GetCuratedLabels(ctx, "ethereum-mainnet", address)
+	if err != nil || len(current) != 1 || current[0].ID != second.ID || current[0].SupersedesID != first.ID {
+		t.Fatalf("current label assertion = %#v err=%v", current, err)
+	}
+	conflict := second
+	conflict.EvidenceSnapshot = `{"source":"altered"}`
+	if err := database.InsertLabelAssertions(ctx, []db.CuratedLabel{conflict}); err == nil {
+		t.Fatal("label assertion reused a version with different evidence")
 	}
 }

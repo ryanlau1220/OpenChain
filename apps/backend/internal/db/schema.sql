@@ -196,22 +196,56 @@ CREATE INDEX IF NOT EXISTS trace_jobs_finished_retention_idx ON public.trace_job
 DROP INDEX IF EXISTS public.trace_jobs_one_running_idx;
 CREATE UNIQUE INDEX IF NOT EXISTS trace_jobs_one_running_per_network_idx ON public.trace_jobs (network) WHERE status = 'running';
 
-CREATE TABLE IF NOT EXISTS public.curated_labels (
+DROP TABLE IF EXISTS public.curated_labels;
+
+CREATE TABLE IF NOT EXISTS public.label_evidence (
+  sha256 TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  content BYTEA NOT NULL,
+  captured_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.label_assertions (
   id TEXT PRIMARY KEY,
+  assertion_key TEXT NOT NULL,
   network TEXT NOT NULL,
   address TEXT NOT NULL,
   category TEXT NOT NULL,
   label TEXT NOT NULL,
   confidence DOUBLE PRECISION NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  evidence_sha256 TEXT NOT NULL REFERENCES public.label_evidence(sha256),
   evidence_url TEXT NOT NULL,
   source TEXT NOT NULL,
   source_version TEXT NOT NULL,
+  supersedes_id TEXT REFERENCES public.label_assertions(id),
+  review_state TEXT NOT NULL CHECK (review_state IN ('approved', 'rejected', 'pending')),
   visibility TEXT NOT NULL CHECK (visibility = 'public'),
   trust_tier SMALLINT NOT NULL CHECK (trust_tier BETWEEN 1 AND 3),
+  valid_from TIMESTAMPTZ NOT NULL,
+  valid_to TIMESTAMPTZ,
   created_by TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL,
-  imported_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  CHECK (valid_to IS NULL OR valid_to > valid_from),
+  UNIQUE (assertion_key, source_version)
 );
 
-CREATE INDEX IF NOT EXISTS curated_labels_address_idx ON public.curated_labels (network, address);
-CREATE INDEX IF NOT EXISTS curated_labels_category_idx ON public.curated_labels (category);
+ALTER TABLE public.label_assertions ADD COLUMN IF NOT EXISTS supersedes_id TEXT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'label_assertions_supersedes_id_fkey' AND conrelid = 'public.label_assertions'::regclass
+  ) THEN
+    ALTER TABLE public.label_assertions
+      ADD CONSTRAINT label_assertions_supersedes_id_fkey
+      FOREIGN KEY (supersedes_id) REFERENCES public.label_assertions(id);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS label_assertions_current_address_idx ON public.label_assertions (network, address, valid_from DESC) WHERE review_state = 'approved';
+CREATE INDEX IF NOT EXISTS label_assertions_current_category_idx ON public.label_assertions (network, category, valid_from DESC) WHERE review_state = 'approved';
+CREATE UNIQUE INDEX IF NOT EXISTS label_assertions_supersedes_idx ON public.label_assertions (supersedes_id) WHERE supersedes_id IS NOT NULL;
+
+DROP TRIGGER IF EXISTS label_evidence_immutable ON public.label_evidence;
+CREATE TRIGGER label_evidence_immutable BEFORE UPDATE OR DELETE ON public.label_evidence FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
+DROP TRIGGER IF EXISTS label_assertions_immutable ON public.label_assertions;
+CREATE TRIGGER label_assertions_immutable BEFORE UPDATE OR DELETE ON public.label_assertions FOR EACH ROW EXECUTE FUNCTION public.reject_evidence_mutation();
