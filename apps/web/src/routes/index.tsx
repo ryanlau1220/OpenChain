@@ -23,6 +23,7 @@ import {
 	exportEvidencePackage,
 	fetchTraceGraph,
 	fetchTraceStatus,
+	isNetworkSlug,
 	lookupAddress,
 	networkDetails,
 	networkFromSlug,
@@ -45,7 +46,39 @@ export const Route = createFileRoute('/')({ component: Index });
 
 type BranchPage = { cursor: string; hasMore: boolean };
 type CaseUpdate = LocalCase | ((current: LocalCase) => LocalCase);
+type InspectorTab = 'address' | 'findings' | 'evidence' | 'case';
 const tracePollInterval = 5_000;
+function allowedNumber(value: string | null, allowed: readonly number[], fallback: number): number {
+	const parsed = Number(value);
+	return allowed.includes(parsed) ? parsed : fallback;
+}
+
+function scopeFromQuery(params: URLSearchParams, fallback: GraphOptions): GraphOptions {
+	return {
+		...fallback,
+		maxCounterparties: allowedNumber(
+			params.get('counterparties'),
+			[5, 10, 25],
+			fallback.maxCounterparties,
+		),
+		ranking: allowedNumber(
+			params.get('ranking'),
+			[1, 2, 3, 4],
+			fallback.ranking,
+		) as GraphOptions['ranking'],
+		direction: allowedNumber(
+			params.get('direction'),
+			[1, 2, 3],
+			fallback.direction,
+		) as GraphOptions['direction'],
+		maxDepth: allowedNumber(params.get('depth'), [1, 2, 3], fallback.maxDepth),
+		from: params.get('from') ?? fallback.from,
+		to: params.get('to') ?? fallback.to,
+		asset: params.get('asset') ?? fallback.asset,
+		minimumAmount: params.get('minimumAmount') ?? fallback.minimumAmount,
+		transferKind: params.get('transferKind') ?? fallback.transferKind,
+	};
+}
 
 function Index() {
 	const [address, setAddress] = useState('');
@@ -59,6 +92,7 @@ function Index() {
 	const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
 	const [selectedRelationship, setSelectedRelationship] = useState<readonly GraphEdge[]>([]);
 	const [selectedLead, setSelectedLead] = useState<InvestigationLead | null>(null);
+	const [inspectorTab, setInspectorTab] = useState<InspectorTab>('address');
 	const [highlightedTransferIds, setHighlightedTransferIds] = useState<readonly string[]>([]);
 	const [caseFile, setCaseFile] = useState<LocalCase>(createLocalCase);
 	const caseFileRef = useRef(caseFile);
@@ -69,7 +103,13 @@ function Index() {
 	const [pendingExpansion, setPendingExpansion] = useState<string | null>(null);
 	const [errorMessage, setErrorMessage] = useState('');
 	const investigationRef = useRef(0);
+	const selectionRef = useRef(0);
 	const graphOptionsRef = useRef(graphOptions);
+	const initialSearchRef = useRef<{
+		address: string;
+		network: SupportedNetwork;
+		scope: GraphOptions;
+	} | null>(null);
 	const updateCaseFile = useCallback((update: CaseUpdate) => {
 		const next = typeof update === 'function' ? update(caseFileRef.current) : update;
 		caseFileRef.current = next;
@@ -92,10 +132,25 @@ function Index() {
 
 	useEffect(() => {
 		const storedCase = loadLocalCase();
-		updateCaseFile(storedCase);
-		graphOptionsRef.current = storedCase.scope;
-		setGraphOptions(storedCase.scope);
-		setNetwork(networkFromSlug(storedCase.network));
+		const params = new URLSearchParams(window.location.search);
+		const queryNetwork = params.get('network');
+		const network = isNetworkSlug(queryNetwork)
+			? networkFromSlug(queryNetwork)
+			: networkFromSlug(storedCase.network);
+		const scope = scopeFromQuery(params, storedCase.scope);
+		const address = params.get('address')?.trim() ?? '';
+		const initialCase = {
+			...storedCase,
+			network: networkDetails(network).slug,
+			scope,
+			rootAddress: address || storedCase.rootAddress,
+		};
+		updateCaseFile(initialCase);
+		graphOptionsRef.current = scope;
+		setGraphOptions(scope);
+		setNetwork(network);
+		setAddress(address);
+		if (address) initialSearchRef.current = { address, network, scope };
 		setCaseLoaded(true);
 	}, [updateCaseFile]);
 
@@ -116,6 +171,7 @@ function Index() {
 			if (!preserveCurrentGraph) setLoading(true);
 			setErrorMessage('');
 			if (!preserveCurrentGraph) {
+				selectionRef.current++;
 				setGraphData(null);
 				setSelectedNode(null);
 				setSelectedEdge(null);
@@ -169,6 +225,31 @@ function Index() {
 		[network, updateCaseFile],
 	);
 
+	useEffect(() => {
+		const initial = initialSearchRef.current;
+		if (!caseLoaded || !initial) return;
+		initialSearchRef.current = null;
+		void load(initial.address, false, initial.network, initial.scope);
+	}, [caseLoaded, load]);
+
+	useEffect(() => {
+		if (!caseLoaded) return;
+		const url = new URL(window.location.href);
+		const params = url.searchParams;
+		params.set('network', networkDetails(network).slug);
+		if (address) params.set('address', address);
+		else params.delete('address');
+		params.set('counterparties', String(graphOptions.maxCounterparties));
+		params.set('ranking', String(graphOptions.ranking));
+		params.set('direction', String(graphOptions.direction));
+		params.set('depth', String(graphOptions.maxDepth));
+		for (const key of ['from', 'to', 'asset', 'minimumAmount', 'transferKind'] as const) {
+			if (graphOptions[key]) params.set(key, graphOptions[key]);
+			else params.delete(key);
+		}
+		window.history.replaceState({}, '', `${url.pathname}?${params.toString()}${url.hash}`);
+	}, [address, caseLoaded, graphOptions, network]);
+
 	const changeNetwork = useCallback(
 		(nextNetwork: SupportedNetwork) => {
 			if (nextNetwork === network) return;
@@ -211,6 +292,8 @@ function Index() {
 
 	const handleSelect = useCallback(
 		async (node: GraphNode | null) => {
+			const selection = ++selectionRef.current;
+			setInspectorTab('address');
 			setSelectedNode(node);
 			setSelectedEdge(null);
 			setSelectedRelationship([]);
@@ -225,6 +308,7 @@ function Index() {
 			if (!node) return;
 			try {
 				const lookup = await lookupAddress(node.id, network);
+				if (selection !== selectionRef.current) return;
 				setSummary(lookup.summary ?? null);
 				setLabels(lookup.labels);
 			} catch (error) {
@@ -342,6 +426,7 @@ function Index() {
 		(!activeBranch || activeBranch.hasMore);
 	const selectTransfer = useCallback(
 		(edge: GraphEdge) => {
+			setInspectorTab('address');
 			setSelectedEdge(edge);
 			setSelectedLead(null);
 			setHighlightedTransferIds([edge.id]);
@@ -358,6 +443,8 @@ function Index() {
 			if (!graphData) return;
 			const evidence = graphData.edges.filter((edge) => lead.transferIds.includes(edge.id));
 			const subject = graphData.nodes.find((node) => node.id === lead.subjectAddress) ?? null;
+			const selection = ++selectionRef.current;
+			setInspectorTab('findings');
 			setSelectedLead(lead);
 			setSelectedRelationship(evidence);
 			setSelectedEdge(evidence[0] ?? null);
@@ -373,6 +460,7 @@ function Index() {
 			}));
 			if (subject)
 				void lookupAddress(subject.id, network).then((lookup) => {
+					if (selection !== selectionRef.current) return;
 					setSummary(lookup.summary ?? null);
 					setLabels(lookup.labels);
 				});
@@ -458,9 +546,14 @@ function Index() {
 					}}
 					network={network}
 					onNetworkChange={changeNetwork}
+					loading={loading}
 				/>
 			)}
-			<div className="min-h-0 flex-1 flex flex-col md:flex-row overflow-hidden">
+			<main
+				id="investigation-workspace"
+				className="min-h-0 flex-1 flex flex-col md:flex-row overflow-hidden"
+			>
+				<h1 className="sr-only">OpenChain investigation workspace</h1>
 				<div className="min-h-0 min-w-0 flex-1 relative">
 					<GraphCanvas
 						key={`${network}:${graphData?.seedAddress ?? 'empty'}`}
@@ -495,9 +588,13 @@ function Index() {
 						}}
 					/>
 					{(errorMessage || graphData?.sourceStatus?.warning) && (
-						<div className="absolute bottom-5 right-5 z-10 max-w-md space-y-2 text-xs pointer-events-none">
+						<div
+							className="absolute bottom-5 right-5 z-10 max-w-md space-y-2 text-xs pointer-events-none"
+							aria-live="polite"
+						>
 							{errorMessage && (
 								<div
+									role="alert"
 									className="rounded-lg px-3 py-2"
 									style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}
 								>
@@ -516,68 +613,121 @@ function Index() {
 					)}
 				</div>
 				<div
-					className="w-full max-h-[42dvh] md:max-h-none md:w-80 shrink-0 overflow-y-auto p-4"
+					className="w-full max-h-[42dvh] md:max-h-none md:w-[clamp(18rem,22vw,22rem)] shrink-0 overflow-y-auto p-4"
 					style={{ borderLeft: '1px solid var(--border)', background: 'rgba(255,255,255,0.70)' }}
 				>
-					<h3
-						className="text-[10px] uppercase font-bold tracking-widest mb-4"
-						style={{ color: 'var(--ink-3)' }}
+					<div
+						className="sticky top-0 z-20 -mx-4 mb-4 px-4 pb-3 pt-0"
+						style={{ background: 'rgba(255,255,255,0.96)' }}
 					>
-						Address Inspector
-					</h3>
-					<WalletLookup
-						summary={summary}
-						labels={labels}
-						loading={loading}
-						network={network}
-						targetSeedAddress={address}
-						onTraceAddress={(value) => {
-							setAddress(value);
-							void load(value);
-						}}
-					/>
-					<TransferInspector
-						edge={selectedEdge}
-						edges={selectedRelationship}
-						network={network}
-						onSelect={selectTransfer}
-					/>
-					{graphData && (
-						<InvestigationLeads
-							leads={graphData.leads}
-							edges={graphData.edges}
-							selectedLeadId={selectedLead?.id}
-							onSelect={selectLead}
-						/>
-					)}
-					{graphData && (
-						<EvidencePaths
-							nodes={graphData.nodes}
-							edges={graphData.edges}
-							network={network}
-							pinnedTransferIds={caseFile.selectedTransferIds}
-							onTogglePin={toggleEvidencePin}
-						/>
-					)}
-					{graphData && <CrossChainPaths transitions={graphData.crossChainTransitions} />}
-					{caseLoaded && (
-						<CaseWorkspace
-							caseFile={caseFile}
-							onChange={updateCaseFile}
-							onExportEvidence={exportFrozenEvidence}
-							onImportEvidence={importFrozenEvidence}
-							frozenEvidence={frozenEvidence}
-							activeTarget={
-								selectedEdge
-									? { kind: 'transfer', id: selectedEdge.id }
-									: selectedNode
-										? { kind: 'address', id: selectedNode.id }
-										: null
-							}
-						/>
-					)}
+						<h3
+							className="text-[10px] uppercase font-bold tracking-widest mb-3"
+							style={{ color: 'var(--ink-3)' }}
+						>
+							Address Inspector
+						</h3>
+						<div className="grid grid-cols-4 gap-1" role="tablist" aria-label="Inspector sections">
+							{(
+								[
+									['address', 'Address'],
+									[
+										'findings',
+										`Findings${graphData?.leads.length ? ` · ${graphData.leads.length}` : ''}`,
+									],
+									[
+										'evidence',
+										`Evidence${graphData?.edges.length ? ` · ${graphData.edges.length}` : ''}`,
+									],
+									['case', 'Case'],
+								] as const
+							).map(([tab, label]) => (
+								<button
+									key={tab}
+									type="button"
+									role="tab"
+									id={`inspector-tab-${tab}`}
+									aria-selected={inspectorTab === tab}
+									aria-controls="inspector-panel"
+									onClick={() => setInspectorTab(tab)}
+									className="rounded-md px-1.5 py-1.5 text-[9px] font-semibold"
+									style={{
+										background: inspectorTab === tab ? 'rgba(136,125,255,0.12)' : 'var(--slate)',
+										color: inspectorTab === tab ? 'var(--accent)' : 'var(--ink-2)',
+									}}
+								>
+									{label}
+								</button>
+							))}
+						</div>
+					</div>
+					<div
+						id="inspector-panel"
+						role="tabpanel"
+						aria-labelledby={`inspector-tab-${inspectorTab}`}
+					>
+						{inspectorTab === 'address' && (
+							<>
+								<WalletLookup
+									summary={summary}
+									labels={labels}
+									loading={loading}
+									network={network}
+									targetSeedAddress={address}
+									onTraceAddress={(value) => {
+										setAddress(value);
+										void load(value);
+									}}
+								/>
+								<TransferInspector
+									edge={selectedEdge}
+									edges={selectedRelationship}
+									network={network}
+									onSelect={selectTransfer}
+								/>
+							</>
+						)}
+						{inspectorTab === 'findings' && graphData && (
+							<InvestigationLeads
+								leads={graphData.leads}
+								edges={graphData.edges}
+								selectedLeadId={selectedLead?.id}
+								onSelect={selectLead}
+							/>
+						)}
+						{inspectorTab === 'evidence' && graphData && (
+							<>
+								<EvidencePaths
+									nodes={graphData.nodes}
+									edges={graphData.edges}
+									network={network}
+									pinnedTransferIds={caseFile.selectedTransferIds}
+									onTogglePin={(transferID) => {
+										setInspectorTab('evidence');
+										toggleEvidencePin(transferID);
+									}}
+								/>
+								<CrossChainPaths transitions={graphData.crossChainTransitions} />
+							</>
+						)}
+						{inspectorTab === 'case' && caseLoaded && (
+							<CaseWorkspace
+								caseFile={caseFile}
+								onChange={updateCaseFile}
+								onExportEvidence={exportFrozenEvidence}
+								onImportEvidence={importFrozenEvidence}
+								frozenEvidence={frozenEvidence}
+								activeTarget={
+									selectedEdge
+										? { kind: 'transfer', id: selectedEdge.id }
+										: selectedNode
+											? { kind: 'address', id: selectedNode.id }
+											: null
+								}
+							/>
+						)}
+					</div>
 				</div>
-			</div>
+			</main>
 		</div>
 	);
 }
