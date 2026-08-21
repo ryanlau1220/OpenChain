@@ -61,6 +61,9 @@ case "$1" in
 
         export GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}"
 
+        echo -e "${CYAN}Applying database migrations...${RESET}"
+        go run ./apps/backend/cmd/migrate
+
         web_port="${WEB_ORIGIN##*:}"
         if ! [[ "${web_port}" =~ ^[0-9]+$ ]]; then
             web_port=3000
@@ -122,6 +125,11 @@ case "$1" in
 
     backup:prod)
         backup_database infra/docker-compose.production.yml
+        ;;
+
+    migrate)
+        echo -e "${CYAN}Applying database migrations...${RESET}"
+        GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go run ./apps/backend/cmd/migrate
         ;;
 
     build)
@@ -283,7 +291,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|build|lint|check|test|test:e2e|smoke|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|migrate|build|lint|check|test|test:e2e|smoke|clean}"
         exit 1
         ;;
 esac
