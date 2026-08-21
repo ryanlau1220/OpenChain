@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+node_modules
+.pnpm-store
+**/node_modules
+**/dist
+**/test-results
+apps/backend/bin
+apps/backend/tmp
+infra/backups
+tmp
+*.log
