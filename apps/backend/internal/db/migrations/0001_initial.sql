@@ -1,3 +1,4 @@
+-- OpenChain's initial relational and Apache AGE schema.
 CREATE EXTENSION IF NOT EXISTS age;
 LOAD 'age';
 SET LOCAL search_path = ag_catalog, "$user", public;

@@ -33,13 +33,6 @@ func main() {
 	}
 	defer func(connection *db.DB) { _ = connection.Close() }(database)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	err = database.InitSchema(ctx)
-	cancel()
-	if err != nil {
-		_ = database.Close()
-		log.Fatalf("Database schema unavailable: %v", err)
-	}
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	err = database.ImportRuleCatalog(ctx, rules.CatalogEntries())
 	cancel()
 	if err != nil {
