@@ -321,7 +321,7 @@ export function aggregateGraphEdges(edges: readonly GraphEdge[]): GraphRelations
 	return [...relationships].map(([id, relationship]) => {
 		const edge = relationship.representative;
 		const stable = edge.asset?.symbol === 'USDT' || edge.asset?.symbol === 'USDC';
-		const transfers = relationship.transfers.toSorted((left, right) => {
+		const transfers = [...relationship.transfers].sort((left, right) => {
 			if (left.firstTxTimestamp !== right.firstTxTimestamp)
 				return Number(left.firstTxTimestamp) - Number(right.firstTxTimestamp);
 			return left.id.localeCompare(right.id);
@@ -397,7 +397,7 @@ export function clusterLeafCounterparties(
 	const memberCluster = new Map<string, string>();
 	const existingIds = new Set(nodes.map((node) => node.id));
 	let index = 0;
-	for (const [, group] of [...groups.entries()].toSorted(([left], [right]) =>
+	for (const [, group] of [...groups.entries()].sort(([left], [right]) =>
 		left.localeCompare(right),
 	)) {
 		if (group.members.length < minimumMembers) continue;
@@ -408,7 +408,7 @@ export function clusterLeafCounterparties(
 			id,
 			anchorId: group.anchorId,
 			direction: group.direction,
-			memberIds: group.members.toSorted(),
+			memberIds: [...group.members].sort(),
 			transferCount: group.edges.reduce((total, edge) => total + (edge.txCount || 1), 0),
 			totalAmount: group.edges.reduce((total, edge) => total + baseUnits(edge.amountBaseUnits), 0n),
 			representative: group.edges[0],
@@ -448,11 +448,7 @@ const minimumBaseUnits = (value: string, decimals: number) => {
 	return BigInt(whole + fraction.padEnd(safeDecimals, '0'));
 };
 
-export function filterGraphEdges(
-	edges: readonly GraphEdge[],
-	seedAddress: string,
-	filters: GraphFilters,
-): GraphEdge[] {
+export function filterGraphEdges(edges: readonly GraphEdge[], filters: GraphFilters): GraphEdge[] {
 	const fromTimestamp = filters.from ? Date.parse(filters.from) : 0;
 	const toTimestamp = filters.to ? Date.parse(filters.to) : Number.POSITIVE_INFINITY;
 	if (Number.isNaN(fromTimestamp) || Number.isNaN(toTimestamp)) return [];
@@ -553,7 +549,7 @@ const layoutAndFit = (cy: cytoscape.Core, name: LayoutName, direction: TraceDire
 		if (cy.elements().length > 0) cy.fit(cy.elements(), 48);
 		return;
 	}
-	const layout = cy.layout({ name, directed: true, padding: 48, animate: false });
+	const layout = cy.layout({ name, padding: 48, animate: false });
 	layout.one('layoutstop', () => {
 		cy.resize();
 		if (cy.elements().length > 0) cy.fit(cy.elements(), 48);
@@ -592,8 +588,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 	const filters = graphOptions ?? defaultGraphOptions;
 	const seedAddress = graphData?.seedAddress || '';
 	const scopedEdges = useMemo(
-		() => filterGraphEdges(graphData?.edges || [], seedAddress, filters),
-		[filters, graphData?.edges, seedAddress],
+		() => filterGraphEdges(graphData?.edges || [], filters),
+		[filters, graphData?.edges],
 	);
 	const depths = useMemo(() => nodeDepths(seedAddress, scopedEdges), [scopedEdges, seedAddress]);
 	const visibleEdges = useMemo(

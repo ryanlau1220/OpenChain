@@ -18,6 +18,7 @@ import {
 	type LookupFieldStatus,
 	Network,
 	type SupportedNetwork,
+	type TraceDirection,
 	TraceGraphResponse,
 	defaultGraphOptions,
 	expandNode,
@@ -746,7 +747,7 @@ function Index() {
 									onTogglePin={toggleBridgePathPin}
 									onTraceDestination={(transition) => {
 										const destination = transition.destinationNetwork as SupportedNetwork;
-										if (!transition.recipient || destination === Network.UNSPECIFIED) return;
+										if (!transition.recipient) return;
 										changeNetwork(destination);
 										setAddress(transition.recipient);
 										void load(transition.recipient, false, destination, graphOptionsRef.current);

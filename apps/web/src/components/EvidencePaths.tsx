@@ -55,7 +55,7 @@ export function orderedEvidencePaths(
 	pinnedTransferIds: readonly string[],
 ): EvidencePath[] {
 	const pinned = new Set(pinnedTransferIds);
-	return paths.toSorted(
+	return [...paths].sort(
 		(left, right) => Number(pinned.has(right.transferId)) - Number(pinned.has(left.transferId)),
 	);
 }

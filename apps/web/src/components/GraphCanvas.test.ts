@@ -89,10 +89,9 @@ describe('aggregateGraphEdges', () => {
 				firstTxTimestamp: 1_704_153_600n,
 			},
 		] as GraphEdge[];
-		const visible = filterGraphEdges(edges, 'seed', {
+		const visible = filterGraphEdges(edges, {
 			from: '2024-01-01',
 			to: '2024-01-01',
-			direction: 'inbound',
 			asset: 'ERC20:usdc:6',
 			minimumAmount: '1.5',
 			transferKind: 'ERC20',
