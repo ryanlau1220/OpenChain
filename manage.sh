@@ -31,6 +31,14 @@ fi
 
 backup_database() {
     local compose_file="$1"
+    local env_file="$2"
+    if [ ! -f "${env_file}" ]; then
+        echo -e "${RED}Environment file ${env_file} was not found.${RESET}"
+        exit 1
+    fi
+    set -a
+    source "${env_file}"
+    set +a
     local retention_days="${BACKUP_RETENTION_DAYS:-14}"
     if ! [[ "${retention_days}" =~ ^[0-9]+$ ]] || [ "${retention_days}" -lt 1 ]; then
         echo -e "${RED}BACKUP_RETENTION_DAYS must be a positive integer.${RESET}"
@@ -42,7 +50,7 @@ backup_database() {
     local backup_file="${backup_dir}/openchain-${timestamp}.sql.gz"
     local partial_file="${backup_file}.partial"
     echo -e "${CYAN}Creating PostgreSQL logical backup...${RESET}"
-    if ! docker compose --env-file .env -f "${compose_file}" exec -T postgres pg_dump -U "${POSTGRES_USER:-openchain}" -d "${POSTGRES_DB:-openchain}" | gzip -c > "${partial_file}"; then
+    if ! docker compose --env-file "${env_file}" -f "${compose_file}" exec -T postgres sh -ec 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | gzip -c > "${partial_file}"; then
         rm -f "${partial_file}"
         echo -e "${RED}Backup failed; no partial backup was retained.${RESET}"
         exit 1
@@ -109,22 +117,22 @@ case "$1" in
 
     docker:prod)
         echo -e "${YELLOW}Building and starting the production Docker Compose stack...${RESET}"
-        docker compose --env-file .env -f infra/docker-compose.production.yml up -d --build --remove-orphans
+        docker compose --env-file .env.prod -f infra/docker-compose.production.yml up -d --build --remove-orphans
         echo -e "${GREEN}✓ [OK] Production stack started successfully.${RESET}"
         ;;
 
     docker:prod:down)
         echo -e "${YELLOW}Stopping production Docker Compose stack...${RESET}"
-        docker compose --env-file .env -f infra/docker-compose.production.yml down
+        docker compose --env-file .env.prod -f infra/docker-compose.production.yml down
         echo -e "${GREEN}✓ [OK] Production containers stopped. Persistent volumes were kept.${RESET}"
         ;;
 
     backup)
-        backup_database infra/docker-compose.yml
+        backup_database infra/docker-compose.yml .env
         ;;
 
     backup:prod)
-        backup_database infra/docker-compose.production.yml
+        backup_database infra/docker-compose.production.yml .env.prod
         ;;
 
     migrate)

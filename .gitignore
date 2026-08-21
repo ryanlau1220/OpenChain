@@ -13,6 +13,7 @@ infra/backups/
 
 # Environment variables
 .env
+.env.prod
 .env.local
 .env.*.local
 *.env
