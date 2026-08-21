@@ -35,7 +35,7 @@ func TestSaveGraphIntegration(t *testing.T) {
 	defer database.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := database.InitSchema(ctx); err != nil {
+	if err := database.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	database.SQL.SetMaxOpenConns(1)
@@ -159,7 +159,7 @@ func TestTraceJobIntegration(t *testing.T) {
 	defer database.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := database.InitSchema(ctx); err != nil {
+	if err := database.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	database.SQL.SetMaxOpenConns(1)
@@ -302,7 +302,7 @@ func TestConcurrentTraceJobsDeduplicateAndRespectCapacity(t *testing.T) {
 	defer root.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := root.InitSchema(ctx); err != nil {
+	if err := root.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	schema := "openchain_concurrent_jobs_test_" + strconv.FormatInt(time.Now().UnixNano(), 10)
@@ -440,9 +440,6 @@ func graphFundFlowCount(t *testing.T, database *DB, id string) int {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path = ag_catalog, "$user", public`); err != nil {
 		t.Fatal(err)
 	}
@@ -470,9 +467,6 @@ func cleanupGraph(t *testing.T, database *DB, flowID, network, from, to string) 
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path = ag_catalog, "$user", public`); err != nil {
 		t.Fatal(err)
 	}

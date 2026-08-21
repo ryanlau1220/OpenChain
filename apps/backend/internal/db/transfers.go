@@ -102,9 +102,6 @@ func (d *DB) SaveEvidenceGraph(ctx context.Context, scope AcquisitionScope, addr
 	if err := insertBridgeTransitions(ctx, tx, transitions, snapshotIDs); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
-		return fmt.Errorf("load Apache AGE: %w", err)
-	}
 	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path = ag_catalog, "$user", public`); err != nil {
 		return fmt.Errorf("set Apache AGE search path: %w", err)
 	}

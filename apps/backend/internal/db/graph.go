@@ -58,9 +58,6 @@ func (d *DB) GraphNeighbors(ctx context.Context, network, address, direction str
 		return nil, fmt.Errorf("begin AGE read transaction: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, "LOAD 'age'"); err != nil {
-		return nil, fmt.Errorf("load Apache AGE: %w", err)
-	}
 	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path = ag_catalog, "$user", public`); err != nil {
 		return nil, fmt.Errorf("set Apache AGE search path: %w", err)
 	}

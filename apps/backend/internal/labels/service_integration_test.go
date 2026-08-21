@@ -21,7 +21,7 @@ func TestSeedImportIsIdempotentAndSearchable(t *testing.T) {
 	defer database.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := database.InitSchema(ctx); err != nil {
+	if err := database.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	service := NewService(database)

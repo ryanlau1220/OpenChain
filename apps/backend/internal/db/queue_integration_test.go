@@ -69,7 +69,7 @@ func TestQueueIntegrationTraceFindingAndEvidenceExport(t *testing.T) {
 	defer database.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := database.InitSchema(ctx); err != nil {
+	if err := database.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	database.SQL.SetMaxOpenConns(1)
@@ -197,7 +197,7 @@ func TestLargeFanDatasetsPersistDeterministicFindings(t *testing.T) {
 	defer database.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := database.InitSchema(ctx); err != nil {
+	if err := database.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	database.SQL.SetMaxOpenConns(1)

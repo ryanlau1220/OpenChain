@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8091"
-      DATABASE_URL: postgres://${POSTGRES_USER:-openchain}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-openchain}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_APP_USER:-openchain_app}:${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-openchain}?sslmode=disable
       ETHEREUM_MAINNET_RPC_URL: ${ETHEREUM_MAINNET_RPC_URL:?ETHEREUM_MAINNET_RPC_URL is required}
       BASE_MAINNET_RPC_URL: ${BASE_MAINNET_RPC_URL:?BASE_MAINNET_RPC_URL is required}
       SOLANA_MAINNET_RPC_URL: ${SOLANA_MAINNET_RPC_URL:?SOLANA_MAINNET_RPC_URL is required}
@@ -41,8 +41,8 @@ services:
       QUEUE_CLIENT_SECRET: ${QUEUE_CLIENT_SECRET:?QUEUE_CLIENT_SECRET is required}
       TRUST_PROXY: "true"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8091/api/v1/health || exit 1"]
       interval: 15s
@@ -50,6 +50,20 @@ services:
       retries: 3
       start_period: 20s
     networks: [app, egress]
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    restart: "no"
+    command: ["/app/migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_APP_USER:-openchain_app}:${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-openchain}?sslmode=disable
+      MIGRATION_DATABASE_URL: postgres://${POSTGRES_USER:-openchain}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-openchain}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [app]
 
   web:
     build:
