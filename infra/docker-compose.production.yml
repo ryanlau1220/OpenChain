@@ -49,7 +49,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    networks: [app, egress]
+    networks:
+      app:
+      egress:
+      proxy:
+        aliases: [openchain-backend]
 
   migrate:
     build:
@@ -70,33 +74,18 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.web
     restart: unless-stopped
-    networks: [app]
-
-  caddy:
-    image: caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    environment:
-      OPENCHAIN_PUBLIC_HOST: ${OPENCHAIN_PUBLIC_HOST:?OPENCHAIN_PUBLIC_HOST is required}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - backend
-      - web
-    networks: [app, edge]
+    networks:
+      app:
+      proxy:
+        aliases: [openchain-web]
 
 volumes:
   postgres-data:
-  caddy-data:
-  caddy-config:
 
 networks:
   app:
     internal: true
   egress:
-  edge:
+  proxy:
+    external: true
+    name: proxy-manager_default
