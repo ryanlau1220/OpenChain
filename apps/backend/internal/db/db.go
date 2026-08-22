@@ -217,7 +217,8 @@ func (d *DB) grantRuntimeRole(ctx context.Context, role, databasePath string) er
 	}
 	statements := []string{
 		"GRANT CONNECT ON DATABASE %I TO %I",
-		"GRANT USAGE ON SCHEMA public, ag_catalog, openchain TO %I",
+		"GRANT USAGE ON SCHEMA public, ag_catalog TO %I",
+		"GRANT USAGE, CREATE ON SCHEMA openchain TO %I",
 		"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, openchain TO %I",
 		"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public, openchain TO %I",
 		"GRANT SELECT ON ag_catalog.ag_graph TO %I",
