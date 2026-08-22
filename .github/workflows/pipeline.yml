@@ -92,6 +92,9 @@ jobs:
       - name: Start deterministic application services
         run: |
           cp .github/ci.env .env
+          set -a
+          source .env
+          set +a
           docker compose --env-file .env -f infra/docker-compose.yml up -d --wait postgres
           GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/migrate
           GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/loadtest >/tmp/openchain-loadtest.log 2>&1 &
@@ -142,6 +145,9 @@ jobs:
       - name: Start disposable Apache AGE and web
         run: |
           cp .github/ci.env .env
+          set -a
+          source .env
+          set +a
           docker compose --env-file .env -f infra/docker-compose.yml up -d --wait postgres
           GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/migrate
           pnpm --filter @openchain/web exec vite --host 127.0.0.1 --strictPort --port 3002 >/tmp/openchain-web.log 2>&1 &
