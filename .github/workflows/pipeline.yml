@@ -150,15 +150,17 @@ jobs:
           set +a
           docker compose --env-file .env -f infra/docker-compose.yml up -d --wait postgres
           GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/migrate
+          GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/server >/tmp/openchain-api.log 2>&1 &
           pnpm --filter @openchain/web exec vite --host 127.0.0.1 --strictPort --port 3002 >/tmp/openchain-web.log 2>&1 &
           for _ in $(seq 1 30); do
-            curl --fail --silent http://127.0.0.1:3002 >/dev/null && exit 0
+            curl --fail --silent http://127.0.0.1:18091/api/v1/health >/dev/null && curl --fail --silent http://127.0.0.1:3002 >/dev/null && exit 0
             sleep 1
           done
-          cat /tmp/openchain-web.log
+          cat /tmp/openchain-api.log /tmp/openchain-web.log
           exit 1
       - name: Run controlled k6 suite
         env:
+          OPENCHAIN_LOAD_TEST_PORT: '18092'
           OPENCHAIN_K6_LOAD_VUS: '5'
           OPENCHAIN_K6_LOAD_DURATION: 10s
         run: ./manage.sh smoke
@@ -168,6 +170,7 @@ jobs:
         with:
           name: k6-diagnostics
           path: |
+            /tmp/openchain-api.log
             /tmp/openchain-loadtest.log
             /tmp/openchain-web.log
           if-no-files-found: ignore
