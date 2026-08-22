@@ -133,6 +133,8 @@ jobs:
           go-version: '1.25.0'
           cache-dependency-path: apps/backend/go.sum
       - uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: '2.2.0'
       - name: Enable pnpm
         run: corepack enable
       - name: Install web dependencies
