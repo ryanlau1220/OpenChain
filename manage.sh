@@ -191,10 +191,13 @@ case "$1" in
             echo -e "${RED}Backend health check failed. Start the stack with ./manage.sh docker and ./manage.sh dev first.${RESET}"
             exit 1
         fi
-        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error "${web_url}" | rg -q '<title>OpenChain'; then
+        web_smoke_file="$(mktemp)"
+        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error --output "${web_smoke_file}" "${web_url}" || ! grep -q '<title>OpenChain' "${web_smoke_file}"; then
+            rm -f "${web_smoke_file}"
             echo -e "${RED}Web smoke check failed. Start the stack with ./manage.sh dev first.${RESET}"
             exit 1
         fi
+        rm -f "${web_smoke_file}"
         OPENCHAIN_E2E_BASE_URL="${web_url}" pnpm --filter @openchain/web test:e2e
         echo -e "${GREEN}✓ Live backend and web end-to-end checks passed.${RESET}"
         ;;
@@ -208,10 +211,13 @@ case "$1" in
             smoke_health_url="http://localhost:${PORT:-8081}/api/v1/health"
         fi
         echo -e "${CYAN}Checking public web and API routes...${RESET}"
-        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error "${smoke_web_url}" | rg -q '<title>OpenChain'; then
+        smoke_web_file="$(mktemp)"
+        if ! curl --connect-timeout 2 --max-time 10 --fail --silent --show-error --output "${smoke_web_file}" "${smoke_web_url}" || ! grep -q '<title>OpenChain' "${smoke_web_file}"; then
+            rm -f "${smoke_web_file}"
             echo -e "${RED}Public web smoke check failed at ${smoke_web_url}.${RESET}"
             exit 1
         fi
+        rm -f "${smoke_web_file}"
         smoke_health_file="$(mktemp)"
         if ! smoke_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error --output "${smoke_health_file}" --write-out '%{http_code}' "${smoke_health_url}")"; then
             rm -f "${smoke_health_file}"
@@ -223,7 +229,7 @@ case "$1" in
             echo -e "${RED}Public API smoke check failed at ${smoke_health_url} (HTTP ${smoke_status}).${RESET}"
             exit 1
         fi
-        if ! rg -q '"service":"openchain-api"' "${smoke_health_file}"; then
+        if ! grep -q '"service":"openchain-api"' "${smoke_health_file}"; then
             rm -f "${smoke_health_file}"
             echo -e "${RED}Public API returned an invalid health response.${RESET}"
             exit 1
