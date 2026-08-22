@@ -1,0 +1,209 @@
+name: CI and production deployment
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openchain-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache-dependency-path: apps/backend/go.sum
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check formatting, types, and production build
+        run: ./manage.sh check
+      - name: Vet Go
+        working-directory: apps/backend
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+
+  test:
+    name: Unit and database integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache-dependency-path: apps/backend/go.sum
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Start disposable Apache AGE
+        run: |
+          cp .github/ci.env .env
+          docker compose --env-file .env -f infra/docker-compose.yml up -d --wait postgres
+      - name: Run canonical test suite
+        run: ./manage.sh test
+      - name: Show database logs on failure
+        if: failure()
+        run: docker compose --env-file .env -f infra/docker-compose.yml logs --no-color postgres
+      - name: Stop disposable Apache AGE
+        if: always()
+        run: docker compose --env-file .env -f infra/docker-compose.yml down -v
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache-dependency-path: apps/backend/go.sum
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install web dependencies and Chromium
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @openchain/web exec playwright install --with-deps chromium
+      - name: Start deterministic application services
+        run: |
+          cp .github/ci.env .env
+          docker compose --env-file .env -f infra/docker-compose.yml up -d --wait postgres
+          GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/migrate
+          GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/loadtest >/tmp/openchain-loadtest.log 2>&1 &
+          pnpm --filter @openchain/web exec vite --host 127.0.0.1 --strictPort --port 3002 >/tmp/openchain-web.log 2>&1 &
+          for _ in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:18091/api/v1/health >/dev/null && curl --fail --silent http://127.0.0.1:3002 >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/openchain-loadtest.log /tmp/openchain-web.log
+          exit 1
+      - name: Run deterministic browser suite
+        run: ./manage.sh test:e2e
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            /tmp/openchain-loadtest.log
+            /tmp/openchain-web.log
+          if-no-files-found: ignore
+      - name: Stop disposable Apache AGE
+        if: always()
+        run: docker compose --env-file .env -f infra/docker-compose.yml down -v
+
+  performance:
+    name: Controlled k6 performance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache-dependency-path: apps/backend/go.sum
+      - uses: grafana/setup-k6-action@v1
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Start disposable Apache AGE and web
+        run: |
+          cp .github/ci.env .env
+          docker compose --env-file .env -f infra/docker-compose.yml up -d --wait postgres
+          GOCACHE=/tmp/openchain-go-cache go run ./apps/backend/cmd/migrate
+          pnpm --filter @openchain/web exec vite --host 127.0.0.1 --strictPort --port 3002 >/tmp/openchain-web.log 2>&1 &
+          for _ in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:3002 >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/openchain-web.log
+          exit 1
+      - name: Run controlled k6 suite
+        env:
+          OPENCHAIN_K6_LOAD_VUS: '5'
+          OPENCHAIN_K6_LOAD_DURATION: 10s
+        run: ./manage.sh smoke
+      - name: Upload k6 diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-diagnostics
+          path: |
+            /tmp/openchain-loadtest.log
+            /tmp/openchain-web.log
+          if-no-files-found: ignore
+      - name: Stop disposable Apache AGE
+        if: always()
+        run: docker compose --env-file .env -f infra/docker-compose.yml down -v
+
+  deploy:
+    name: Deploy production
+    needs: [quality, test, e2e, performance]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Configure deployment SSH key
+        shell: bash
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Deploy tested revision
+        shell: bash
+        env:
+          VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST }}
+          VPS_SSH_USER: ${{ secrets.VPS_SSH_USER }}
+          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+          REVISION: ${{ github.sha }}
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "${VPS_SSH_USER}@${VPS_SSH_HOST}" \
+            bash -s -- "$VPS_PROJECT_PATH" "$REVISION" <<'REMOTE'
+          set -euo pipefail
+          project_path=$1
+          revision=$2
+          cd "$project_path"
+          git fetch origin main
+          git checkout --detach "$revision"
+          docker compose --env-file .env.prod -f infra/docker-compose.production.yml up -d --build --remove-orphans
+          set -a
+          . ./.env.prod
+          set +a
+          curl --fail --silent --show-error --max-time 20 "https://${OPENCHAIN_PUBLIC_HOST}/api/v1/health" >/dev/null
+          REMOTE
