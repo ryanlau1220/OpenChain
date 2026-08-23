@@ -138,7 +138,7 @@ func toGraphProto(result *tracing.GraphResult) ([]*pb.GraphNode, []*pb.GraphEdge
 }
 
 func toCoverageProto(coverage tracing.TraceCoverage) *pb.TraceCoverage {
-	return &pb.TraceCoverage{RequestedPageSize: coverage.RequestedPageSize, ObservedTransferCount: coverage.ObservedTransferCount, GraphTransferCount: coverage.GraphTransferCount, ConfirmationBackedTransferCount: coverage.ConfirmationBackedTransferCount, ProvisionalTransferCount: coverage.ProvisionalTransferCount, Cursor: coverage.Cursor, HasMore: coverage.HasMore, ProviderComplete: coverage.ProviderComplete, Limitation: coverage.Limitation}
+	return &pb.TraceCoverage{RequestedPageSize: coverage.RequestedPageSize, ObservedTransferCount: coverage.ObservedTransferCount, RuleInputTransferCount: coverage.RuleInputTransferCount, ConfirmationBackedTransferCount: coverage.ConfirmationBackedTransferCount, ProvisionalTransferCount: coverage.ProvisionalTransferCount, Cursor: coverage.Cursor, HasMore: coverage.HasMore, ProviderComplete: coverage.ProviderComplete, Limitation: coverage.Limitation, FreshRetrievedAt: coverage.FreshRetrievedAt, StoredGraphTransferCount: coverage.StoredGraphTransferCount, StoredHistoryTransferCount: coverage.StoredHistoryTransferCount, StoredOldestRetrievedAt: coverage.StoredOldestRetrievedAt, StoredNewestRetrievedAt: coverage.StoredNewestRetrievedAt, RuleInputScope: coverage.RuleInputScope}
 }
 
 func toBridgeProto(transitions []bridge.Transition) []*pb.CrossChainTransition {

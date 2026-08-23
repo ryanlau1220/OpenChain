@@ -706,7 +706,6 @@ function Index() {
 									fieldStatuses={fieldStatuses}
 									loading={loading}
 									network={network}
-									coverage={graphData?.coverage}
 									targetSeedAddress={address}
 									onTraceAddress={(value) => {
 										setAddress(value);
@@ -736,6 +735,8 @@ function Index() {
 									edges={graphData.edges}
 									network={network}
 									pinnedTransferIds={caseFile.selectedTransferIds}
+									coverage={graphData.coverage}
+									sourceName={graphData.sourceStatus?.source}
 									onTogglePin={(transferID) => {
 										setInspectorTab('evidence');
 										toggleEvidencePin(transferID);

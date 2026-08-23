@@ -32,8 +32,8 @@ export function TransferInspector({
 			'Confirmation',
 			edge.provisional ? 'Provisional observation' : 'Confirmation-backed observation',
 		],
-		['Source', edge.sourceName],
-		['Retrieved', edge.retrievedAt ? formatObservationTime(edge.retrievedAt) : 'Unknown'],
+		['Stored source', edge.sourceName],
+		['Stored retrieved', edge.retrievedAt ? formatObservationTime(edge.retrievedAt) : 'Unknown'],
 	];
 	return (
 		<section className="space-y-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>

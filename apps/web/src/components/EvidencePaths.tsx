@@ -60,6 +60,10 @@ export function orderedEvidencePaths(
 	);
 }
 
+function formatCoverageTime(timestamp: bigint): string {
+	return timestamp > 0n ? formatObservationTime(timestamp) : 'Unknown retrieval time';
+}
+
 export const EvidencePaths: React.FC<{
 	nodes: readonly GraphNode[];
 	edges: readonly GraphEdge[];
@@ -67,7 +71,8 @@ export const EvidencePaths: React.FC<{
 	pinnedTransferIds: readonly string[];
 	onTogglePin: (transferId: string) => void;
 	coverage?: TraceCoverage;
-}> = ({ nodes, edges, network, pinnedTransferIds, onTogglePin, coverage }) => {
+	sourceName?: string;
+}> = ({ nodes, edges, network, pinnedTransferIds, onTogglePin, coverage, sourceName }) => {
 	const [showAll, setShowAll] = useState(false);
 	const paths = orderedEvidencePaths(evidencePaths(nodes, edges), pinnedTransferIds);
 	const pinned = new Set(pinnedTransferIds);
@@ -90,27 +95,33 @@ export const EvidencePaths: React.FC<{
 					}}
 				>
 					<p className="font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-3)' }}>
-						Retrieved scope
+						Fresh page & stored graph
 					</p>
 					<p className="mt-1">
-						{coverage.graphTransferCount}/{coverage.observedTransferCount} observed transfers shown
-						from a requested page of {coverage.requestedPageSize}.
+						Fresh provider page: {sourceName || 'Unknown provider'} retrieved{' '}
+						{formatCoverageTime(coverage.freshRetrievedAt)}. {coverage.observedTransferCount}{' '}
+						observed; {coverage.ruleInputTransferCount} selected for deterministic rules (requested
+						page size {coverage.requestedPageSize}).
 					</p>
 					<p className="mt-1">
-						{coverage.confirmationBackedTransferCount} confirmation-backed ·{' '}
-						{coverage.provisionalTransferCount} provisional ·{' '}
+						Fresh rule input: {coverage.confirmationBackedTransferCount} confirmation-backed ·{' '}
+						{coverage.provisionalTransferCount} provisional.
+					</p>
+					<p className="mt-1">
+						Stored AGE graph: {coverage.storedGraphTransferCount} edges ·{' '}
+						{coverage.storedHistoryTransferCount} outside this fresh rule input. Stored edge
+						retrieval range: {formatCoverageTime(coverage.storedOldestRetrievedAt)} –{' '}
+						{formatCoverageTime(coverage.storedNewestRetrievedAt)}.
+					</p>
+					<p className="mt-1">
 						{coverage.hasMore
-							? 'additional provider pages available'
+							? 'Additional provider pages available'
 							: coverage.providerComplete
-								? 'provider reports this page complete'
-								: 'provider completeness unavailable'}
-						.
+								? 'Provider reports this page complete'
+								: 'Provider completeness unavailable'}
+						. {coverage.cursor ? 'Continuation provider page.' : 'First provider page.'}.
 					</p>
-					<p className="mt-1">
-						{coverage.cursor
-							? 'Continuation cursor supplied for this page.'
-							: 'First provider page.'}
-					</p>
+					<p className="mt-1">{coverage.ruleInputScope}</p>
 					<p className="mt-1">{coverage.limitation}</p>
 				</div>
 			)}
@@ -124,8 +135,9 @@ export const EvidencePaths: React.FC<{
 				</h3>
 			</div>
 			<p className="text-[10px]" style={{ color: 'var(--ink-3)' }}>
-				Direct labels only; no risk inference. Pinned paths remain while expanding and export with
-				the case.
+				Direct labels only; no risk inference. Each stored edge shows its original source and
+				retrieval time, and may predate the fresh page above. Pinned paths remain while expanding
+				and export with the case.
 			</p>
 			{visiblePaths.map((path) => (
 				<div
@@ -168,7 +180,7 @@ export const EvidencePaths: React.FC<{
 						Observed {formatObservationTime(path.timestamp)}
 					</p>
 					<p className="mt-1 break-all text-[9px]" style={{ color: 'var(--ink-3)' }}>
-						Provenance: {path.provenance}
+						Stored provenance: {path.provenance}
 					</p>
 				</div>
 			))}

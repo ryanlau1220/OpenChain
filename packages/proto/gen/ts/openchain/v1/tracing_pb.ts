@@ -888,7 +888,7 @@ export class TraceGraphResponse extends Message<TraceGraphResponse> {
 }
 
 /**
- * Coverage facts for this retrieved provider page and the graph derived from it.
+ * Coverage distinguishes the fresh provider page from the durable AGE graph.
  * Provider completeness concerns the returned page, not the address's full history.
  *
  * @generated from message openchain.v1.TraceCoverage
@@ -905,9 +905,11 @@ export class TraceCoverage extends Message<TraceCoverage> {
   observedTransferCount = 0;
 
   /**
-   * @generated from field: uint32 graph_transfer_count = 3;
+   * Current-page transfers selected for deterministic rules before AGE traversal.
+   *
+   * @generated from field: uint32 rule_input_transfer_count = 3;
    */
-  graphTransferCount = 0;
+  ruleInputTransferCount = 0;
 
   /**
    * @generated from field: uint32 confirmation_backed_transfer_count = 4;
@@ -939,6 +941,40 @@ export class TraceCoverage extends Message<TraceCoverage> {
    */
   limitation = "";
 
+  /**
+   * Time the current provider page was fetched. Edge retrieved_at values can be older.
+   *
+   * @generated from field: int64 fresh_retrieved_at = 10;
+   */
+  freshRetrievedAt = protoInt64.zero;
+
+  /**
+   * @generated from field: uint32 stored_graph_transfer_count = 11;
+   */
+  storedGraphTransferCount = 0;
+
+  /**
+   * Durable graph edges that were not inputs to this fresh rule evaluation.
+   *
+   * @generated from field: uint32 stored_history_transfer_count = 12;
+   */
+  storedHistoryTransferCount = 0;
+
+  /**
+   * @generated from field: int64 stored_oldest_retrieved_at = 13;
+   */
+  storedOldestRetrievedAt = protoInt64.zero;
+
+  /**
+   * @generated from field: int64 stored_newest_retrieved_at = 14;
+   */
+  storedNewestRetrievedAt = protoInt64.zero;
+
+  /**
+   * @generated from field: string rule_input_scope = 15;
+   */
+  ruleInputScope = "";
+
   constructor(data?: PartialMessage<TraceCoverage>) {
     super();
     proto3.util.initPartial(data, this);
@@ -949,13 +985,19 @@ export class TraceCoverage extends Message<TraceCoverage> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "requested_page_size", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 2, name: "observed_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
-    { no: 3, name: "graph_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "rule_input_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 4, name: "confirmation_backed_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 5, name: "provisional_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 6, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 8, name: "provider_complete", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 9, name: "limitation", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "fresh_retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 11, name: "stored_graph_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 12, name: "stored_history_transfer_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 13, name: "stored_oldest_retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 14, name: "stored_newest_retrieved_at", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 15, name: "rule_input_scope", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TraceCoverage {

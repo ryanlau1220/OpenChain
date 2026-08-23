@@ -140,16 +140,20 @@ func TestGraphAggregatesPerNodeTransferCountsAndOrdersEdges(t *testing.T) {
 }
 
 func TestTraceCoverageDescribesRetrievedScope(t *testing.T) {
+	fresh := time.Unix(300, 0)
 	page := &adapter.TransferPage{
 		Transfers:  []adapter.TransferItem{{}, {}, {}},
 		NextCursor: "next",
 		HasMore:    true,
 		SourceStatus: adapter.SourceStatus{
-			IsComplete: false,
+			RetrievedAt: fresh,
+			IsComplete:  false,
 		},
 	}
-	coverage := traceCoverage(50, "start", page, []db.Transfer{{Provisional: false}, {Provisional: true}})
-	if coverage.RequestedPageSize != 50 || coverage.ObservedTransferCount != 3 || coverage.GraphTransferCount != 2 || coverage.ConfirmationBackedTransferCount != 1 || coverage.ProvisionalTransferCount != 1 || !coverage.HasMore || coverage.ProviderComplete || coverage.Cursor != "start" || coverage.Limitation == "" {
+	ruleInputs := []db.Transfer{{ID: "current", Provisional: false}, {ID: "provisional", Provisional: true}}
+	stored := append(append([]db.Transfer{}, ruleInputs...), db.Transfer{ID: "history", RetrievedAt: time.Unix(100, 0)})
+	coverage := traceCoverage(50, "start", page, ruleInputs, stored)
+	if coverage.RequestedPageSize != 50 || coverage.ObservedTransferCount != 3 || coverage.RuleInputTransferCount != 2 || coverage.StoredGraphTransferCount != 3 || coverage.StoredHistoryTransferCount != 1 || coverage.ConfirmationBackedTransferCount != 1 || coverage.ProvisionalTransferCount != 1 || coverage.FreshRetrievedAt != fresh.Unix() || coverage.StoredOldestRetrievedAt != 100 || !coverage.HasMore || coverage.ProviderComplete || coverage.Cursor != "start" || coverage.RuleInputScope == "" || coverage.Limitation == "" {
 		t.Fatalf("coverage = %#v", coverage)
 	}
 }

@@ -75,10 +75,12 @@ type GraphResult struct {
 }
 
 type TraceCoverage struct {
-	RequestedPageSize, ObservedTransferCount, GraphTransferCount, ConfirmationBackedTransferCount, ProvisionalTransferCount uint32
-	Cursor                                                                                                                  string
-	HasMore, ProviderComplete                                                                                               bool
-	Limitation                                                                                                              string
+	RequestedPageSize, ObservedTransferCount, RuleInputTransferCount, ConfirmationBackedTransferCount, ProvisionalTransferCount uint32
+	StoredGraphTransferCount, StoredHistoryTransferCount                                                                        uint32
+	Cursor, RuleInputScope                                                                                                      string
+	FreshRetrievedAt, StoredOldestRetrievedAt, StoredNewestRetrievedAt                                                          int64
+	HasMore, ProviderComplete                                                                                                   bool
+	Limitation                                                                                                                  string
 }
 
 const retrievedScopeLimitation = "This graph and its findings are limited to the retrieved provider page after the selected direction and counterparty scope. An observation is confirmation-backed only when OpenChain obtained a current chain height and the network confirmation threshold was met; this is not an evidentiary finality claim."
@@ -144,6 +146,7 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 			return nil, err
 		}
 		result = e.graphFromStored(ctx, address, storedTransfers, page)
+		result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers, storedTransfers)
 		persistedBridgeTransitions, err := e.database.BridgeTransitionsForTransfers(ctx, persistedTransferIDs(persistedTransfers))
 		if err != nil {
 			return nil, err
@@ -153,7 +156,9 @@ func (e *Engine) ResolveGraph(ctx context.Context, address string, direction Dir
 			return nil, err
 		}
 	}
-	result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers)
+	if result.Coverage.RuleInputScope == "" {
+		result.Coverage = traceCoverage(limit, cursor, page, persistedTransfers, persistedTransfers)
+	}
 	result.Coverage.Limitation = retrievedScopeLimitation + " AGE traversal only includes persisted observations within the selected depth and bounded per-address graph scope."
 	result.Leads = leads
 	if e.database == nil {
@@ -620,21 +625,41 @@ func (e *Engine) toTransfers(items []adapter.TransferItem, source adapter.Source
 	return transfers
 }
 
-func traceCoverage(limit uint32, cursor string, page *adapter.TransferPage, transfers []db.Transfer) TraceCoverage {
+func traceCoverage(limit uint32, cursor string, page *adapter.TransferPage, ruleInputs, storedTransfers []db.Transfer) TraceCoverage {
 	coverage := TraceCoverage{
-		RequestedPageSize:     limit,
-		ObservedTransferCount: uint32(len(page.Transfers)),
-		GraphTransferCount:    uint32(len(transfers)),
-		Cursor:                cursor,
-		HasMore:               page.HasMore,
-		ProviderComplete:      page.SourceStatus.IsComplete,
-		Limitation:            retrievedScopeLimitation,
+		RequestedPageSize:        limit,
+		ObservedTransferCount:    uint32(len(page.Transfers)),
+		RuleInputTransferCount:   uint32(len(ruleInputs)),
+		StoredGraphTransferCount: uint32(len(storedTransfers)),
+		Cursor:                   cursor,
+		HasMore:                  page.HasMore,
+		ProviderComplete:         page.SourceStatus.IsComplete,
+		FreshRetrievedAt:         page.SourceStatus.RetrievedAt.Unix(),
+		RuleInputScope:           "Deterministic rules evaluate only selected transfers from this fresh provider page; durable AGE history is excluded.",
+		Limitation:               retrievedScopeLimitation,
 	}
-	for _, transfer := range transfers {
+	ruleInputIDs := make(map[string]struct{}, len(ruleInputs))
+	for _, transfer := range ruleInputs {
+		ruleInputIDs[transfer.ID] = struct{}{}
 		if transfer.Provisional {
 			coverage.ProvisionalTransferCount++
 		} else {
 			coverage.ConfirmationBackedTransferCount++
+		}
+	}
+	for _, transfer := range storedTransfers {
+		if _, current := ruleInputIDs[transfer.ID]; !current {
+			coverage.StoredHistoryTransferCount++
+		}
+		if transfer.RetrievedAt.IsZero() {
+			continue
+		}
+		retrievedAt := transfer.RetrievedAt.Unix()
+		if coverage.StoredOldestRetrievedAt == 0 || retrievedAt < coverage.StoredOldestRetrievedAt {
+			coverage.StoredOldestRetrievedAt = retrievedAt
+		}
+		if retrievedAt > coverage.StoredNewestRetrievedAt {
+			coverage.StoredNewestRetrievedAt = retrievedAt
 		}
 	}
 	return coverage

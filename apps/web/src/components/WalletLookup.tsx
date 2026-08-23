@@ -8,7 +8,6 @@ import {
 	LookupField,
 	type LookupFieldStatus,
 	type SupportedNetwork,
-	type TraceCoverage,
 	entityLabel,
 	explorerURL,
 	networkDetails,
@@ -22,7 +21,6 @@ interface WalletLookupProps {
 	onTraceAddress: (addr: string) => void;
 	targetSeedAddress?: string;
 	network: SupportedNetwork;
-	coverage?: TraceCoverage;
 }
 
 export function entityCategoryName(category: string): string {

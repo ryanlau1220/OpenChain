@@ -339,8 +339,8 @@ func TestGraphProtoCarriesFinalityState(t *testing.T) {
 }
 
 func TestGraphProtoCarriesRetrievedScopeCoverage(t *testing.T) {
-	coverage := toCoverageProto(tracing.TraceCoverage{RequestedPageSize: 50, ObservedTransferCount: 50, GraphTransferCount: 10, ConfirmationBackedTransferCount: 8, ProvisionalTransferCount: 2, Cursor: "page-2", HasMore: true, ProviderComplete: false, Limitation: "retrieved provider page only"})
-	if coverage.GetRequestedPageSize() != 50 || coverage.GetObservedTransferCount() != 50 || coverage.GetGraphTransferCount() != 10 || coverage.GetConfirmationBackedTransferCount() != 8 || coverage.GetProvisionalTransferCount() != 2 || !coverage.GetHasMore() || coverage.GetProviderComplete() || coverage.GetCursor() != "page-2" || coverage.GetLimitation() == "" {
+	coverage := toCoverageProto(tracing.TraceCoverage{RequestedPageSize: 50, ObservedTransferCount: 50, RuleInputTransferCount: 10, StoredGraphTransferCount: 25, StoredHistoryTransferCount: 15, FreshRetrievedAt: 100, StoredOldestRetrievedAt: 10, StoredNewestRetrievedAt: 100, RuleInputScope: "fresh page only", ConfirmationBackedTransferCount: 8, ProvisionalTransferCount: 2, Cursor: "page-2", HasMore: true, ProviderComplete: false, Limitation: "retrieved provider page only"})
+	if coverage.GetRequestedPageSize() != 50 || coverage.GetObservedTransferCount() != 50 || coverage.GetRuleInputTransferCount() != 10 || coverage.GetStoredGraphTransferCount() != 25 || coverage.GetStoredHistoryTransferCount() != 15 || coverage.GetFreshRetrievedAt() != 100 || coverage.GetStoredOldestRetrievedAt() != 10 || coverage.GetStoredNewestRetrievedAt() != 100 || coverage.GetRuleInputScope() == "" || coverage.GetConfirmationBackedTransferCount() != 8 || coverage.GetProvisionalTransferCount() != 2 || !coverage.GetHasMore() || coverage.GetProviderComplete() || coverage.GetCursor() != "page-2" || coverage.GetLimitation() == "" {
 		t.Fatalf("coverage = %#v", coverage)
 	}
 }
