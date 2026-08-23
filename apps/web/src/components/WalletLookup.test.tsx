@@ -24,6 +24,17 @@ describe('WalletLookup entity evidence', () => {
 				loading={false}
 				onTraceAddress={() => undefined}
 				network={Network.ETHEREUM_MAINNET}
+				capabilities={{
+					native_transfers: true,
+					token_transfers: true,
+					internal_transfers: true,
+					historical_pagination: true,
+					finality: true,
+					transaction_success: false,
+					entity_classification: true,
+					bridge_evidence: true,
+					exact_raw_provenance: true,
+				}}
 			/>,
 		);
 		expect(screen.getByText('Verified entity labels')).toBeTruthy();
@@ -33,6 +44,8 @@ describe('WalletLookup entity evidence', () => {
 		expect(screen.getByRole('link', { name: 'Proof' }).getAttribute('href')).toBe(
 			'https://example.test/proof',
 		);
+		expect(screen.getByText('Network evidence coverage')).toBeTruthy();
+		expect(screen.getByText('Unknown · Execution status')).toBeTruthy();
 	});
 
 	it('names canonical entity categories for investigators', () => {

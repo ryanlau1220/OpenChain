@@ -72,6 +72,38 @@ export type NetworkSlug =
 	| 'solana-mainnet'
 	| 'tron-mainnet';
 
+export type NetworkCapabilities = {
+	native_transfers: boolean;
+	token_transfers: boolean;
+	internal_transfers: boolean;
+	historical_pagination: boolean;
+	finality: boolean;
+	transaction_success: boolean;
+	entity_classification: boolean;
+	bridge_evidence: boolean;
+	exact_raw_provenance: boolean;
+};
+
+const capabilityKeys = [
+	'native_transfers',
+	'token_transfers',
+	'internal_transfers',
+	'historical_pagination',
+	'finality',
+	'transaction_success',
+	'entity_classification',
+	'bridge_evidence',
+	'exact_raw_provenance',
+] as const;
+
+function isNetworkCapabilities(value: unknown): value is NetworkCapabilities {
+	return (
+		typeof value === 'object' &&
+		value !== null &&
+		capabilityKeys.every((key) => typeof (value as Record<string, unknown>)[key] === 'boolean')
+	);
+}
+
 const NETWORK_DETAILS: Record<
 	SupportedNetwork,
 	{
@@ -165,6 +197,27 @@ export const supportedNetworks = [
 
 export function networkDetails(network: SupportedNetwork) {
 	return NETWORK_DETAILS[network];
+}
+
+export async function fetchNetworkCapabilities(): Promise<
+	Partial<Record<NetworkSlug, NetworkCapabilities>>
+> {
+	const response = await fetch(`${API_BASE}/api/v1/health`);
+	if (!response.ok) throw new Error(`Health request failed: ${response.status}`);
+	const payload: unknown = await response.json();
+	if (
+		typeof payload !== 'object' ||
+		payload === null ||
+		!Array.isArray((payload as { networks?: unknown }).networks)
+	)
+		return {};
+	const capabilities: Partial<Record<NetworkSlug, NetworkCapabilities>> = {};
+	for (const item of (payload as { networks: unknown[] }).networks) {
+		if (typeof item !== 'object' || item === null) continue;
+		const { network, capabilities: value } = item as { network?: unknown; capabilities?: unknown };
+		if (isNetworkSlug(network) && isNetworkCapabilities(value)) capabilities[network] = value;
+	}
+	return capabilities;
 }
 
 export function networkFromSlug(slug: NetworkSlug): SupportedNetwork {

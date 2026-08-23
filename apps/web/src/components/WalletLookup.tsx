@@ -7,6 +7,7 @@ import {
 	LabelVisibility,
 	LookupField,
 	type LookupFieldStatus,
+	type NetworkCapabilities,
 	type SupportedNetwork,
 	entityLabel,
 	explorerURL,
@@ -21,6 +22,50 @@ interface WalletLookupProps {
 	onTraceAddress: (addr: string) => void;
 	targetSeedAddress?: string;
 	network: SupportedNetwork;
+	capabilities?: NetworkCapabilities;
+}
+
+const capabilityLabels: readonly [keyof NetworkCapabilities, string][] = [
+	['native_transfers', 'Native transfers'],
+	['token_transfers', 'Token transfers'],
+	['internal_transfers', 'Internal transfers'],
+	['historical_pagination', 'Historical pagination'],
+	['finality', 'Confirmation finality'],
+	['entity_classification', 'Entity classification'],
+	['bridge_evidence', 'Bridge evidence'],
+	['exact_raw_provenance', 'Exact provenance'],
+];
+
+function CapabilityPanel({ capabilities }: { capabilities?: NetworkCapabilities }) {
+	if (!capabilities) return null;
+	return (
+		<section
+			className="rounded-xl p-3 space-y-2"
+			style={{ background: 'var(--white)', border: '1px solid var(--border)' }}
+		>
+			<div>
+				<h3
+					className="text-[9px] font-bold uppercase tracking-wider"
+					style={{ color: 'var(--ink-3)' }}
+				>
+					Network evidence coverage
+				</h3>
+				<p className="mt-1 text-[9px]" style={{ color: 'var(--ink-3)' }}>
+					Unavailable means unsupported. Execution status stays unknown unless the source proves it.
+				</p>
+			</div>
+			<div className="grid grid-cols-2 gap-1 text-[9px]">
+				{capabilityLabels.map(([key, label]) => (
+					<p key={key} style={{ color: capabilities[key] ? 'var(--ink-2)' : 'var(--ink-3)' }}>
+						{capabilities[key] ? 'Available' : 'Unavailable'} · {label}
+					</p>
+				))}
+				<p style={{ color: capabilities.transaction_success ? 'var(--ink-2)' : 'var(--ink-3)' }}>
+					{capabilities.transaction_success ? 'Exact' : 'Unknown'} · Execution status
+				</p>
+			</div>
+		</section>
+	);
 }
 
 export function entityCategoryName(category: string): string {
@@ -56,6 +101,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 	onTraceAddress: _onTraceAddress,
 	targetSeedAddress,
 	network,
+	capabilities,
 }) => {
 	const [copied, setCopied] = useState<boolean>(false);
 
@@ -90,8 +136,11 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 
 	if (!summary) {
 		return (
-			<div className="p-6 text-center text-xs" style={{ color: 'var(--ink-3)' }}>
-				Select a node on the canvas to inspect wallet details and transaction history.
+			<div className="space-y-2">
+				<p className="p-6 text-center text-xs" style={{ color: 'var(--ink-3)' }}>
+					Select a node on the canvas to inspect wallet details and transaction history.
+				</p>
+				<CapabilityPanel capabilities={capabilities} />
 			</div>
 		);
 	}
@@ -306,6 +355,7 @@ export const WalletLookup: React.FC<WalletLookupProps> = ({
 					</div>
 				))}
 			</div>
+			<CapabilityPanel capabilities={capabilities} />
 		</div>
 	);
 };

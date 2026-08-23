@@ -17,12 +17,15 @@ import {
 	type InvestigationLead,
 	type LookupFieldStatus,
 	Network,
+	type NetworkCapabilities,
+	type NetworkSlug,
 	type SupportedNetwork,
 	type TraceDirection,
 	TraceGraphResponse,
 	defaultGraphOptions,
 	expandNode,
 	exportEvidencePackage,
+	fetchNetworkCapabilities,
 	fetchTraceGraph,
 	fetchTraceStatus,
 	isNetworkSlug,
@@ -89,6 +92,9 @@ function Index() {
 	const [summary, setSummary] = useState<AddressSummary | null>(null);
 	const [labels, setLabels] = useState<AddressLabel[]>([]);
 	const [fieldStatuses, setFieldStatuses] = useState<LookupFieldStatus[]>([]);
+	const [networkCapabilities, setNetworkCapabilities] = useState<
+		Partial<Record<NetworkSlug, NetworkCapabilities>>
+	>({});
 	const [graphData, setGraphData] = useState<TraceGraphResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -156,6 +162,18 @@ function Index() {
 		if (address) initialSearchRef.current = { address, network, scope };
 		setCaseLoaded(true);
 	}, [updateCaseFile]);
+
+	useEffect(() => {
+		let active = true;
+		void fetchNetworkCapabilities()
+			.then((capabilities) => {
+				if (active) setNetworkCapabilities(capabilities);
+			})
+			.catch((error) => console.error('Unable to load network capabilities', error));
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	useEffect(() => {
 		if (caseLoaded) saveLocalCase(caseFile);
@@ -706,6 +724,7 @@ function Index() {
 									fieldStatuses={fieldStatuses}
 									loading={loading}
 									network={network}
+									capabilities={networkCapabilities[networkDetails(network).slug]}
 									targetSeedAddress={address}
 									onTraceAddress={(value) => {
 										setAddress(value);
