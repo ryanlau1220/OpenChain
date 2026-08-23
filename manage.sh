@@ -286,6 +286,7 @@ case "$1" in
 
     providers:acceptance:prod)
         echo -e "${CYAN}Running read-only live provider acceptance checks...${RESET}"
+        docker compose --env-file .env.prod -f infra/docker-compose.production.yml build provider-acceptance
         docker compose --env-file .env.prod -f infra/docker-compose.production.yml run --rm --no-deps provider-acceptance
         ;;
 
