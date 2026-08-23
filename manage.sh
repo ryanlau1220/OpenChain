@@ -142,11 +142,11 @@ configure_npm_edge_protection() {
     fi
 
     local npm_container="${NPM_CONTAINER:-proxy-manager-app-1}"
-    local npm_data_dir="${NPM_DATA_DIR:-/home/ubuntu/proxy-manager/data}"
-    local custom_dir="${npm_data_dir}/nginx/custom"
+    local custom_dir="/data/nginx/custom"
     local marker="# Managed by OpenChain edge protection."
     local http_template="infra/nginx-proxy-manager/http_top.conf"
     local server_template="infra/nginx-proxy-manager/server_proxy.conf"
+    local staging_dir
 
     if [ ! -f "${http_template}" ] || [ ! -f "${server_template}" ]; then
         echo -e "${RED}Nginx Proxy Manager edge-protection templates are missing.${RESET}"
@@ -157,17 +157,17 @@ configure_npm_edge_protection() {
         exit 1
     fi
 
-    mkdir -p "${custom_dir}"
     for target in "${custom_dir}/http_top.conf" "${custom_dir}/server_proxy.conf"; do
-        if [ -e "${target}" ] && ! grep -Fqx "${marker}" "${target}"; then
+        if docker exec "${npm_container}" test -e "${target}" && ! docker exec "${npm_container}" grep -Fqx "${marker}" "${target}"; then
             echo -e "${RED}Refusing to overwrite unmanaged Nginx configuration at ${target}.${RESET}"
             exit 1
         fi
     done
 
+    staging_dir="$(mktemp -d)"
     OPENCHAIN_PUBLIC_HOST="${OPENCHAIN_PUBLIC_HOST}" \
         PUBLIC_REQUESTS_PER_MINUTE="${PUBLIC_REQUESTS_PER_MINUTE:-30}" \
-        python3 - "${http_template}" "${server_template}" "${custom_dir}" <<'PY'
+        python3 - "${http_template}" "${server_template}" "${staging_dir}" <<'PY'
 import os
 import re
 import sys
@@ -189,6 +189,11 @@ for template, target_name in ((http_template, "http_top.conf"), (server_template
     temporary.chmod(0o644)
     temporary.replace(target)
 PY
+
+    docker exec "${npm_container}" mkdir -p "${custom_dir}"
+    docker cp "${staging_dir}/http_top.conf" "${npm_container}:${custom_dir}/http_top.conf"
+    docker cp "${staging_dir}/server_proxy.conf" "${npm_container}:${custom_dir}/server_proxy.conf"
+    rm -rf "${staging_dir}"
 
     if ! docker exec "${npm_container}" nginx -t; then
         echo -e "${RED}Nginx rejected the edge-protection configuration; reload was not performed.${RESET}"
