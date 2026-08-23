@@ -105,7 +105,7 @@ services:
   telegraf:
     image: telegraf@sha256:cf9c35ee62e73129a1cb2b2ea425e573298ae8f03be8edfaeaffa6aa8cfb3869
     restart: unless-stopped
-    user: "0:0"
+    user: "telegraf:${DOCKER_GID:?DOCKER_GID is required}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./observability/telegraf.conf:/etc/telegraf/telegraf.conf:ro

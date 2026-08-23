@@ -175,7 +175,9 @@ case "$1" in
     docker:prod)
         echo -e "${YELLOW}Building and starting the production Docker Compose stack...${RESET}"
         mkdir -p .metrics
+        export DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
         docker compose --env-file .env.prod -f infra/docker-compose.production.yml up -d --build --remove-orphans
+        docker compose --env-file .env.prod -f infra/docker-compose.production.yml restart prometheus grafana
         echo -e "${GREEN}✓ [OK] Production stack started successfully.${RESET}"
         ;;
 
