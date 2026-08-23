@@ -55,9 +55,57 @@ backup_database() {
         echo -e "${RED}Backup failed; no partial backup was retained.${RESET}"
         exit 1
     fi
+    if ! gzip -t "${partial_file}"; then
+        rm -f "${partial_file}"
+        echo -e "${RED}Backup verification failed; no partial backup was retained.${RESET}"
+        exit 1
+    fi
     mv "${partial_file}" "${backup_file}"
+    upload_backup_to_r2 "${backup_file}"
     find "${backup_dir}" -maxdepth 1 -type f -name 'openchain-*.sql.gz' -mtime +"${retention_days}" -delete
     echo -e "${GREEN}✓ Backup created at ${backup_file}; backups older than ${retention_days} days were removed.${RESET}"
+}
+
+upload_backup_to_r2() {
+    local backup_file="$1"
+    local remote_retention_days="${BACKUP_REMOTE_RETENTION_DAYS:-35}"
+    local r2_endpoint="${R2_ENDPOINT%/}"
+    r2_endpoint="${r2_endpoint%/${R2_BUCKET:-}}"
+    if [ -z "${R2_ENDPOINT:-}" ] && [ -z "${R2_BUCKET:-}" ] && [ -z "${R2_ACCESS_KEY_ID:-}" ] && [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
+        return
+    fi
+    if [ -z "${R2_ENDPOINT:-}" ] || [ -z "${R2_BUCKET:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
+        echo -e "${RED}R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY must be set together.${RESET}"
+        exit 1
+    fi
+    if [[ "${r2_endpoint}" != https://*.r2.cloudflarestorage.com ]] || [[ ! "${R2_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]*[a-z0-9]$ ]] || ! [[ "${remote_retention_days}" =~ ^[0-9]+$ ]] || [ "${remote_retention_days}" -lt 1 ]; then
+        echo -e "${RED}R2 configuration or BACKUP_REMOTE_RETENTION_DAYS is invalid.${RESET}"
+        exit 1
+    fi
+    local backup_directory
+    backup_directory="$(cd "$(dirname "${backup_file}")" && pwd)"
+    local backup_name
+    backup_name="$(basename "${backup_file}")"
+    local rclone_environment=(
+        -e RCLONE_CONFIG_OPENCHAINR2_TYPE=s3
+        -e RCLONE_CONFIG_OPENCHAINR2_PROVIDER=Cloudflare
+        -e RCLONE_CONFIG_OPENCHAINR2_ACCESS_KEY_ID
+        -e RCLONE_CONFIG_OPENCHAINR2_SECRET_ACCESS_KEY
+        -e RCLONE_CONFIG_OPENCHAINR2_ENDPOINT
+        -e RCLONE_CONFIG_OPENCHAINR2_REGION=auto
+        -e RCLONE_CONFIG_OPENCHAINR2_NO_CHECK_BUCKET=true
+    )
+    echo -e "${CYAN}Copying verified backup to Cloudflare R2...${RESET}"
+    RCLONE_CONFIG_OPENCHAINR2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
+        RCLONE_CONFIG_OPENCHAINR2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+        RCLONE_CONFIG_OPENCHAINR2_ENDPOINT="${r2_endpoint}" \
+        docker run --rm "${rclone_environment[@]}" -v "${backup_directory}:/backup:ro" rclone/rclone@sha256:4680f96c8fd7fb9c130d9e2587ac726f8d098232b7f32c5e5302fd0cb3d8922d \
+        copyto "/backup/${backup_name}" "openchainr2:${R2_BUCKET}/postgres/${backup_name}"
+    RCLONE_CONFIG_OPENCHAINR2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" \
+        RCLONE_CONFIG_OPENCHAINR2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+        RCLONE_CONFIG_OPENCHAINR2_ENDPOINT="${r2_endpoint}" \
+        docker run --rm "${rclone_environment[@]}" rclone/rclone@sha256:4680f96c8fd7fb9c130d9e2587ac726f8d098232b7f32c5e5302fd0cb3d8922d \
+        delete "openchainr2:${R2_BUCKET}/postgres" --min-age "${remote_retention_days}d"
 }
 
 case "$1" in

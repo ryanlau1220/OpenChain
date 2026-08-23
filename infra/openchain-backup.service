@@ -1,0 +1,8 @@
+[Unit]
+Description=OpenChain production PostgreSQL backup
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/OpenChain
+ExecStart=/home/ubuntu/OpenChain/manage.sh backup:prod
