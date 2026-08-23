@@ -29,6 +29,10 @@ if [ -f .env ]; then
     set +a
 fi
 
+if [ -S /var/run/docker.sock ] && [ -z "${DOCKER_GID:-}" ]; then
+    export DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
+fi
+
 backup_database() {
     local compose_file="$1"
     local env_file="$2"
@@ -175,7 +179,6 @@ case "$1" in
     docker:prod)
         echo -e "${YELLOW}Building and starting the production Docker Compose stack...${RESET}"
         mkdir -p .metrics
-        export DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
         docker compose --env-file .env.prod -f infra/docker-compose.production.yml up -d --build --remove-orphans
         docker compose --env-file .env.prod -f infra/docker-compose.production.yml restart prometheus grafana
         echo -e "${GREEN}✓ [OK] Production stack started successfully.${RESET}"
