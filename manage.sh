@@ -143,7 +143,7 @@ configure_npm_edge_protection() {
 
     local npm_container="${NPM_CONTAINER:-proxy-manager-app-1}"
     local custom_dir="/data/nginx/custom"
-    local marker="# Managed by OpenChain edge protection."
+    local marker="# Managed by OpenChain edge protection. Do not edit on the host."
     local http_template="infra/nginx-proxy-manager/http_top.conf"
     local server_template="infra/nginx-proxy-manager/server_proxy.conf"
     local staging_dir
