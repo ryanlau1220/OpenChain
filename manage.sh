@@ -121,6 +121,83 @@ upload_backup_to_r2() {
         delete "openchainr2:${R2_BUCKET}/postgres" --min-age "${remote_retention_days}d"
 }
 
+configure_npm_edge_protection() {
+    local env_file="$1"
+    if [ ! -f "${env_file}" ]; then
+        echo -e "${RED}Environment file ${env_file} was not found.${RESET}"
+        exit 1
+    fi
+
+    set -a
+    source "${env_file}"
+    set +a
+
+    if ! [[ "${OPENCHAIN_PUBLIC_HOST:-}" =~ ^[A-Za-z0-9.-]+$ ]]; then
+        echo -e "${RED}OPENCHAIN_PUBLIC_HOST must be a hostname.${RESET}"
+        exit 1
+    fi
+    if ! [[ "${PUBLIC_REQUESTS_PER_MINUTE:-30}" =~ ^[1-9][0-9]*$ ]]; then
+        echo -e "${RED}PUBLIC_REQUESTS_PER_MINUTE must be a positive integer.${RESET}"
+        exit 1
+    fi
+
+    local npm_container="${NPM_CONTAINER:-proxy-manager-app-1}"
+    local npm_data_dir="${NPM_DATA_DIR:-/home/ubuntu/proxy-manager/data}"
+    local custom_dir="${npm_data_dir}/nginx/custom"
+    local marker="# Managed by OpenChain edge protection."
+    local http_template="infra/nginx-proxy-manager/http_top.conf"
+    local server_template="infra/nginx-proxy-manager/server_proxy.conf"
+
+    if [ ! -f "${http_template}" ] || [ ! -f "${server_template}" ]; then
+        echo -e "${RED}Nginx Proxy Manager edge-protection templates are missing.${RESET}"
+        exit 1
+    fi
+    if ! docker inspect "${npm_container}" >/dev/null 2>&1; then
+        echo -e "${RED}Nginx Proxy Manager container ${npm_container} was not found.${RESET}"
+        exit 1
+    fi
+
+    mkdir -p "${custom_dir}"
+    for target in "${custom_dir}/http_top.conf" "${custom_dir}/server_proxy.conf"; do
+        if [ -e "${target}" ] && ! grep -Fqx "${marker}" "${target}"; then
+            echo -e "${RED}Refusing to overwrite unmanaged Nginx configuration at ${target}.${RESET}"
+            exit 1
+        fi
+    done
+
+    OPENCHAIN_PUBLIC_HOST="${OPENCHAIN_PUBLIC_HOST}" \
+        PUBLIC_REQUESTS_PER_MINUTE="${PUBLIC_REQUESTS_PER_MINUTE:-30}" \
+        python3 - "${http_template}" "${server_template}" "${custom_dir}" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+http_template, server_template, custom_dir = map(Path, sys.argv[1:])
+replacements = {
+    "__OPENCHAIN_PUBLIC_HOST_REGEX__": re.escape(os.environ["OPENCHAIN_PUBLIC_HOST"]),
+    "__PUBLIC_REQUESTS_PER_MINUTE__": os.environ["PUBLIC_REQUESTS_PER_MINUTE"],
+}
+
+for template, target_name in ((http_template, "http_top.conf"), (server_template, "server_proxy.conf")):
+    content = template.read_text()
+    for placeholder, value in replacements.items():
+        content = content.replace(placeholder, value)
+    target = custom_dir / target_name
+    temporary = target.with_suffix(".conf.next")
+    temporary.write_text(content)
+    temporary.chmod(0o644)
+    temporary.replace(target)
+PY
+
+    if ! docker exec "${npm_container}" nginx -t; then
+        echo -e "${RED}Nginx rejected the edge-protection configuration; reload was not performed.${RESET}"
+        exit 1
+    fi
+    docker exec "${npm_container}" nginx -s reload
+    echo -e "${GREEN}✓ OpenChain edge rate limiting is active in Nginx Proxy Manager.${RESET}"
+}
+
 case "$1" in
     dev)
         if [ -z "${ETHEREUM_MAINNET_RPC_URL:-}" ] || [ -z "${BASE_MAINNET_RPC_URL:-}" ] || [ -z "${SOLANA_MAINNET_RPC_URL:-}" ] || [ -z "${ETHERSCAN_API_KEY:-}" ] || [ -z "${BLOCKSCOUT_API_KEY:-}" ] || [ -z "${ALCHEMY_API_KEY:-}" ] || [ -z "${TRONGRID_API_KEY:-}" ] || [ -z "${TONAPI_KEY:-}" ] || [ -z "${BLOCKFROST_PROJECT_ID:-}" ] || [ -z "${QUEUE_CLIENT_SECRET:-}" ]; then
@@ -196,6 +273,10 @@ case "$1" in
 
     backup:prod)
         backup_database infra/docker-compose.production.yml .env.prod
+        ;;
+
+    edge:prod)
+        configure_npm_edge_protection .env.prod
         ;;
 
     migrate)
@@ -368,7 +449,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|migrate|build|lint|check|test|test:e2e|smoke|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|edge:prod|migrate|build|lint|check|test|test:e2e|smoke|clean}"
         exit 1
         ;;
 esac
