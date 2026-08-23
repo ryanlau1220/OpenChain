@@ -284,6 +284,11 @@ case "$1" in
         configure_npm_edge_protection .env.prod
         ;;
 
+    providers:acceptance:prod)
+        echo -e "${CYAN}Running read-only live provider acceptance checks...${RESET}"
+        docker compose --env-file .env.prod -f infra/docker-compose.production.yml run --rm --no-deps provider-acceptance
+        ;;
+
     migrate)
         echo -e "${CYAN}Applying database migrations...${RESET}"
         GOCACHE="${GOCACHE:-/tmp/openchain-go-cache}" go run ./apps/backend/cmd/migrate
@@ -454,7 +459,7 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|edge:prod|migrate|build|lint|check|test|test:e2e|smoke|clean}"
+        echo "Usage: ./manage.sh {dev|docker|docker:down|docker:prod|docker:prod:down|backup|backup:prod|edge:prod|providers:acceptance:prod|migrate|build|lint|check|test|test:e2e|smoke|clean}"
         exit 1
         ;;
 esac

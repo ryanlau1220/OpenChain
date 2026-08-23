@@ -76,6 +76,26 @@ services:
     logging: *rotated-logs
     networks: [app]
 
+  provider-acceptance:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    profiles: [manual]
+    command: ["/app/provideracceptance"]
+    environment:
+      ETHEREUM_MAINNET_RPC_URL: ${ETHEREUM_MAINNET_RPC_URL:?ETHEREUM_MAINNET_RPC_URL is required}
+      BASE_MAINNET_RPC_URL: ${BASE_MAINNET_RPC_URL:?BASE_MAINNET_RPC_URL is required}
+      SOLANA_MAINNET_RPC_URL: ${SOLANA_MAINNET_RPC_URL:?SOLANA_MAINNET_RPC_URL is required}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:?ETHERSCAN_API_KEY is required}
+      BLOCKSCOUT_API_KEY: ${BLOCKSCOUT_API_KEY:?BLOCKSCOUT_API_KEY is required}
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:?ALCHEMY_API_KEY is required}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:?TRONGRID_API_KEY is required}
+      TONAPI_KEY: ${TONAPI_KEY:?TONAPI_KEY is required}
+      BLOCKFROST_PROJECT_ID: ${BLOCKFROST_PROJECT_ID:?BLOCKFROST_PROJECT_ID is required}
+      QUEUE_CLIENT_SECRET: ${QUEUE_CLIENT_SECRET:?QUEUE_CLIENT_SECRET is required}
+    logging: *rotated-logs
+    networks: [egress]
+
   web:
     build:
       context: ..
