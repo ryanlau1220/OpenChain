@@ -48,8 +48,9 @@ func main() {
 	}
 	runtimes := make(map[pb.Network]api.NetworkRuntime, 10)
 	queues := make([]*tracing.Queue, 0, 10)
-	bridgeClients := make(map[string]*adapter.EVMClient, 2)
+	bridgeClients := make(map[string]*adapter.EVMClient, 3)
 	baseBridge := bridge.NewBaseStandardBridge(bridgeClients)
+	optimismBridge := bridge.NewOptimismStandardBridge(bridgeClients)
 	for _, network := range []struct {
 		id                    pb.Network
 		name, chainID, rpcURL string
@@ -81,8 +82,14 @@ func main() {
 		{pb.Network_NETWORK_BNB_CHAIN, "bnb-chain", "https://bnb-mainnet.g.alchemy.com/v2", adapter.Asset{Kind: "NATIVE", Symbol: "BNB", Decimals: 18}},
 	} {
 		rpcURL := network.endpoint + "/" + cfg.AlchemyAPIKey
-		chainAdapter := adapter.NewAlchemyEVMChainAdapter(network.name, network.endpoint, cfg.AlchemyAPIKey, network.nativeAsset, adapter.NewEVMClient(rpcURL))
-		engine := tracing.NewEngine(chainAdapter, database, registry)
+		evmClient := adapter.NewEVMClient(rpcURL)
+		chainAdapter := adapter.NewAlchemyEVMChainAdapter(network.name, network.endpoint, cfg.AlchemyAPIKey, network.nativeAsset, evmClient)
+		var bridgeAdapters []bridge.Adapter
+		if network.name == bridge.OptimismMainnet {
+			bridgeClients[network.name] = evmClient
+			bridgeAdapters = append(bridgeAdapters, optimismBridge)
+		}
+		engine := tracing.NewEngine(chainAdapter, database, registry, bridgeAdapters...)
 		queue := tracing.NewQueue(engine, database, cfg.MaxQueuedTraceJobsPerNetwork, cfg.MaxQueuedJobsPerClientPerNetwork)
 		runtimes[network.id] = api.NetworkRuntime{Chain: chainAdapter, Engine: engine, Queue: queue}
 		queues = append(queues, queue)

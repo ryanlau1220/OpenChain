@@ -51,7 +51,8 @@ func TestBaseBridgeControlledLifecycles(t *testing.T) {
 		{"failed", "failed", LifecycleFailed},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			server := bridgeRPCFixture(t, fixture.mode)
+			source, destination := baseEndpointsForTest()
+			server := bridgeRPCFixture(t, fixture.mode, source, destination)
 			defer server.Close()
 			clients := map[string]*adapter.EVMClient{EthereumMainnet: adapter.NewEVMClient(server.URL), BaseMainnet: adapter.NewEVMClient(server.URL)}
 			resolver := NewBaseStandardBridge(clients)
@@ -80,7 +81,8 @@ func TestBaseBridgeControlledLifecycles(t *testing.T) {
 }
 
 func TestBaseBridgeDuplicateAmountDoesNotCreateSecondContinuation(t *testing.T) {
-	server := bridgeRPCFixture(t, "duplicate")
+	source, destination := baseEndpointsForTest()
+	server := bridgeRPCFixture(t, "duplicate", source, destination)
 	defer server.Close()
 	resolver := NewBaseStandardBridge(map[string]*adapter.EVMClient{EthereumMainnet: adapter.NewEVMClient(server.URL), BaseMainnet: adapter.NewEVMClient(server.URL)})
 	transitions, err := resolver.Resolve(context.Background(), EthereumMainnet, []adapter.TransferItem{{Hash: "0xsource", To: baseL1Bridge, Timestamp: time.Unix(1000, 0).UTC()}})
@@ -101,20 +103,71 @@ func TestBaseBridgeDuplicateAmountDoesNotCreateSecondContinuation(t *testing.T) 
 	}
 }
 
-func bridgeRPCFixture(t *testing.T, mode string) *httptest.Server {
+func TestOptimismBridgeControlledLifecycles(t *testing.T) {
+	for _, fixture := range []struct {
+		name string
+		mode string
+		want Lifecycle
+	}{
+		{"finalized", "finalized", LifecycleFinalized},
+		{"pending", "pending", LifecycleInitiated},
+		{"failed", "failed", LifecycleFailed},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			source, destination := optimismEndpointsForTest()
+			server := bridgeRPCFixture(t, fixture.mode, source, destination)
+			defer server.Close()
+			resolver := NewOptimismStandardBridge(map[string]*adapter.EVMClient{EthereumMainnet: adapter.NewEVMClient(server.URL), OptimismMainnet: adapter.NewEVMClient(server.URL)})
+			transitions, err := resolver.Resolve(context.Background(), EthereumMainnet, []adapter.TransferItem{{Hash: "0xsource", To: source.Bridge, Timestamp: time.Unix(1000, 0).UTC()}})
+			if err != nil || len(transitions) != 1 {
+				t.Fatalf("resolve = %#v, %v", transitions, err)
+			}
+			transition := transitions[0]
+			if transition.Protocol != "optimism-standard-bridge" || transition.SourceNetwork != EthereumMainnet || transition.DestinationNetwork != OptimismMainnet || transition.Lifecycle != fixture.want {
+				t.Fatalf("transition = %#v", transition)
+			}
+			if fixture.want == LifecycleFinalized && (!transition.SourceConfirmed || !transition.DestinationConfirmed) {
+				t.Fatal("finalized Optimism bridge requires both confirmation policies")
+			}
+		})
+	}
+}
+
+func TestOptimismBridgeRejectsBaseMessengerNearMatch(t *testing.T) {
+	source, destination := optimismEndpointsForTest()
+	initiation, ok := decodeETHBridge(ethInitiatedLogAt(source.Bridge, "0xsource", "0x01", "0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42"))
+	if !ok {
+		t.Fatal("expected Optimism bridge initiation")
+	}
+	message := sentLogAt(baseL1Messenger, "0xsource", "0x02", source.Bridge, destination.Bridge, finalETHData(initiation.From, initiation.To, "42"))
+	messages := decodeSentMessages([]adapter.LogItem{message}, source.Messenger)
+	if len(messages) != 0 {
+		t.Fatal("a Base messenger event must not match the Optimism Standard Bridge")
+	}
+}
+
+func baseEndpointsForTest() (endpoint, endpoint) {
+	return endpoint{Network: EthereumMainnet, Bridge: baseL1Bridge, Messenger: baseL1Messenger, Confirmations: 64}, endpoint{Network: BaseMainnet, Bridge: baseL2Bridge, Messenger: baseL2Messenger, Confirmations: 120}
+}
+
+func optimismEndpointsForTest() (endpoint, endpoint) {
+	return endpoint{Network: EthereumMainnet, Bridge: optimismL1Bridge, Messenger: optimismL1Messenger, Confirmations: 64}, endpoint{Network: OptimismMainnet, Bridge: optimismL2Bridge, Messenger: optimismL2Messenger, Confirmations: 120}
+}
+
+func bridgeRPCFixture(t *testing.T, mode string, source, destination endpoint) *httptest.Server {
 	t.Helper()
-	initiation := ethInitiatedLog("0xsource", "0x01", "0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42")
-	message := sentLog("0xsource", "0x02", baseL1Bridge, baseL2Bridge, finalETHData("0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42"))
-	extension := adapter.LogItem{Address: baseL1Messenger, Topics: []string{sentMessageExtensionTopic, topicAddress(baseL1Bridge)}, Data: "0x" + hex.EncodeToString(word("0")), BlockNumber: "0x1", BlockHash: "0xsourceblock", TransactionHash: "0xsource", LogIndex: "0x03"}
-	messageID, err := sentMessage{log: message, Target: baseL2Bridge, Sender: baseL1Bridge, Message: finalETHData("0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42"), Nonce: nonceV1(), Gas: word("100000"), Value: word("0")}.messageID()
+	initiation := ethInitiatedLogAt(source.Bridge, "0xsource", "0x01", "0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42")
+	message := sentLogAt(source.Messenger, "0xsource", "0x02", source.Bridge, destination.Bridge, finalETHData("0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42"))
+	extension := adapter.LogItem{Address: source.Messenger, Topics: []string{sentMessageExtensionTopic, topicAddress(source.Bridge)}, Data: "0x" + hex.EncodeToString(word("0")), BlockNumber: "0x1", BlockHash: "0xsourceblock", TransactionHash: "0xsource", LogIndex: "0x03"}
+	messageID, err := sentMessage{log: message, Target: destination.Bridge, Sender: source.Bridge, Message: finalETHData("0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42"), Nonce: nonceV1(), Gas: word("100000"), Value: word("0")}.messageID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	relayed := adapter.LogItem{Address: baseL2Messenger, Topics: []string{relayedMessageTopic, messageID}, Data: "0x", BlockNumber: "0x2", BlockHash: "0xdestinationblock", TransactionHash: "0xdestination", LogIndex: "0x04"}
-	failed := adapter.LogItem{Address: baseL2Messenger, Topics: []string{failedRelayedMessageTopic, messageID}, Data: "0x", BlockNumber: "0x2", BlockHash: "0xdestinationblock", TransactionHash: "0xdestination", LogIndex: "0x04"}
-	finalized := ethFinalizedLog("0xdestination", "0x05", "0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42")
+	relayed := adapter.LogItem{Address: destination.Messenger, Topics: []string{relayedMessageTopic, messageID}, Data: "0x", BlockNumber: "0x2", BlockHash: "0xdestinationblock", TransactionHash: "0xdestination", LogIndex: "0x04"}
+	failed := adapter.LogItem{Address: destination.Messenger, Topics: []string{failedRelayedMessageTopic, messageID}, Data: "0x", BlockNumber: "0x2", BlockHash: "0xdestinationblock", TransactionHash: "0xdestination", LogIndex: "0x04"}
+	finalized := ethFinalizedLogAt(destination.Bridge, "0xdestination", "0x05", "0xaaa0000000000000000000000000000000000001", "0xbbb0000000000000000000000000000000000002", "42")
 	if mode == "duplicate" {
-		initiation2 := ethInitiatedLog("0xsource", "0x06", "0xaaa0000000000000000000000000000000000001", "0xccc0000000000000000000000000000000000003", "42")
+		initiation2 := ethInitiatedLogAt(source.Bridge, "0xsource", "0x06", "0xaaa0000000000000000000000000000000000001", "0xccc0000000000000000000000000000000000003", "42")
 		return rpcServer([]adapter.LogItem{initiation, message, extension, initiation2}, relayed, failed, finalized, mode)
 	}
 	return rpcServer([]adapter.LogItem{initiation, message, extension}, relayed, failed, finalized, mode)
@@ -162,14 +215,26 @@ func rpcServer(sourceReceipt []adapter.LogItem, relayed, failed, destinationRece
 }
 
 func ethInitiatedLog(tx, index, from, to, amount string) adapter.LogItem {
-	return adapter.LogItem{Address: baseL1Bridge, Topics: []string{ethBridgeInitiatedTopic, topicAddress(from), topicAddress(to)}, Data: "0x" + hex.EncodeToString(append(append(word(amount), word("64")...), append(word("0"), make([]byte, 0)...)...)), BlockNumber: "0x1", BlockHash: "0xsourceblock", TransactionHash: tx, LogIndex: index}
+	return ethInitiatedLogAt(baseL1Bridge, tx, index, from, to, amount)
+}
+
+func ethInitiatedLogAt(bridge, tx, index, from, to, amount string) adapter.LogItem {
+	return adapter.LogItem{Address: bridge, Topics: []string{ethBridgeInitiatedTopic, topicAddress(from), topicAddress(to)}, Data: "0x" + hex.EncodeToString(append(append(word(amount), word("64")...), append(word("0"), make([]byte, 0)...)...)), BlockNumber: "0x1", BlockHash: "0xsourceblock", TransactionHash: tx, LogIndex: index}
 }
 
 func ethFinalizedLog(tx, index, from, to, amount string) adapter.LogItem {
-	return adapter.LogItem{Address: baseL2Bridge, Topics: []string{ethBridgeFinalizedTopic, topicAddress(from), topicAddress(to)}, Data: "0x" + hex.EncodeToString(append(word(amount), append(word("64"), word("0")...)...)), BlockNumber: "0x2", BlockHash: "0xdestinationblock", TransactionHash: tx, LogIndex: index}
+	return ethFinalizedLogAt(baseL2Bridge, tx, index, from, to, amount)
+}
+
+func ethFinalizedLogAt(bridge, tx, index, from, to, amount string) adapter.LogItem {
+	return adapter.LogItem{Address: bridge, Topics: []string{ethBridgeFinalizedTopic, topicAddress(from), topicAddress(to)}, Data: "0x" + hex.EncodeToString(append(word(amount), append(word("64"), word("0")...)...)), BlockNumber: "0x2", BlockHash: "0xdestinationblock", TransactionHash: tx, LogIndex: index}
 }
 
 func sentLog(tx, index, sender, target string, message []byte) adapter.LogItem {
+	return sentLogAt(baseL1Messenger, tx, index, sender, target, message)
+}
+
+func sentLogAt(messenger, tx, index, sender, target string, message []byte) adapter.LogItem {
 	data := append(addressWord(sender), word("128")...)
 	data = append(data, nonceV1()...)
 	data = append(data, word("100000")...)
@@ -179,7 +244,7 @@ func sentLog(tx, index, sender, target string, message []byte) adapter.LogItem {
 		padded = append(padded, make([]byte, 32-remainder)...)
 	}
 	data = append(data, padded...)
-	return adapter.LogItem{Address: baseL1Messenger, Topics: []string{sentMessageTopic, topicAddress(target)}, Data: "0x" + hex.EncodeToString(data), BlockNumber: "0x1", BlockHash: "0xsourceblock", TransactionHash: tx, LogIndex: index}
+	return adapter.LogItem{Address: messenger, Topics: []string{sentMessageTopic, topicAddress(target)}, Data: "0x" + hex.EncodeToString(data), BlockNumber: "0x1", BlockHash: "0xsourceblock", TransactionHash: tx, LogIndex: index}
 }
 
 func finalETHData(from, to, amount string) []byte {

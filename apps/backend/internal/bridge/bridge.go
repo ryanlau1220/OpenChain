@@ -20,6 +20,7 @@ import (
 const (
 	EthereumMainnet = "ethereum-mainnet"
 	BaseMainnet     = "base-mainnet"
+	OptimismMainnet = "optimism-mainnet"
 
 	baseL1Messenger = "0x866e82a600a1414e583f7f13623f1ac5d58b0afa"
 	baseL1Bridge    = "0x3154cf16ccdb4c6d922629664174b904d80f2c35"
@@ -28,6 +29,12 @@ const (
 
 	ethereumWETH = "0xc02aa39b223fe8d0a0e5c4f27ead9083c756cc2"
 	baseWETH     = "0x4200000000000000000000000000000000000006"
+
+	optimismL1Messenger = "0x25ace71c97b33cc4729cf772ae268934f7ab5fa1"
+	optimismL1Bridge    = "0x99c9fc46f92e8a1c0dec1b1747d010903e884be1"
+	optimismL2Messenger = "0x4200000000000000000000000000000000000007"
+	optimismL2Bridge    = "0x4200000000000000000000000000000000000010"
+	optimismWETH        = "0x4200000000000000000000000000000000000006"
 )
 
 type Lifecycle string
@@ -94,31 +101,50 @@ type endpoint struct {
 	Confirmations              uint64
 }
 
-// OPStackStandardBridge implements the Base Standard Bridge only. It follows
-// the protocol message hash through SentMessage and Relayed/FailedRelayedMessage
-// and validates the exact StandardBridge finalization call and registered route.
+// OPStackStandardBridge follows a version-1 OP Stack cross-domain message through
+// SentMessage and Relayed/FailedRelayedMessage, then validates the exact
+// StandardBridge finalization call and registered route.
 type OPStackStandardBridge struct {
-	clients map[string]*adapter.EVMClient
-	routes  []route
+	clients                              map[string]*adapter.EVMClient
+	routes                               []route
+	endpoints                            map[string]bridgeEndpoints
+	protocol, bridgeName, destinationNet string
 }
 
-func NewBaseStandardBridge(clients map[string]*adapter.EVMClient) *OPStackStandardBridge {
+type bridgeEndpoints struct{ source, destination endpoint }
+
+func newOPStackStandardBridge(protocol, bridgeName, destinationNet string, l1, l2 endpoint, l2WETH string, clients map[string]*adapter.EVMClient) *OPStackStandardBridge {
 	return &OPStackStandardBridge{
-		clients: clients,
+		clients:        clients,
+		protocol:       protocol,
+		bridgeName:     bridgeName,
+		destinationNet: destinationNet,
+		endpoints: map[string]bridgeEndpoints{
+			EthereumMainnet: {source: l1, destination: l2},
+			destinationNet:  {source: l2, destination: l1},
+		},
 		routes: []route{
-			{SourceNetwork: EthereumMainnet, DestinationNetwork: BaseMainnet, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
-			{SourceNetwork: BaseMainnet, DestinationNetwork: EthereumMainnet, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
-			{SourceNetwork: EthereumMainnet, DestinationNetwork: BaseMainnet, SourceToken: ethereumWETH, DestinationToken: baseWETH, Asset: adapter.Asset{Kind: "ERC20", ContractAddress: ethereumWETH, Symbol: "WETH", Decimals: 18}},
-			{SourceNetwork: BaseMainnet, DestinationNetwork: EthereumMainnet, SourceToken: baseWETH, DestinationToken: ethereumWETH, Asset: adapter.Asset{Kind: "ERC20", ContractAddress: baseWETH, Symbol: "WETH", Decimals: 18}},
+			{SourceNetwork: EthereumMainnet, DestinationNetwork: destinationNet, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
+			{SourceNetwork: destinationNet, DestinationNetwork: EthereumMainnet, Asset: adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}},
+			{SourceNetwork: EthereumMainnet, DestinationNetwork: destinationNet, SourceToken: ethereumWETH, DestinationToken: l2WETH, Asset: adapter.Asset{Kind: "ERC20", ContractAddress: ethereumWETH, Symbol: "WETH", Decimals: 18}},
+			{SourceNetwork: destinationNet, DestinationNetwork: EthereumMainnet, SourceToken: l2WETH, DestinationToken: ethereumWETH, Asset: adapter.Asset{Kind: "ERC20", ContractAddress: l2WETH, Symbol: "WETH", Decimals: 18}},
 		},
 	}
 }
 
-func (a *OPStackStandardBridge) Protocol() string { return "base-standard-bridge" }
+func NewBaseStandardBridge(clients map[string]*adapter.EVMClient) *OPStackStandardBridge {
+	return newOPStackStandardBridge("base-standard-bridge", "Base Standard Bridge", BaseMainnet, endpoint{Network: EthereumMainnet, Bridge: baseL1Bridge, Messenger: baseL1Messenger, Confirmations: 64}, endpoint{Network: BaseMainnet, Bridge: baseL2Bridge, Messenger: baseL2Messenger, Confirmations: 120}, baseWETH, clients)
+}
+
+func NewOptimismStandardBridge(clients map[string]*adapter.EVMClient) *OPStackStandardBridge {
+	return newOPStackStandardBridge("optimism-standard-bridge", "Optimism Standard Bridge", OptimismMainnet, endpoint{Network: EthereumMainnet, Bridge: optimismL1Bridge, Messenger: optimismL1Messenger, Confirmations: 64}, endpoint{Network: OptimismMainnet, Bridge: optimismL2Bridge, Messenger: optimismL2Messenger, Confirmations: 120}, optimismWETH, clients)
+}
+
+func (a *OPStackStandardBridge) Protocol() string { return a.protocol }
 
 func (a *OPStackStandardBridge) Capabilities() Capabilities {
 	return Capabilities{
-		Directions:         []string{EthereumMainnet + "→" + BaseMainnet, BaseMainnet + "→" + EthereumMainnet},
+		Directions:         []string{EthereumMainnet + "→" + a.destinationNet, a.destinationNet + "→" + EthereumMainnet},
 		Assets:             []string{"native ETH", "WETH (canonical route registry)"},
 		MessageIDType:      "OP Stack versioned cross-domain message hash (v1)",
 		FinalityMethod:     "both source and destination chain heads meet the configured confirmation threshold",
@@ -128,7 +154,8 @@ func (a *OPStackStandardBridge) Capabilities() Capabilities {
 }
 
 func (a *OPStackStandardBridge) Resolve(ctx context.Context, sourceNetwork string, transfers []adapter.TransferItem) ([]Transition, error) {
-	source, destination, ok := baseEndpoints(sourceNetwork)
+	pair, ok := a.endpoints[sourceNetwork]
+	source, destination := pair.source, pair.destination
 	if !ok || a.clients[source.Network] == nil || a.clients[destination.Network] == nil {
 		return []Transition{}, nil
 	}
@@ -156,24 +183,13 @@ func (a *OPStackStandardBridge) Resolve(ctx context.Context, sourceNetwork strin
 	return result, nil
 }
 
-func baseEndpoints(network string) (endpoint, endpoint, bool) {
-	switch network {
-	case EthereumMainnet:
-		return endpoint{Network: EthereumMainnet, Bridge: baseL1Bridge, Messenger: baseL1Messenger, Confirmations: 64}, endpoint{Network: BaseMainnet, Bridge: baseL2Bridge, Messenger: baseL2Messenger, Confirmations: 120}, true
-	case BaseMainnet:
-		return endpoint{Network: BaseMainnet, Bridge: baseL2Bridge, Messenger: baseL2Messenger, Confirmations: 120}, endpoint{Network: EthereumMainnet, Bridge: baseL1Bridge, Messenger: baseL1Messenger, Confirmations: 64}, true
-	default:
-		return endpoint{}, endpoint{}, false
-	}
-}
-
 func (a *OPStackStandardBridge) resolveCandidate(ctx context.Context, source, destination endpoint, candidate adapter.TransferItem) ([]Transition, error) {
 	sourceClient := a.clients[source.Network]
 	destinationClient := a.clients[destination.Network]
 	before := adapter.AcquisitionResponseHashes(acquisitions(ctx))
 	logs, err := sourceClient.GetTransactionReceiptLogs(ctx, candidate.Hash)
 	if err != nil {
-		return []Transition{unresolvedTransition(source, destination, candidate, "Source bridge receipt is unavailable; no cross-chain continuation was inferred.", nil)}, nil
+		return []Transition{a.unresolvedTransition(source, destination, candidate, "Source bridge receipt is unavailable; no cross-chain continuation was inferred.", nil)}, nil
 	}
 	afterReceipt := adapter.AcquisitionResponseHashes(acquisitions(ctx))
 	sourceHashes := newHashes(before, afterReceipt)
@@ -189,25 +205,25 @@ func (a *OPStackStandardBridge) resolveCandidate(ctx context.Context, source, de
 	for _, initiated := range initiations {
 		sent, found := matchingMessage(messages, initiated, source, destination)
 		if !found {
-			result = append(result, unresolvedTransition(source, destination, candidate, "A StandardBridge initiation was observed, but no matching version-1 cross-domain message record was present in the same source receipt.", sourceHashes))
+			result = append(result, a.unresolvedTransition(source, destination, candidate, "A StandardBridge initiation was observed, but no matching version-1 cross-domain message record was present in the same source receipt.", sourceHashes))
 			continue
 		}
 		route, found := a.canonicalRoute(source.Network, destination.Network, initiated)
 		if !found {
-			result = append(result, unresolvedTransition(source, destination, candidate, "The bridge message is protocol-shaped, but its token route is not in OpenChain's canonical Base Standard Bridge route registry.", sourceHashes))
+			result = append(result, a.unresolvedTransition(source, destination, candidate, "The bridge message is protocol-shaped, but its token route is not in OpenChain's canonical bridge route registry.", sourceHashes))
 			continue
 		}
 		messageID, err := sent.messageID()
 		if err != nil {
-			result = append(result, unresolvedTransition(source, destination, candidate, "The bridge message uses an unsupported cross-domain message version; no continuation was inferred.", sourceHashes))
+			result = append(result, a.unresolvedTransition(source, destination, candidate, "The bridge message uses an unsupported cross-domain message version; no continuation was inferred.", sourceHashes))
 			continue
 		}
 		transition := Transition{
-			Protocol: a.Protocol(), BridgeName: "Base Standard Bridge", SourceNetwork: source.Network, DestinationNetwork: destination.Network,
+			Protocol: a.Protocol(), BridgeName: a.bridgeName, SourceNetwork: source.Network, DestinationNetwork: destination.Network,
 			Lifecycle: LifecycleInitiated, MessageID: messageID, SourceTransactionHash: strings.ToLower(candidate.Hash), SourceLogReference: logReference(initiated.log),
 			SourceBridgeAddress: source.Bridge, DestinationBridgeAddress: destination.Bridge, CanonicalSourceToken: route.SourceToken, CanonicalDestinationToken: route.DestinationToken,
 			Recipient: initiated.To, AmountBaseUnits: initiated.Amount.String(), Asset: route.Asset, SourceBlockNumber: logBlock(initiated.log), SourceBlockHash: initiated.log.BlockHash,
-			SourceTimestamp: candidate.Timestamp.UTC(), Limitations: limitation(), SourceAcquisitionHashes: sourceHashes,
+			SourceTimestamp: candidate.Timestamp.UTC(), Limitations: a.limitation(), SourceAcquisitionHashes: sourceHashes,
 		}
 		if err := a.completeDestination(ctx, &transition, initiated, source, destination, destinationClient); err != nil {
 			return nil, err
@@ -304,13 +320,13 @@ func confirmed(head, block, threshold uint64) bool {
 	return block > 0 && head >= block && head-block >= threshold
 }
 
-func unresolvedTransition(source, destination endpoint, candidate adapter.TransferItem, reason string, hashes []string) Transition {
+func (a *OPStackStandardBridge) unresolvedTransition(source, destination endpoint, candidate adapter.TransferItem, reason string, hashes []string) Transition {
 	identifier := sha256.Sum256([]byte(strings.ToLower(candidate.Hash) + "|" + reason))
-	return Transition{ID: "base-standard-bridge:unresolved:" + hex.EncodeToString(identifier[:16]), Protocol: "base-standard-bridge", BridgeName: "Base Standard Bridge", SourceNetwork: source.Network, DestinationNetwork: destination.Network, Lifecycle: LifecycleUnresolved, SourceTransactionHash: strings.ToLower(candidate.Hash), SourceBridgeAddress: source.Bridge, DestinationBridgeAddress: destination.Bridge, SourceTimestamp: candidate.Timestamp.UTC(), Limitations: reason, SourceAcquisitionHashes: hashes}
+	return Transition{ID: a.Protocol() + ":unresolved:" + hex.EncodeToString(identifier[:16]), Protocol: a.Protocol(), BridgeName: a.bridgeName, SourceNetwork: source.Network, DestinationNetwork: destination.Network, Lifecycle: LifecycleUnresolved, SourceTransactionHash: strings.ToLower(candidate.Hash), SourceBridgeAddress: source.Bridge, DestinationBridgeAddress: destination.Bridge, SourceTimestamp: candidate.Timestamp.UTC(), Limitations: reason, SourceAcquisitionHashes: hashes}
 }
 
-func limitation() string {
-	return "This continuation is limited to the exact Base Standard Bridge message, canonical token route, and retrieved chain records. It does not infer cross-chain address ownership, control, or intent."
+func (a *OPStackStandardBridge) limitation() string {
+	return "This continuation is limited to the exact " + a.bridgeName + " message, canonical token route, and retrieved chain records. It does not infer cross-chain address ownership, control, or intent."
 }
 
 func transitionID(value Transition) string {

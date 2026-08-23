@@ -51,7 +51,7 @@ func TestAdaptersDeclareNetworkCapabilities(t *testing.T) {
 		{"base", NewBlockscoutChainAdapter("base-mainnet", "https://api.example", "key", nil), bridgeEVM},
 		{"polygon", NewAlchemyEVMChainAdapter("polygon-mainnet", "https://api.example", "key", Asset{}, nil), evm},
 		{"arbitrum", NewAlchemyEVMChainAdapter("arbitrum-one", "https://api.example", "key", Asset{}, nil), evm},
-		{"optimism", NewAlchemyEVMChainAdapter("optimism-mainnet", "https://api.example", "key", Asset{}, nil), evm},
+		{"optimism", NewAlchemyEVMChainAdapter("optimism-mainnet", "https://api.example", "key", Asset{}, nil), bridgeEVM},
 		{"bnb", NewAlchemyEVMChainAdapter("bnb-chain", "https://api.example", "key", Asset{}, nil), evm},
 		{"solana", NewSolanaAdapter("solana-mainnet", "https://mainnet.helius-rpc.com/?api-key=key"), NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, HistoricalPagination: true, EntityClassification: true, ExactRawProvenance: true}},
 		{"tron", NewTronAdapter("tron-mainnet", "https://api.example", "key"), NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, InternalTransfers: true, HistoricalPagination: true, EntityClassification: true, ExactRawProvenance: true}},

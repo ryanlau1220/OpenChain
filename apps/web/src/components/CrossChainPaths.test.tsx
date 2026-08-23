@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { CrossChainTransition, Network } from '../services/api';
+import { describe, expect, it, vi } from 'vitest';
+import { BridgeLifecycle, CrossChainTransition, Network } from '../services/api';
 import { CrossChainPaths } from './CrossChainPaths';
 
 describe('CrossChainPaths', () => {
@@ -37,5 +37,33 @@ describe('CrossChainPaths', () => {
 		expect(
 			screen.getByRole('link', { name: /destination transaction/i }).getAttribute('href'),
 		).toBe('https://basescan.org/tx/0xdestination');
+	});
+
+	it('traces a finalized Optimism bridge recipient on its destination network', () => {
+		const onTraceDestination = vi.fn();
+		render(
+			<CrossChainPaths
+				transitions={[
+					new CrossChainTransition({
+						id: 'optimism:source:destination',
+						bridgeName: 'Optimism Standard Bridge',
+						sourceNetwork: Network.ETHEREUM_MAINNET,
+						destinationNetwork: Network.OPTIMISM_MAINNET,
+						sourceTransactionHash: '0xsource',
+						destinationTransactionHash: '0xdestination',
+						recipient: '0xrecipient',
+						lifecycle: BridgeLifecycle.FINALIZED,
+					}),
+				]}
+				onTraceDestination={onTraceDestination}
+			/>,
+		);
+		expect(
+			screen.getByRole('link', { name: /destination transaction/i }).getAttribute('href'),
+		).toBe('https://optimistic.etherscan.io/tx/0xdestination');
+		screen.getByRole('button', { name: /trace destination recipient/i }).click();
+		expect(onTraceDestination).toHaveBeenCalledWith(
+			expect.objectContaining({ destinationNetwork: Network.OPTIMISM_MAINNET }),
+		);
 	});
 });

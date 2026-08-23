@@ -37,9 +37,13 @@ func NewAlchemyEVMChainAdapter(network, apiURL, apiKey string, nativeAsset Asset
 	return &AlchemyEVMChainAdapter{network: network, apiURL: strings.TrimRight(apiURL, "/"), apiKey: apiKey, nativeAsset: nativeAsset, evmClient: evmClient, httpClient: &http.Client{Timeout: 15 * time.Second}, metrics: newProviderMetrics(AlchemySource, int(time.Second/alchemyRequestGap))}
 }
 
-func (a *AlchemyEVMChainAdapter) Network() string                   { return a.network }
-func (a *AlchemyEVMChainAdapter) EVMClient() *EVMClient             { return a.evmClient }
-func (a *AlchemyEVMChainAdapter) Capabilities() NetworkCapabilities { return evmCapabilities() }
+func (a *AlchemyEVMChainAdapter) Network() string       { return a.network }
+func (a *AlchemyEVMChainAdapter) EVMClient() *EVMClient { return a.evmClient }
+func (a *AlchemyEVMChainAdapter) Capabilities() NetworkCapabilities {
+	capabilities := evmCapabilities()
+	capabilities.BridgeEvidence = a.network == "optimism-mainnet"
+	return capabilities
+}
 func (a *AlchemyEVMChainAdapter) NormalizeAddress(value string) (string, error) {
 	return normalizeEthereumAddress(value)
 }
