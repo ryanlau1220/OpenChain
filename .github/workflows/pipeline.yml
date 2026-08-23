@@ -212,6 +212,7 @@ jobs:
           cd "$project_path"
           git fetch origin main
           git checkout --detach "$revision"
+          install -d -m 755 .metrics
           docker compose --env-file .env.prod -f infra/docker-compose.production.yml up -d --build --remove-orphans
           set -a
           . ./.env.prod

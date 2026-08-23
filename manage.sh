@@ -62,8 +62,17 @@ backup_database() {
     fi
     mv "${partial_file}" "${backup_file}"
     upload_backup_to_r2 "${backup_file}"
+	write_backup_metric
     find "${backup_dir}" -maxdepth 1 -type f -name 'openchain-*.sql.gz' -mtime +"${retention_days}" -delete
     echo -e "${GREEN}✓ Backup created at ${backup_file}; backups older than ${retention_days} days were removed.${RESET}"
+}
+
+write_backup_metric() {
+	local metrics_dir=".metrics"
+	local metrics_file="${metrics_dir}/backup.prom"
+	mkdir -p "${metrics_dir}"
+	printf '# TYPE openchain_backup_last_success_unixtime gauge\nopenchain_backup_last_success_unixtime %s\n' "$(date +%s)" > "${metrics_file}.partial"
+	mv "${metrics_file}.partial" "${metrics_file}"
 }
 
 upload_backup_to_r2() {
@@ -165,6 +174,7 @@ case "$1" in
 
     docker:prod)
         echo -e "${YELLOW}Building and starting the production Docker Compose stack...${RESET}"
+        mkdir -p .metrics
         docker compose --env-file .env.prod -f infra/docker-compose.production.yml up -d --build --remove-orphans
         echo -e "${GREEN}✓ [OK] Production stack started successfully.${RESET}"
         ;;

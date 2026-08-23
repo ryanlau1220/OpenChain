@@ -121,10 +121,11 @@ func (q *Queue) resultForJob(address string, job *db.TraceJob) (*GraphResult, er
 }
 
 type Stats struct {
-	Enabled bool  `json:"enabled"`
-	Queued  int64 `json:"queued"`
-	Running int64 `json:"running"`
-	Failed  int64 `json:"failed"`
+	Enabled             bool    `json:"enabled"`
+	Queued              int64   `json:"queued"`
+	Running             int64   `json:"running"`
+	Failed              int64   `json:"failed"`
+	OldestQueuedSeconds float64 `json:"oldest_queued_seconds"`
 }
 
 func (q *Queue) Stats(ctx context.Context) (Stats, error) {
@@ -132,7 +133,7 @@ func (q *Queue) Stats(ctx context.Context) (Stats, error) {
 		return Stats{}, nil
 	}
 	stats, err := q.database.TraceJobStats(ctx, q.engine.Network())
-	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed}, err
+	return Stats{Enabled: true, Queued: stats.Queued, Running: stats.Running, Failed: stats.Failed, OldestQueuedSeconds: stats.OldestQueuedSeconds}, err
 }
 
 // Capacity is the durable per-network queue limit.

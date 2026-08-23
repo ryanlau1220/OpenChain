@@ -1,0 +1,80 @@
+groups:
+  - name: openchain
+    rules:
+      - alert: OpenChainBackendDown
+        expr: up{job="openchain-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: OpenChain backend cannot be scraped for two minutes.
+      - alert: OpenChainServerErrors
+        expr: sum(rate(openchain_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(openchain_http_requests_total[5m])), 1) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of OpenChain requests are failing with 5xx responses.
+      - alert: OpenChainSlowRequests
+        expr: histogram_quantile(0.95, sum by (le) (rate(openchain_http_request_duration_seconds_bucket[5m]))) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenChain HTTP p95 latency has exceeded five seconds.
+      - alert: OpenChainMetricsCollectionFailed
+        expr: min_over_time(openchain_metrics_collection_success[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenChain could not collect durable queue metrics.
+      - alert: OpenChainProviderUnhealthy
+        expr: (openchain_provider_last_failure_timestamp_seconds > openchain_provider_last_success_timestamp_seconds) and (time() - openchain_provider_last_failure_timestamp_seconds < 600)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An OpenChain provider has failed more recently than it has succeeded.
+      - alert: OpenChainProviderThrottled
+        expr: sum by (network, provider) (increase(openchain_provider_throttled[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An OpenChain provider is throttling requests.
+      - alert: OpenChainQueueNearCapacity
+        expr: openchain_trace_queue_jobs{status="queued"} >= 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An OpenChain trace queue has at least 20 queued jobs.
+      - alert: OpenChainQueueStalled
+        expr: openchain_trace_queue_oldest_queued_seconds > 600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An OpenChain trace job has waited more than ten minutes.
+      - alert: OpenChainBackupStale
+        expr: absent(openchain_backup_last_success_unixtime) or time() - openchain_backup_last_success_unixtime > 93600
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: OpenChain has no successful backup in the last 26 hours.
+      - alert: OpenChainDiskLow
+        expr: node_filesystem_avail_bytes{job="openchain-node",mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="openchain-node",mountpoint="/",fstype!~"tmpfs|overlay"} < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenChain VPS root disk has less than 15% free space.
+      - alert: OpenChainContainerMemoryHigh
+        expr: sum(container_memory_working_set_bytes{job="openchain-cadvisor"}) / on() node_memory_MemTotal_bytes{job="openchain-node"} > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenChain containers use more than 80% of VPS memory.

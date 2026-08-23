@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -169,6 +170,28 @@ func TestHealthAPI(t *testing.T) {
 	}
 	if len(body.Networks) != 1 || body.Networks[0].Network != "ethereum-mainnet" || !body.Networks[0].Capabilities.NativeTransfers || !body.Networks[0].Capabilities.TokenTransfers || !body.Networks[0].Capabilities.InternalTransfers || !body.Networks[0].Capabilities.HistoricalPagination || !body.Networks[0].Capabilities.Finality || !body.Networks[0].Capabilities.EntityClassification || !body.Networks[0].Capabilities.ExactRawProvenance || !body.Networks[0].Capabilities.BridgeEvidence || body.Networks[0].Capabilities.TransactionSuccess || len(body.Networks[0].Providers) != 1 || body.Networks[0].Providers[0].MaxConcurrent != 1 || body.Networks[0].Providers[0].RequestsPerSecond != 5 {
 		t.Fatalf("network health = %#v", body.Networks)
+	}
+}
+
+func TestMetricsExposeOperationalSignals(t *testing.T) {
+	handler, _ := setupTestServer()
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/health", nil))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	body := response.Body.String()
+	for _, metric := range []string{
+		`openchain_http_requests_total{method="GET",route="/api/v1/health",status="200"} 1`,
+		"openchain_trace_queue_jobs",
+		"openchain_trace_queue_oldest_queued_seconds",
+		"openchain_provider_requests",
+		"openchain_metrics_collection_success 1",
+	} {
+		if !strings.Contains(body, metric) {
+			t.Fatalf("metrics missing %q:\n%s", metric, body)
+		}
 	}
 }
 

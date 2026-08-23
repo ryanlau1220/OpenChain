@@ -10,6 +10,7 @@ build/
 bin/
 apps/web/test-results/
 infra/backups/
+.metrics/
 
 # Environment variables
 .env

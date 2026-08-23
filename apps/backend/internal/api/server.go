@@ -29,13 +29,16 @@ func (writer *responseLogger) WriteHeader(statusCode int) {
 	writer.ResponseWriter.WriteHeader(statusCode)
 }
 
-func withLogging(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) withObservability(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		writer := &responseLogger{ResponseWriter: w, statusCode: http.StatusOK}
-		next(writer, r)
+		next.ServeHTTP(writer, r)
 		slog.Info("http_request", "method", r.Method, "path", r.URL.Path, "status", writer.statusCode, "duration", time.Since(started))
-	}
+		if r.URL.Path != "/metrics" {
+			s.metrics.observeRequest(r.Method, metricRoute(r.URL.Path), writer.statusCode, time.Since(started))
+		}
+	})
 }
 
 type Server struct {
@@ -43,6 +46,7 @@ type Server struct {
 	labels            *labels.Service
 	webOrigin         string
 	requestLimiter    *RequestLimiter
+	metrics           *metrics
 	trustProxy        bool
 	queueClientSecret []byte
 }
@@ -74,7 +78,7 @@ type HealthAlert struct {
 }
 
 func NewServer(networks map[pb.Network]NetworkRuntime, registry *labels.Service, webOrigin string, publicRequestsPerMinute int, trustProxy bool, queueClientSecret string) *Server {
-	return &Server{networks: networks, labels: registry, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), trustProxy: trustProxy, queueClientSecret: []byte(queueClientSecret)}
+	return &Server{networks: networks, labels: registry, webOrigin: strings.TrimRight(webOrigin, "/"), requestLimiter: NewRequestLimiter(publicRequestsPerMinute), metrics: newMetrics(), trustProxy: trustProxy, queueClientSecret: []byte(queueClientSecret)}
 }
 
 func (s *Server) queueClientKey(ctx context.Context) string {
@@ -115,13 +119,14 @@ func (s *Server) traceStatus(ctx context.Context, network pb.Network, address st
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	s.RegisterConnectRPC(mux)
-	mux.HandleFunc("/api/v1/health", withLogging(s.handleHealth))
+	mux.HandleFunc("/api/v1/health", s.handleHealth)
+	mux.Handle("/metrics", s.metrics.handler(s))
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.RegisterRoutes(mux)
-	return s.withCORS(withClientKey(mux, s.trustProxy))
+	return s.withObservability(s.withCORS(withClientKey(mux, s.trustProxy)))
 }
 
 func (s *Server) withCORS(next http.Handler) http.Handler {
@@ -161,6 +166,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		queue.Queued += stats.Queued
 		queue.Running += stats.Running
 		queue.Failed += stats.Failed
+		queue.OldestQueuedSeconds = max(queue.OldestQueuedSeconds, stats.OldestQueuedSeconds)
 		item := healthNetwork{Network: runtime.Engine.Network(), Capabilities: runtime.Chain.Capabilities(), Queue: stats}
 		if reporter, ok := runtime.Chain.(providerHealthReporter); ok {
 			item.Providers = reporter.ProviderHealth()

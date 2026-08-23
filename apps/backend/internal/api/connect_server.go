@@ -383,7 +383,7 @@ func (h *connectLabelHandler) SearchLabels(ctx context.Context, req *connect.Req
 }
 
 func (s *Server) RegisterConnectRPC(mux *http.ServeMux) {
-	mount := func(path string, handler http.Handler) { mux.Handle(path, withLogging(handler.ServeHTTP)) }
+	mount := func(path string, handler http.Handler) { mux.Handle(path, handler) }
 	options := []connect.HandlerOption{connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
 			if rateLimitProcedure(request.Spec().Procedure) && !s.requestLimiter.Allow(clientKey(ctx)) {

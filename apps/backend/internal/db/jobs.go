@@ -111,14 +111,15 @@ WHERE network = $1 AND address = $2 AND direction = $3 AND cursor = $4 AND page_
 }
 
 type TraceJobStats struct {
-	Queued  int64
-	Running int64
-	Failed  int64
+	Queued              int64
+	Running             int64
+	Failed              int64
+	OldestQueuedSeconds float64
 }
 
 func (d *DB) TraceJobStats(ctx context.Context, network string) (TraceJobStats, error) {
 	stats := TraceJobStats{}
-	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed' AND completed_at >= now() - $2::interval) FROM trace_jobs WHERE network = $1`, network, traceFailureWindow.String()).Scan(&stats.Queued, &stats.Running, &stats.Failed)
+	err := d.SQL.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'), count(*) FILTER (WHERE status = 'failed' AND completed_at >= now() - $2::interval), COALESCE(EXTRACT(EPOCH FROM now() - min(created_at) FILTER (WHERE status = 'queued')), 0) FROM trace_jobs WHERE network = $1`, network, traceFailureWindow.String()).Scan(&stats.Queued, &stats.Running, &stats.Failed, &stats.OldestQueuedSeconds)
 	return stats, err
 }
 
