@@ -102,18 +102,13 @@ services:
     logging: *rotated-logs
     networks: [app]
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor@sha256:3cde6faf0791ebf7b41d6f8ae7145466fed712ea6f252c935294d2608b1af388
+  telegraf:
+    image: telegraf@sha256:cf9c35ee62e73129a1cb2b2ea425e573298ae8f03be8edfaeaffa6aa8cfb3869
     restart: unless-stopped
-    privileged: true
-    devices:
-      - /dev/kmsg
+    user: "0:0"
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./observability/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     logging: *rotated-logs
     networks: [app]
 

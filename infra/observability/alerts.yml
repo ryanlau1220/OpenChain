@@ -72,7 +72,7 @@ groups:
         annotations:
           summary: OpenChain VPS root disk has less than 15% free space.
       - alert: OpenChainContainerMemoryHigh
-        expr: sum(container_memory_working_set_bytes{job="openchain-cadvisor"}) / on() node_memory_MemTotal_bytes{job="openchain-node"} > 0.8
+        expr: sum(docker_container_mem_usage{job="openchain-containers"}) / on() node_memory_MemTotal_bytes{job="openchain-node"} > 0.8
         for: 10m
         labels:
           severity: warning

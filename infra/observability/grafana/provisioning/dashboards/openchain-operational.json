@@ -71,7 +71,7 @@
       "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
       "id": 8,
-      "targets": [{ "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{job=\"openchain-cadvisor\"})", "legendFormat": "{{container_label_com_docker_compose_service}}", "refId": "A" }],
+      "targets": [{ "expr": "docker_container_mem_usage{job=\"openchain-containers\"}", "legendFormat": "{{container_name}}", "refId": "A" }],
       "title": "Container memory",
       "type": "timeseries"
     },
@@ -80,7 +80,7 @@
       "fieldConfig": { "defaults": { "unit": "cores" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
       "id": 9,
-      "targets": [{ "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{job=\"openchain-cadvisor\"}[5m]))", "legendFormat": "{{container_label_com_docker_compose_service}}", "refId": "A" }],
+      "targets": [{ "expr": "sum by (container_name) (rate(docker_container_cpu_usage_total{job=\"openchain-containers\"}[5m]))", "legendFormat": "{{container_name}}", "refId": "A" }],
       "title": "Container CPU",
       "type": "timeseries"
     },
