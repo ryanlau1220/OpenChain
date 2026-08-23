@@ -35,12 +35,14 @@ func main() {
 
 func acceptanceCases(cfg *config.Config) []acceptanceCase {
 	evmCapabilities := adapter.NetworkCapabilities{NativeTransfers: true, TokenTransfers: true, InternalTransfers: true, HistoricalPagination: true, Finality: true, EntityClassification: true, ExactRawProvenance: true}
+	ethereumCapabilities := evmCapabilities
+	ethereumCapabilities.BridgeEvidence = true
 	baseCapabilities := evmCapabilities
 	baseCapabilities.BridgeEvidence = true
 	optimismCapabilities := evmCapabilities
 	optimismCapabilities.BridgeEvidence = true
 	return []acceptanceCase{
-		{"ethereum-mainnet", "0x0000000000000000000000000000000000000000", adapter.EtherscanSource, adapter.NewEVMChainAdapter("ethereum-mainnet", "1", adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, adapter.NewEVMClient(cfg.EthereumMainnetRPCURL)), evmCapabilities},
+		{"ethereum-mainnet", "0x0000000000000000000000000000000000000000", adapter.EtherscanSource, adapter.NewEVMChainAdapter("ethereum-mainnet", "1", adapter.EtherscanAPIURL, cfg.EtherscanAPIKey, adapter.NewEVMClient(cfg.EthereumMainnetRPCURL)), ethereumCapabilities},
 		{"base-mainnet", "0x0000000000000000000000000000000000000000", adapter.BlockscoutSource, adapter.NewBlockscoutChainAdapter("base-mainnet", adapter.BlockscoutBaseAPIURL, cfg.BlockscoutAPIKey, adapter.NewEVMClient(cfg.BaseMainnetRPCURL)), baseCapabilities},
 		{"polygon-mainnet", "0x0000000000000000000000000000000000000000", adapter.AlchemySource, adapter.NewAlchemyEVMChainAdapter("polygon-mainnet", "https://polygon-mainnet.g.alchemy.com/v2", cfg.AlchemyAPIKey, adapter.Asset{Kind: "NATIVE", Symbol: "POL", Decimals: 18}, adapter.NewEVMClient("https://polygon-mainnet.g.alchemy.com/v2/"+cfg.AlchemyAPIKey)), evmCapabilities},
 		{"arbitrum-one", "0x0000000000000000000000000000000000000000", adapter.AlchemySource, adapter.NewAlchemyEVMChainAdapter("arbitrum-one", "https://arb-mainnet.g.alchemy.com/v2", cfg.AlchemyAPIKey, adapter.Asset{Kind: "NATIVE", Symbol: "ETH", Decimals: 18}, adapter.NewEVMClient("https://arb-mainnet.g.alchemy.com/v2/"+cfg.AlchemyAPIKey)), evmCapabilities},
