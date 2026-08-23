@@ -184,7 +184,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: production
+    environment:
+      name: production
+      url: https://openchain.duckdns.org
     steps:
       - name: Configure deployment SSH key
         shell: bash
