@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -68,8 +70,9 @@ func NewDB(cfg Config) (*DB, error) {
 }
 
 type migration struct {
-	version string
-	sql     string
+	version  string
+	checksum string
+	sql      string
 }
 
 // ApplyMigrations applies each embedded migration exactly once. Only the
@@ -93,25 +96,19 @@ func (d *DB) ApplyMigrations(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS public.schema_migrations (
 		version TEXT PRIMARY KEY,
+		checksum TEXT NOT NULL,
 		applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`); err != nil {
 		return fmt.Errorf("create migration ledger: %w", err)
 	}
-	applied := make(map[string]struct{}, len(migrations))
-	rows, err := tx.QueryContext(ctx, "SELECT version FROM public.schema_migrations")
+	applied, hasChecksums, err := migrationLedger(ctx, tx)
 	if err != nil {
-		return fmt.Errorf("read migration ledger: %w", err)
+		return err
 	}
-	for rows.Next() {
-		var version string
-		if err := rows.Scan(&version); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan migration ledger: %w", err)
+	if hasChecksums {
+		if err := verifyMigrationLedger(migrations, applied); err != nil {
+			return err
 		}
-		applied[version] = struct{}{}
-	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close migration ledger: %w", err)
 	}
 	for _, migration := range migrations {
 		if _, found := applied[migration.version]; found {
@@ -120,9 +117,30 @@ func (d *DB) ApplyMigrations(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, migration.sql); err != nil {
 			return fmt.Errorf("apply migration %s: %w", migration.version, err)
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO public.schema_migrations (version) VALUES ($1)", migration.version); err != nil {
+		if !hasChecksums {
+			hasChecksums, err = migrationLedgerHasChecksums(ctx, tx)
+			if err != nil {
+				return err
+			}
+		}
+		if hasChecksums {
+			_, err = tx.ExecContext(ctx, "INSERT INTO public.schema_migrations (version, checksum) VALUES ($1, $2)", migration.version, migration.checksum)
+		} else {
+			_, err = tx.ExecContext(ctx, "INSERT INTO public.schema_migrations (version) VALUES ($1)", migration.version)
+		}
+		if err != nil {
 			return fmt.Errorf("record migration %s: %w", migration.version, err)
 		}
+	}
+	applied, hasChecksums, err = migrationLedger(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !hasChecksums {
+		return fmt.Errorf("migration ledger does not support checksums")
+	}
+	if err := verifyMigrationLedger(migrations, applied); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -147,13 +165,76 @@ func embeddedMigrations() ([]migration, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read migration %s: %w", entry.Name(), err)
 		}
-		migrations = append(migrations, migration{version: strings.TrimSuffix(entry.Name(), ".sql"), sql: string(contents)})
+		checksum := sha256.Sum256(contents)
+		migrations = append(migrations, migration{version: strings.TrimSuffix(entry.Name(), ".sql"), checksum: hex.EncodeToString(checksum[:]), sql: string(contents)})
 	}
 	sort.Slice(migrations, func(left, right int) bool { return migrations[left].version < migrations[right].version })
 	if len(migrations) == 0 {
 		return nil, fmt.Errorf("no database migrations embedded")
 	}
 	return migrations, nil
+}
+
+func migrationLedger(ctx context.Context, tx *sql.Tx) (map[string]string, bool, error) {
+	hasChecksums, err := migrationLedgerHasChecksums(ctx, tx)
+	if err != nil {
+		return nil, false, err
+	}
+	query := "SELECT version FROM public.schema_migrations"
+	if hasChecksums {
+		query = "SELECT version, checksum FROM public.schema_migrations"
+	}
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return nil, false, fmt.Errorf("read migration ledger: %w", err)
+	}
+	defer rows.Close()
+	applied := make(map[string]string)
+	for rows.Next() {
+		var version, checksum string
+		if hasChecksums {
+			err = rows.Scan(&version, &checksum)
+		} else {
+			err = rows.Scan(&version)
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("scan migration ledger: %w", err)
+		}
+		applied[version] = checksum
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("iterate migration ledger: %w", err)
+	}
+	return applied, hasChecksums, nil
+}
+
+func migrationLedgerHasChecksums(ctx context.Context, tx *sql.Tx) (bool, error) {
+	var exists bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'schema_migrations' AND column_name = 'checksum'
+	)`).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("inspect migration ledger: %w", err)
+	}
+	return exists, nil
+}
+
+func verifyMigrationLedger(migrations []migration, applied map[string]string) error {
+	known := make(map[string]string, len(migrations))
+	for _, migration := range migrations {
+		known[migration.version] = migration.checksum
+	}
+	for version, checksum := range applied {
+		expected, found := known[version]
+		if !found {
+			return fmt.Errorf("applied migration %s is missing from embedded migrations", version)
+		}
+		if checksum != expected {
+			return fmt.Errorf("migration checksum mismatch for %s", version)
+		}
+	}
+	return nil
 }
 
 func (d *DB) requireAgePreload(ctx context.Context) error {
